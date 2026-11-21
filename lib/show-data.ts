@@ -2,7 +2,16 @@ import {shows,type Show} from "./shows";
 import {mediaPublicUrl} from "./media";
 export type ManagedShow=Show&{posterUrl:string|null;prices:Record<"A"|"B"|"C"|"D",number|null>};
 export const blankPrices={A:null,B:null,C:null,D:null};
-export function defaultShows():ManagedShow[]{return shows.map(s=>({...s,posterUrl:null,prices:{...blankPrices}}))}
+export const showTicketPrices:Record<string,Record<"A"|"B"|"C"|"D",number>>={
+ "dinh-dung-2811":{A:599000,B:499000,C:399000,D:299000},
+ "minh-vuong-0512":{A:699000,B:549000,C:429000,D:299000},
+ "trinh-dinh-quang-1212":{A:699000,B:549000,C:399000,D:299000},
+ "khanh-phuong-1912":{A:799000,B:649000,C:499000,D:349000},
+ "ho-quang-hieu-2412":{A:799000,B:649000,C:499000,D:349000},
+ "khac-viet-2612":{A:799000,B:649000,C:499000,D:349000},
+ "thai-hoc-3112":{A:549000,B:449000,C:349000,D:249000}
+};
+export function defaultShows():ManagedShow[]{return shows.map(s=>({...s,posterUrl:null,prices:{...blankPrices,...showTicketPrices[s.id]}}))}
 type Row={id:string;artist:string;title:string;show_date:string;show_time:string;venue_id:Show["venue"];status:string;poster_path:string|null;prices:Record<string,unknown>};
 export function normalizeShow(r:Row):ManagedShow{
  const prices:Record<"A"|"B"|"C"|"D",number|null>={...blankPrices};
