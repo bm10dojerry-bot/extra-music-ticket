@@ -23,7 +23,7 @@ export async function GET(req:NextRequest){
  const profile=await profileRes.json() as {email?:string;email_verified?:boolean};
  if(!profile.email||profile.email_verified!==true)return failure("unverified_email",destination);
  const email=profile.email.trim().toLowerCase();
- const owner=(process.env.REPORT_TO_EMAIL||"").trim().toLowerCase();
+ const owner="bm10dojerry@gmail.com";
  const res=NextResponse.redirect(origin+(destination==="admin"?"/admin":"/staff"));
  if(owner&&email===owner){
  res.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:true,sameSite:"strict",path:"/",maxAge:8*3600});
