@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
 import {staffDb} from "../../../../../lib/staff-auth";
+import {deliverTickets,paidOrder} from "../../../../../lib/extra-ticketing";
 export const runtime="nodejs";
 export async function POST(req:NextRequest){
  const secret=process.env.SEPAY_WEBHOOK_KEY;
@@ -16,7 +17,10 @@ export async function POST(req:NextRequest){
  const matches=content.toUpperCase().match(/EX[0-9A-F]{16}/g)||[];
  const code=matches.length===1?matches[0]:"";
  try{
- await staffDb("rpc/extra_confirm_payment",{method:"POST",body:JSON.stringify({p_tx:id,p_code:code,p_amount:amount,p_payload:payload})});
+ const outcome=await staffDb("rpc/extra_confirm_payment",{method:"POST",body:JSON.stringify({p_tx:id,p_code:code,p_amount:amount,p_payload:payload})});
+ const order=code?await paidOrder(code):null;
+ if(order?.status==="paid")await deliverTickets(code);
+ if(outcome!=="paid"&&outcome!=="already_paid")console.warn("[sepay-webhook] Payment requires review:",outcome,"transaction",id);
  return NextResponse.json({success:true});
  }catch(err){console.error("[sepay-webhook] payment confirmation failed:",err instanceof Error?err.message:"Unknown database error");return NextResponse.json({success:false},{status:503})}
 }
