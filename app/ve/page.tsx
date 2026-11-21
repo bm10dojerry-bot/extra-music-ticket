@@ -1,0 +1,11 @@
+"use client";
+import {useEffect,useState} from "react";
+import QRCode from "qrcode";
+type Ticket={id:string;seat:string;checkedIn:boolean;qrValue:string};
+type Data={code:string;showId:string;buyerName:string;amount:number;tickets:Ticket[]};
+export default function TicketsPage(){
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(""),[images,setImages]=useState<Record<string,string>>({});
+ useEffect(()=>{const q=new URLSearchParams(window.location.search);const code=q.get("code"),token=q.get("token");if(!code||!token){setError("Thiếu mã đơn hoặc mã bảo mật");return}
+ fetch("/api/tickets?code="+encodeURIComponent(code)+"&token="+encodeURIComponent(token),{cache:"no-store"}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được vé");return d as Data}).then(async d=>{setData(d);const entries=await Promise.all(d.tickets.map(async t=>[t.id,await QRCode.toDataURL(t.qrValue,{width:280,margin:2,errorCorrectionLevel:"M"})] as const));setImages(Object.fromEntries(entries))}).catch(e=>setError(e instanceof Error?e.message:"Không tải được vé"))},[]);
+ return <main style={{background:"#0d0f14",color:"#fff",minHeight:"100vh",padding:"32px 16px",fontFamily:"Arial,sans-serif"}}><div style={{maxWidth:700,margin:"auto"}}><a href="/" style={{color:"#f87171"}}>+1 EXTRA MUSIC SHOW</a><h1>Vé điện tử của bạn</h1>{error&&<p role="alert">{error}</p>}{!data&&!error&&<p>Đang tải vé...</p>}{data&&<><p>Mã đơn: <b>{data.code}</b> · {data.buyerName}</p><p>Show: {data.showId} · {new Intl.NumberFormat("vi-VN").format(data.amount)}đ</p><p>Mỗi ghế có một QR riêng. Xuất trình mã này cho nhân viên tại cổng. Không chia sẻ liên kết vé.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>{data.tickets.map(t=><section key={t.id} style={{background:"#1b1e27",border:"1px solid #3b3d46",borderRadius:14,padding:20,textAlign:"center"}}><h2>Ghế {t.seat}</h2>{images[t.id]?<img alt={"QR vé ghế "+t.seat} src={images[t.id]} width={240} height={240} style={{maxWidth:"100%",background:"white",padding:8,borderRadius:8}}/>:<p>Đang tạo QR...</p>}<p style={{color:t.checkedIn?"#fca5a5":"#86efac"}}>{t.checkedIn?"Đã check-in":"Chưa check-in"}</p></section>)}</div></>}</div></main>
+}
