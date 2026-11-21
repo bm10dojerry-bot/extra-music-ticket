@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb} from "../../../../lib/staff-auth";
 export const runtime="nodejs";
 export async function POST(req:NextRequest){
- const actor=await requireRole(["admin","show_manager","sale"]);
+ const actor=await requireRole(["admin","show_manager","sale","checkin"]);
  if(!actor)return NextResponse.json({error:"Vui lòng đăng nhập nhân viên có quyền check-in"},{status:403});
  const body=await req.json().catch(()=>null);
  const id=String(body?.ticket||""),secret=String(body?.secret||"");
