@@ -23,7 +23,7 @@ export async function deliverTickets(code:string){
  try{
   const tickets=await ticketsFor(code);
   const show=(await loadShows()).find(s=>s.id===order.show_id);
-  const venue=venues.find(v=>v.id===(tickets[0]?.venue_id||show?.venue));
+  const venue=venues.find(v=>v.id===(show?.venue||tickets[0]?.venue_id));
   const directions=venue?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(venue.name+" "+venue.address):null;
   const link="https://iextra.net/ve?code="+encodeURIComponent(code)+"&token="+encodeURIComponent(order.access_token);
   const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]||c));
