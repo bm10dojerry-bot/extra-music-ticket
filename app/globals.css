@@ -374,3 +374,12 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .ccc-seatmap .seat.sold,.ccc-seatmap .seat.held,.ccc-seatmap .seat.demo-unavailable{background:#535966!important;color:#c1c6d0;opacity:.5}
 .ccc-seatmap .seat:hover:not(:disabled),.ccc-seatmap .seat:focus-visible{outline:2px solid #fff;outline-offset:2px;z-index:5;transform:translate(-50%,-50%) scale(1.35)}
 @media(max-width:700px){.map-area.ccc-seatmap{min-width:960px;height:840px}}
+
+
+/* Numbered seating maps for Moana Sa Pa and +1 Extra Lào Cai. Keep their original stage positions and seat IDs. */
+.map-area:is(.moana-seatmap,.laocai-seatmap){min-width:960px;height:840px;background:radial-gradient(ellipse at 50% 38%,#24232a 0%,#171a22 50%,#11141a 100%);border:1px solid #353943;border-radius:14px}
+:is(.moana-seatmap,.laocai-seatmap) .stage.top{top:1.5%;left:30%;width:40%;height:8%;border-radius:0 0 45% 45%;background:linear-gradient(180deg,#e74b59,#a91e31);box-shadow:0 0 24px #c52b4450;color:#fff;font-size:13px}
+:is(.moana-seatmap,.laocai-seatmap) .seat{width:13px;height:13px;border-radius:50%;font-size:7px;font-weight:700;line-height:13px;text-align:center;color:#111827;opacity:1;box-shadow:0 0 0 1px #ffffff38}
+:is(.moana-seatmap,.laocai-seatmap) .seat.selected{background:#fff!important;color:#111827;box-shadow:0 0 0 2px #fbbf24,0 0 8px #fbbf2470;z-index:4}
+:is(.moana-seatmap,.laocai-seatmap) .seat.sold,:is(.moana-seatmap,.laocai-seatmap) .seat.held,:is(.moana-seatmap,.laocai-seatmap) .seat.demo-unavailable{background:#535966!important;color:#c1c6d0;opacity:.5}
+:is(.moana-seatmap,.laocai-seatmap) .seat:hover:not(:disabled),:is(.moana-seatmap,.laocai-seatmap) .seat:focus-visible{outline:2px solid #fff;outline-offset:2px;z-index:5;transform:translate(-50%,-50%) scale(1.35)}
