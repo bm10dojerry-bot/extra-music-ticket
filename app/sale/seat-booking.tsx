@@ -11,10 +11,10 @@ export default function SeatBooking({shows}:{shows:Show[]}){
  const [name,setName]=useState(""),[phone,setPhone]=useState(""),[email,setEmail]=useState(""),[payment,setPayment]=useState<Payment|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const activeShowId=shows.some(s=>s.id===showId)?showId:(shows[0]?.id||"");
  const show=shows.find(s=>s.id===activeShowId),seats=useMemo(()=>show?seatsFor(show.venue as VenueId):[],[show?.venue]);
- const unavailable=new Set([...(inventory?.[activeShowId]?.soldSeats||[]),...(inventory?.[showId]?.heldSeats||[])]);
+ const unavailable=new Set([...(inventory?.[activeShowId]?.soldSeats||[]),...(inventory?.[activeShowId]?.heldSeats||[])]);
  const selected=seats.filter(s=>chosen.includes(s.id));
  const giftLimit=promotion==="buy5"?1:promotion==="buy10"?2:promotion==="buy20"?3:0;
- const required=promotion==="buy5"?5:promotion==="buy10"?10:promotion==="buy20"?20:23;
+ const required=promotion==="buy5"?5:promotion==="buy10"?10:promotion==="buy20"?20:12;
  const rank:Record<string,number>={A:0,B:1,C:2,D:3};
  const lowest=selected.length?Math.max(...selected.map(s=>rank[s.zone])):3;
  const eligibleGift=(id:string)=>{const seat=seats.find(s=>s.id===id);return !!seat&&rank[seat.zone]>=lowest};
