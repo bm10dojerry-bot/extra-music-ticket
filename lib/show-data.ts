@@ -7,7 +7,7 @@ type Row={id:string;artist:string;title:string;show_date:string;show_time:string
 export function normalizeShow(r:Row):ManagedShow{
  const prices:Record<"A"|"B"|"C"|"D",number|null>={...blankPrices};
  for(const zone of ["A","B","C","D"] as const){const n=r.prices?.[zone];prices[zone]=typeof n==="number"&&Number.isSafeInteger(n)&&n>=0?n:null}
- return {id:r.id,artist:r.artist,title:r.title,date:r.show_date,time:r.show_time,venue:r.venue_id,status:r.status==="pending"?"pending":r.status==="sold_out"?"sold_out":"announced",posterUrl:r.poster_path?mediaPublicUrl(r.poster_path):null,prices};
+ return {id:r.id,artist:r.artist,title:r.title,date:r.show_date,time:r.show_time,venue:r.venue_id,status:r.status==="pending"?"pending":r.status==="sold_out"?"sold_out":r.status==="live"?"live":r.status==="ended"?"ended":"announced",posterUrl:r.poster_path?mediaPublicUrl(r.poster_path):null,prices};
 }
 export async function loadShows():Promise<ManagedShow[]>{
  const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
