@@ -3,8 +3,8 @@ import {createStaffSession,makePasswordHash,staffDb,verifyPassword,STAFF_COOKIE,
 export const runtime="nodejs";
 export async function POST(req:NextRequest){let body:{username?:string;password?:string};try{body=await req.json()}catch{return NextResponse.json({error:"Dữ liệu không hợp lệ"},{status:400})}
  const username=String(body.username||"").trim().toLowerCase(),password=String(body.password||"");
- if(!/^[a-z0-9._-]{3,40}$/.test(username)||!password||password.length>256)return NextResponse.json({error:"Tài khoản hoặc mật khẩu không đúng"},{status:401});
- try{const rows=await staffDb("staff_accounts?username=eq."+encodeURIComponent(username)+"&select=*&limit=1") as (Staff&{password_hash:string})[];
+ if(!(/^([a-z0-9._-]{3,40})$/.test(username)||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username))||!password||password.length>256)return NextResponse.json({error:"Tài khoản hoặc mật khẩu không đúng"},{status:401});
+ try{const lookup=username.includes("@")?"email":"username";const rows=await staffDb("staff_accounts?"+lookup+"=eq."+encodeURIComponent(username)+"&select=*&limit=1") as (Staff&{password_hash:string})[];
  const account=rows[0];if(!account||!account.active||!verifyPassword(password,account.password_hash))return NextResponse.json({error:"Tài khoản hoặc mật khẩu không đúng"},{status:401});
  if(req.nextUrl.hostname==="sale.iextra.net"&&account.role!=="sale")return NextResponse.json({error:"Chỉ tài khoản nhân viên Sale được đăng nhập tại sale.iextra.net"},{status:403});
  const response=NextResponse.json({ok:true,role:account.role});response.cookies.set(STAFF_COOKIE,createStaffSession(account),{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"strict",path:"/",maxAge:8*3600});return response;
