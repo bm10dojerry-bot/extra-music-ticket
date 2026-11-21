@@ -11,7 +11,7 @@ export async function POST(req:NextRequest){
  try{await staffDb("extra_tickets?select=id&limit=1")}catch{return NextResponse.json({error:"Hệ thống đang kích hoạt vé QR. Vui lòng thử lại sau khi quản trị hoàn tất SQL 013."},{status:503})}
  const body=await req.json().catch(()=>null);
  const showId=String(body?.showId||""),seats=body?.seats,name=String(body?.name||"").trim(),phone=String(body?.phone||"").trim(),email=String(body?.email||"").trim();
- if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>23||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
+ if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>(body?.promotion&&body.promotion!=="none"?20:12)||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
  const promotion=String(body?.promotion||"none");
  const giftSeats=body?.giftSeats??[];
  const giftCounts:Record<string,number>={none:0,buy5:1,buy10:2,buy20:3};
