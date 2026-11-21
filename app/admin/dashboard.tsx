@@ -44,7 +44,7 @@ async function saveShow(){
   setSelectedPoster(null);setPosterPreview(null);
   setPosterStatus("✅ Đã lưu và đăng show thành công! Đang mở trang chủ...");
   setMessage("✅ Đã lưu thông tin và poster thành công.");
-  window.setTimeout(()=>window.location.assign("/"),1800);
+  window.setTimeout(()=>window.location.assign("https://iextra.net/"),1800);
  }catch(e){const msg=e instanceof Error?e.message:"Có lỗi khi lưu show.";setPosterStatus("❌ "+msg);setMessage(msg)}
  finally{setShowBusy(false)}
 }
