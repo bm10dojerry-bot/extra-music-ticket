@@ -415,3 +415,10 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .admin-financial-fields input{width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid #47474f;border-radius:9px;background:#1b1d24;color:#fff}
 @media(max-width:900px){.admin-financial-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.admin-financial-kpis,.admin-financial-fields{grid-template-columns:1fr}}
+
+/* Extended homepage navigation: About, Recruitment, Contact */
+.topbar .nav{gap:clamp(9px,1.15vw,18px);min-width:0}
+.topbar .nav>a{white-space:nowrap;font-size:clamp(11px,.95vw,14px)}
+.topbar .logo{white-space:nowrap;flex-shrink:0}
+@media(max-width:1100px){.topbar{height:auto;min-height:76px;flex-wrap:wrap;gap:12px;padding-top:14px;padding-bottom:14px}.topbar .nav{flex:1 1 100%;justify-content:center;flex-wrap:wrap;gap:13px}.header-show-search{flex:0 1 260px}}
+@media(max-width:650px){.topbar .nav{justify-content:flex-start;gap:12px 15px}.topbar .nav>a{font-size:12px}.topbar .nav .pill{padding:8px 12px}}

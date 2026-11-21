@@ -1,0 +1,1 @@
+alter table public.site_information_pages drop constraint if exists site_information_pages_slug_check; alter table public.site_information_pages add constraint site_information_pages_slug_check check (slug in ('gioi-thieu','tuyen-dung','lien-he'));
