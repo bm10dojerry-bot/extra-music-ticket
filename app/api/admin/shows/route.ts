@@ -28,7 +28,7 @@ export async function POST(req:NextRequest){
  const rows=await existing.json() as {poster_path:string|null}[];
  const body={id,artist,title,show_date:date,show_time:time,venue_id:venue,status,prices,poster_path:rows[0]?.poster_path||null,updated_at:new Date().toISOString()};
  const saved=await fetch(url+"/rest/v1/managed_shows?on_conflict=id",{method:"POST",headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(body)});
- if(!saved.ok)throw Error("Không lưu được show: "+saved.status);
+ if(!saved.ok){const detail=(await saved.text()).slice(0,600);let reason=detail;try{const parsed=JSON.parse(detail) as {message?:string;code?:string;hint?:string};reason=[parsed.code,parsed.message,parsed.hint].filter(Boolean).join(" — ")||detail}catch{}throw Error("Supabase từ chối lưu show (HTTP "+saved.status+"): "+reason+(saved.status===401||saved.status===403?". Kiểm tra SUPABASE_SERVICE_ROLE_KEY trên Vercel và quyền ghi bảng managed_shows.":""));}
  return NextResponse.json({ok:true});
  }catch(e){return error(e instanceof Error?e.message:"Lỗi lưu show.",503)}
 }
