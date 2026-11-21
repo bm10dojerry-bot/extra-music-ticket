@@ -1,7 +1,7 @@
 -- SePay payment orders. Apply in Supabase SQL Editor before enabling checkout.
 create table if not exists public.extra_payment_orders (
  id uuid primary key default gen_random_uuid(),
- code text not null unique check(code ~ '^EX[0-9A-F]{16}$'),
+ access_token text not null unique,\n code text not null unique check(code ~ '^EX[0-9A-F]{16}$'),
  show_id text not null,
  venue_id text not null,
  seats text[] not null,
@@ -27,7 +27,7 @@ create table if not exists public.extra_payment_events (
 alter table public.extra_payment_orders enable row level security;
 alter table public.extra_payment_events enable row level security;
 -- Serialize reservations per show and check both paid sales and active holds.
-create or replace function public.extra_reserve_order(p_code text,p_show text,p_venue text,p_seats text[],p_amount bigint,p_name text,p_phone text,p_email text)
+create or replace function public.extra_reserve_order(p_code text,p_token text,p_show text,p_venue text,p_seats text[],p_amount bigint,p_name text,p_phone text,p_email text)
 returns table(order_code text,expires_at timestamptz) language plpgsql security definer set search_path=public as $$
 declare taken text[];
 begin
@@ -39,10 +39,10 @@ begin
   select unnest(seats) x from public.ticket_sales where show_id=p_show and payment_verified=true
  ) q;
  if p_seats && coalesce(taken,array[]::text[]) then raise exception 'Seats already reserved';end if;
- return query insert into public.extra_payment_orders(code,show_id,venue_id,seats,amount_vnd,buyer_name,buyer_phone,buyer_email)
- values(p_code,p_show,p_venue,p_seats,p_amount,p_name,p_phone,p_email) returning code,extra_payment_orders.expires_at;
+ return query insert into public.extra_payment_orders(code,access_token,show_id,venue_id,seats,amount_vnd,buyer_name,buyer_phone,buyer_email)
+ values(p_code,p_token,p_show,p_venue,p_seats,p_amount,p_name,p_phone,p_email) returning code,extra_payment_orders.expires_at;
 end $$;
-revoke all on function public.extra_reserve_order(text,text,text,text[],bigint,text,text,text) from public,anon,authenticated;
+revoke all on function public.extra_reserve_order(text,text,text,text,text[],bigint,text,text,text) from public,anon,authenticated;
 grant execute on function public.extra_reserve_order(text,text,text,text[],bigint,text,text,text) to service_role;
 -- Webhook records every verified event; late/incorrect transfers are held for manual review.
 create or replace function public.extra_confirm_payment(p_tx bigint,p_code text,p_amount bigint,p_payload jsonb)
