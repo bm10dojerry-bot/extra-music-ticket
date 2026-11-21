@@ -9,7 +9,7 @@ export function middleware(request:NextRequest){
   const url=request.nextUrl.clone();url.pathname="/checkin";url.search="";return NextResponse.rewrite(url);
  }
  if(host==="sale.iextra.net"){
-  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname==="/api/staff/login"||pathname==="/api/staff/logout"||pathname==="/api/staff/sale-requests"||pathname==="/api/staff/reports")return NextResponse.next();
+  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname==="/api/staff/login"||pathname==="/api/staff/logout"||pathname==="/api/staff/sale-requests"||pathname==="/api/staff/sale-shows"||pathname==="/api/staff/reports")return NextResponse.next();
   if(pathname==="/sale"||pathname.startsWith("/sale/"))return NextResponse.next();
   if(pathname.startsWith("/api/"))return NextResponse.json({error:"Cổng Sale không có quyền truy cập API này"},{status:403});
   const url=request.nextUrl.clone();url.pathname="/sale";url.search="";return NextResponse.rewrite(url);
