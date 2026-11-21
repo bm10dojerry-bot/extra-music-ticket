@@ -22,5 +22,10 @@ export async function POST(req:NextRequest){
  const account=process.env.SEPAY_BANK_ACCOUNT!,bank=(process.env.SEPAY_BANK_CODE||"").toUpperCase(),holder=process.env.SEPAY_ACCOUNT_NAME!;
  const qr="https://img.vietqr.io/image/"+encodeURIComponent(bank)+"-"+encodeURIComponent(account)+"-compact2.png?amount="+amount+"&addInfo="+encodeURIComponent(code)+"&accountName="+encodeURIComponent(holder);
  return NextResponse.json({code,token,amount,expiresAt:rows[0].expires_at,bank,account,holder,qr,status:"pending"},{headers:{"Cache-Control":"no-store"}});
- }catch{return NextResponse.json({error:"Không thể giữ ghế. Có thể ghế đã được khách khác chọn hoặc chưa chạy SQL 012."},{status:409})}
+ }catch(err){
+  const detail=err instanceof Error?err.message:"Unknown reservation error";
+  console.error("[sepay-reserve] Supabase reservation failed:",detail);
+  const seatConflict=/Seats already reserved/i.test(detail);
+  return NextResponse.json({error:seatConflict?"Ghế đã được khách khác giữ hoặc mua. Vui lòng chọn ghế khác.":"Hệ thống chưa thể giữ ghế. Vui lòng báo quản trị kiểm tra Vercel Runtime Logs.",errorCode:seatConflict?"SEAT_CONFLICT":"RESERVATION_FAILED"},{status:seatConflict?409:503,headers:{"Cache-Control":"no-store"}});
+ }
 }
