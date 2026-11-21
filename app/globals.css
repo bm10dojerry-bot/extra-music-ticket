@@ -468,3 +468,11 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 @media(max-width:750px){.workspace{grid-template-columns:minmax(0,1fr)!important}.extra-checkout-panel{position:static}.extra-upcoming{padding-top:24px}.extra-upcoming-head{align-items:start;flex-direction:column}.extra-upcoming-image{height:155px}.extra-admin-detail-head{flex-direction:column;align-items:stretch}.extra-admin-detail-head select{width:100%}}
 @media(max-width:450px){.extra-upcoming-grid{gap:9px}.extra-upcoming-info{padding:12px}.extra-upcoming-info h3{font-size:16px}.extra-upcoming-image{height:130px}.extra-admin-detail-kpis{grid-template-columns:1fr}.extra-seat-tools{align-items:stretch}.extra-seat-tools label{width:100%;justify-content:space-between}}
 @media(prefers-reduced-motion:reduce){.extra-upcoming-card,.extra-booking-progress-track i{transition:none}}
+
+/* Upcoming show cards: display entire original portrait poster, never crop artwork */
+.extra-upcoming-card{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.extra-upcoming-image{height:auto!important;aspect-ratio:2/3;width:100%;overflow:hidden;background:#101115;flex:none}
+.extra-upcoming-image img{display:block;width:100%;height:100%;object-fit:contain!important;object-position:center;background:#101115}
+.extra-upcoming-info{flex:1;display:flex;flex-direction:column;background:#17181e;position:relative;z-index:1}
+.extra-upcoming-info button{margin-top:auto;min-height:43px}
+@media(max-width:600px){.extra-upcoming-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.extra-upcoming-image{height:auto!important;aspect-ratio:2/3}.extra-upcoming-info{gap:7px}}
