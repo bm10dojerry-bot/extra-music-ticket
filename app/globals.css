@@ -138,3 +138,12 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .artist-detail-rule{background:linear-gradient(90deg,#f4c16c 0%,#b08036 55%,transparent 100%);box-shadow:0 0 14px #c18c4250}
 .artist-detail-info h2{text-shadow:0 2px 20px #a46c2c35}
 @media(max-width:750px){.artist-detail{background:radial-gradient(ellipse at 60% 26%,#50331d77,transparent 55%),#08090b}.artist-detail-image{overflow:hidden}}
+
+/* Artist discovery: selected artist and seat map above all other singers. */
+#dia-diem.artist-mode{display:flex;flex-direction:column}
+#dia-diem.artist-mode>.eyebrow,#dia-diem.artist-mode>h2,#dia-diem.artist-mode>.sub,#dia-diem.artist-mode>.venue-grid{display:none}
+#dia-diem.artist-mode>.artist-detail{order:1;margin-top:24px}
+#dia-diem.artist-mode>.workspace{order:2}
+#dia-diem.artist-mode>.show-section{order:3;margin-top:48px}
+#dia-diem.artist-mode>.show-section .show-card.active{display:none}
+#dia-diem.artist-mode>.show-section>h2{font-size:clamp(24px,3vw,36px)}
