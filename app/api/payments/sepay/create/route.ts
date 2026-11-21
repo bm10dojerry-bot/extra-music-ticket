@@ -7,7 +7,7 @@ export const runtime="nodejs";
 export async function POST(req:NextRequest){
  if(process.env.SEPAY_CHECKOUT_ENABLED!=="true")return NextResponse.json({error:"Thanh toán đang được cấu hình, chưa mở nhận tiền."},{status:503});
  if(!process.env.SEPAY_BANK_ACCOUNT||!process.env.SEPAY_BANK_CODE||!process.env.SEPAY_ACCOUNT_NAME||!process.env.SEPAY_WEBHOOK_KEY)return NextResponse.json({error:"Chưa cấu hình ngân hàng và webhook SePay."},{status:503});
- const body=await req.json().catch(()=>null);
+ if((process.env.SEPAY_BANK_CODE||"").toUpperCase()!=="ACB")return NextResponse.json({error:"Ngân hàng nhận tiền phải được cấu hình là ACB trong Vercel."},{status:503});\n const body=await req.json().catch(()=>null);
  const showId=String(body?.showId||""),seats=body?.seats,name=String(body?.name||"").trim(),phone=String(body?.phone||"").trim(),email=String(body?.email||"").trim();
  if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>12||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
  const show=(await loadShows()).find(x=>x.id===showId);
