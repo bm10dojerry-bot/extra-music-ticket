@@ -51,19 +51,20 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .show-card .show-art.show-art-poster{height:560px;min-height:560px;aspect-ratio:auto;padding:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#080a11}
 .show-card .show-art.show-art-poster .show-poster-image{display:block;width:100%;height:100%;max-height:100%;object-fit:contain;object-position:center;border-radius:11px}
 
-/* Black / white split hero with a pronounced diagonal light beam. */
-.split-landing{position:relative;isolation:isolate;display:grid;grid-template-columns:1fr 1fr;height:min(76vh,740px);min-height:520px;overflow:hidden;margin:0 calc(-1 * max(28px,(100vw - 1264px)/2));background:#080808}
-.split-side{position:relative;display:flex;align-items:center;justify-content:center;min-width:0;min-height:520px;overflow:hidden;text-align:center;transition:filter .25s ease}
-.split-shows{background:radial-gradient(ellipse at 70% 50%,#333 0%,#151515 48%,#020202 100%);color:#fff}
-.split-places{background:radial-gradient(ellipse at 28% 48%,#fff 0%,#eee 55%,#c9c9c9 100%);color:#111}
-.split-side:hover{filter:brightness(1.08)}
-.split-copy{position:relative;z-index:3;display:flex;flex-direction:column;align-items:center;gap:16px;max-width:86%;padding:18px;pointer-events:none}
-.split-copy small{font-size:12px;letter-spacing:3px;font-weight:700;opacity:.8}
-.split-copy strong{display:flex;flex-direction:column;gap:10px;font-size:clamp(28px,3.6vw,58px);font-weight:900;letter-spacing:-1px;line-height:1.1}.split-title-first{display:block;font-size:.62em;letter-spacing:2px}.split-title-second{display:block}
-.split-copy span{font-size:clamp(12px,1.25vw,17px);opacity:.8}
-.split-shows .split-copy{transform:translateX(-7%);text-shadow:0 3px 20px #000}
-.split-places .split-copy{transform:translateX(7%)}
-.split-light{position:absolute;z-index:6;top:-35%;bottom:-35%;left:50%;width:2px;transform:rotate(17deg);transform-origin:center;pointer-events:none;background:linear-gradient(180deg,transparent,#ffffff80 25%,#ffffffb3 50%,#ffffff80 75%,transparent);box-shadow:0 0 9px 2px #ffffff5c,0 0 30px 9px #ffffff2b,0 0 65px 22px #ffffff12;animation:split-glow 7s ease-in-out infinite alternate}
-@keyframes split-glow{from{opacity:.4}to{opacity:.7}}
-@media(max-width:700px){.split-landing{height:calc(100svh - 76px);min-height:560px;max-height:850px;margin:0 -28px}.split-side{min-height:560px}.split-copy{gap:10px;padding:7px;max-width:98%}.split-copy strong{font-size:clamp(18px,5vw,28px)}.split-copy small{font-size:9px;letter-spacing:1px}.split-copy span{font-size:11px}.split-shows .split-copy{transform:translateX(-3%)}.split-places .split-copy{transform:translateX(3%)}.split-light{transform:rotate(12deg);width:2px}}
+/* Monochrome cinematic landing: softly blended halves, crisp diagonal light. */
+.split-landing{position:relative;isolation:isolate;display:grid;grid-template-columns:1fr 1fr;height:min(76vh,740px);min-height:520px;overflow:hidden;margin:0 calc(-1 * max(28px,(100vw - 1264px)/2));background:linear-gradient(90deg,#080808,#f5f5f5)}
+.split-side{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;min-width:0;min-height:520px;text-align:center;color:#fff;background:transparent}
+.split-shows{color:#fff}
+.split-places{color:#151515}
+.split-landing::before{content:"";position:absolute;z-index:0;inset:0;pointer-events:none;background:linear-gradient(90deg,#080808 0%,#141414 21%,#464646 35%,#969696 49%,#d4d4d4 64%,#f5f5f5 83%,#fff 100%)}
+.split-landing::after{content:"";position:absolute;z-index:2;inset:0;pointer-events:none;background:linear-gradient(180deg,#09090917 0%,transparent 28%,transparent 73%,#0909090c 100%)}
+.split-copy{position:relative;z-index:4;display:flex;flex-direction:column;align-items:center;max-width:90%;padding:18px;pointer-events:none}
+.split-copy strong{display:flex;flex-direction:column;gap:9px;font-family:Arial,Helvetica,sans-serif;font-size:clamp(28px,3.5vw,54px);font-weight:800;letter-spacing:-.8px;line-height:1.16}
+.split-title-first{display:block;font-size:.57em;font-weight:700;letter-spacing:2.4px}
+.split-title-second{display:block;font-weight:800;letter-spacing:-.8px}
+.split-shows .split-copy{transform:translateX(-8%);text-shadow:0 2px 15px #0008}
+.split-places .split-copy{transform:translateX(8%);text-shadow:0 2px 12px #fff8}
+.split-light{position:absolute;z-index:6;top:-35%;bottom:-35%;left:50%;width:2px;transform:rotate(17deg);transform-origin:center;pointer-events:none;background:linear-gradient(180deg,transparent 0%,#ffffffa6 17%,#fff 42%,#fff 58%,#ffffffa6 83%,transparent 100%);box-shadow:0 0 5px 1px #fff,0 0 14px 3px #ffffff90,0 0 34px 10px #ffffff38;animation:split-glow 7s ease-in-out infinite alternate}
+@keyframes split-glow{from{opacity:.82}to{opacity:1}}
+@media(max-width:700px){.split-landing{height:calc(100svh - 76px);min-height:560px;max-height:850px;margin:0 -28px}.split-side{min-height:560px}.split-copy{max-width:98%;padding:5px}.split-copy strong{font-size:clamp(18px,5vw,27px);gap:7px;letter-spacing:-.4px}.split-title-first{letter-spacing:1px}.split-shows .split-copy{transform:translateX(-3%)}.split-places .split-copy{transform:translateX(3%)}.split-light{transform:rotate(12deg)}}
 @media(prefers-reduced-motion:reduce){.split-light{animation:none}}
