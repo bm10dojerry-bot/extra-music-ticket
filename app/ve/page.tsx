@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import QRCode from "qrcode";
-type Ticket={id:string;seat:string;checkedIn:boolean;qrValue:string};
+type Ticket={id:string;seat:string;zone:string|null;checkedIn:boolean;qrValue:string};
 type Data={code:string;showId:string;showTitle:string;artist:string|null;showDate:string|null;showTime:string|null;venueName:string|null;venueAddress:string|null;buyerName:string;amount:number;tickets:Ticket[]};
 export default function TicketsPage(){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(""),[images,setImages]=useState<Record<string,string>>({});
@@ -9,12 +9,13 @@ export default function TicketsPage(){
  fetch("/api/tickets?code="+encodeURIComponent(code)+"&token="+encodeURIComponent(token),{cache:"no-store"}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được vé");return d as Data}).then(async d=>{setData(d);const entries=await Promise.all(d.tickets.map(async t=>[t.id,await QRCode.toDataURL(t.qrValue,{width:320,margin:2,errorCorrectionLevel:"M"})] as const));setImages(Object.fromEntries(entries))}).catch(e=>setError(e instanceof Error?e.message:"Không tải được vé"))},[]);
  return <main style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#3a1924 0%,#101114 48%,#08090b 100%)",color:"#f8f4e9",padding:"32px 16px 70px",fontFamily:"Arial,sans-serif"}}>
  <div style={{maxWidth:640,margin:"auto"}}>
- <header style={{textAlign:"center",marginBottom:32}}><a href="/" style={{color:"#ff5260",textDecoration:"none",fontWeight:900,letterSpacing:4,fontSize:22}}>+1 EXTRA</a><div style={{fontSize:11,letterSpacing:5,color:"#ff8892",marginTop:8}}>MUSIC SHOW · E-TICKET</div></header>
+ <header style={{textAlign:"center",marginBottom:32}}><a href="/" style={{color:"#ff5260",textDecoration:"none",fontWeight:900,letterSpacing:4,fontSize:22}}>+1 EXTRA</a><div style={{fontSize:11,letterSpacing:5,color:"#ffffff",marginTop:8}}>MUSIC SHOW · E-TICKET</div></header>
  <div style={{textAlign:"center",marginBottom:26}}><div style={{color:"#ff6878",fontSize:12,letterSpacing:3}}>CHÀO MỪNG BẠN ĐẾN VỚI EXTRA</div><h1 style={{fontSize:"clamp(26px,6vw,38px)",margin:"12px 0"}}>Tấm vé cho một đêm đáng nhớ</h1><p style={{color:"#c6c0b5",lineHeight:1.7}}>Cảm ơn bạn đã chọn đồng hành cùng +1 EXTRA MUSIC SHOW.</p></div>
  {error&&<div role="alert" style={{padding:20,background:"#382024",borderRadius:12}}>{error}</div>}
  {!data&&!error&&<p style={{textAlign:"center"}}>Đang chuẩn bị vé của bạn...</p>}
- {data&&<><div style={{textAlign:"center",marginBottom:22,color:"#d4c4c7"}}>Khách mời: <strong style={{color:"#fff"}}>{data.buyerName}</strong><div style={{fontSize:12,marginTop:8}}>Mã đơn {data.code}</div></div>
+ {data&&<><div style={{textAlign:"center",marginBottom:22,color:"#d4c4c7"}}>Mã đơn <strong style={{color:"#fff"}}>{data.code}</strong></div>
  <div style={{display:"grid",gap:24}}>{data.tickets.map((t,i)=><section key={t.id} style={{border:"1px solid #65343d",borderRadius:22,overflow:"hidden",background:"#161719",boxShadow:"0 20px 50px #0007"}}>
+ <div style={{textAlign:"center",padding:"18px 20px 0",color:"#d4c4c7",fontSize:14}}>{t.zone==="A"||t.zone==="B"?"The VIP":"Khách hàng"}: <strong style={{color:"#fff"}}>{data.buyerName}</strong></div>
  <div style={{background:"linear-gradient(135deg,#481b27,#161719 70%)",padding:"30px 24px 25px",textAlign:"center",borderBottom:"1px dashed #806b4c"}}>
  <div style={{fontSize:11,color:"#ff8995",letterSpacing:4}}>VÉ ĐIỆN TỬ · +1 EXTRA MUSIC SHOW</div>
  <div style={{fontSize:28,fontWeight:800,marginTop:15,letterSpacing:1}}>{data.artist||"+1 EXTRA MUSIC SHOW"}</div>
