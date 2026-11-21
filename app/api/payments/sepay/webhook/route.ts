@@ -18,5 +18,5 @@ export async function POST(req:NextRequest){
  try{
  await staffDb("rpc/extra_confirm_payment",{method:"POST",body:JSON.stringify({p_tx:id,p_code:code,p_amount:amount,p_payload:payload})});
  return NextResponse.json({success:true});
- }catch{return NextResponse.json({success:false},{status:503})}
+ }catch(err){console.error("[sepay-webhook] payment confirmation failed:",err instanceof Error?err.message:"Unknown database error");return NextResponse.json({success:false},{status:503})}
 }
