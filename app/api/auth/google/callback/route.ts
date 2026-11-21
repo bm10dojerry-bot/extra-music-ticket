@@ -27,11 +27,11 @@ export async function GET(req:NextRequest){
  const res=NextResponse.redirect(origin+(destination==="admin"?"/admin":"/staff"));
  if(owner&&email===owner){
  if(!process.env.ADMIN_MEDIA_SECRET||process.env.ADMIN_MEDIA_SECRET.length<24)return failure("admin_session_secret_short",destination);
- res.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:true,sameSite:"strict",path:"/",maxAge:8*3600});
+ res.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:8*3600});
  }else{
  const rows=await staffDb("staff_accounts?email=eq."+encodeURIComponent(email)+"&active=eq.true&select=id,username,display_name,role,active&limit=1") as Staff[];
  if(!rows[0])return failure("not_authorized",destination);
- res.cookies.set(STAFF_COOKIE,createStaffSession(rows[0]),{httpOnly:true,secure:true,sameSite:"strict",path:"/",maxAge:8*3600});
+ res.cookies.set(STAFF_COOKIE,createStaffSession(rows[0]),{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:8*3600});
  }
  res.cookies.set("extra_google_oauth","",{httpOnly:true,secure:true,sameSite:"lax",path:"/api/auth/google",maxAge:0});
  return res;
