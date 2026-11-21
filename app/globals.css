@@ -422,3 +422,17 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .topbar .logo{white-space:nowrap;flex-shrink:0}
 @media(max-width:1100px){.topbar{height:auto;min-height:76px;flex-wrap:wrap;gap:12px;padding-top:14px;padding-bottom:14px}.topbar .nav{flex:1 1 100%;justify-content:center;flex-wrap:wrap;gap:13px}.header-show-search{flex:0 1 260px}}
 @media(max-width:650px){.topbar .nav{justify-content:flex-start;gap:12px 15px}.topbar .nav>a{font-size:12px}.topbar .nav .pill{padding:8px 12px}}
+
+/* EXTRA Smart Guide — inline buyer checkout guidance */
+.extra-guide-heading{display:flex;align-items:center;gap:8px;margin:18px 0 6px;color:#ff9ba4;font-size:13px;font-weight:800}
+.extra-guide-heading>span{color:#ff5765;font-size:19px}
+.extra-guide-heading small{margin-left:auto;font-size:11px;color:#aeb0b8;font-weight:400;text-align:right}
+.extra-guide-required{color:#f66b79}
+.extra-guide-field{gap:7px;margin-top:13px}
+.extra-guide-field input:focus{outline:2px solid #a73d4b;outline-offset:1px}
+.extra-guide-field input[aria-invalid="true"]{border-color:#d75460}
+.extra-guide-hint{font-size:12px;line-height:1.55;margin:0;padding:8px 10px;background:#211e25;border-left:2px solid #b14b59;color:#e4c8cc;border-radius:0 6px 6px 0}
+.extra-guide-hint.ok{border-color:#5dba87;background:#16261f;color:#b8e9cb}
+.extra-guide-hint.invalid{border-color:#e75b65;background:#2a1b22;color:#ffd0d3}
+.extra-guide-next{margin:16px 0 0;padding:11px 12px;background:#222029;border:1px solid #4b3b48;border-radius:9px;font-size:12px;line-height:1.6;color:#f3d6dc}
+@media(max-width:600px){.extra-guide-heading{flex-wrap:wrap}.extra-guide-heading small{width:100%;margin-left:0;text-align:left}}
