@@ -18,7 +18,10 @@ export async function GET(){
  const counts=new Map<string,Set<string>>();
  for(const row of rows){if(!counts.has(row.show_id))counts.set(row.show_id,new Set());for(const seat of row.seats||[])counts.get(row.show_id)!.add(seat);}
  const ordersRes=await fetch(new URL("/rest/v1/extra_payment_orders?select=show_id,seats&status=eq.paid&limit=10000",url).toString(),{headers:{apikey:key,Authorization:"Bearer "+key},cache:"no-store"});if(ordersRes.ok){const paidOrders=await ordersRes.json() as {show_id:string;seats:string[]}[];for(const row of paidOrders){if(!counts.has(row.show_id))counts.set(row.show_id,new Set());for(const seat of row.seats||[])counts.get(row.show_id)!.add(seat)}}
- const shows=await loadShows();const inventory=shows.map(show=>{const capacity=venues.find(v=>v.id===show.venue)?.capacity||0;const sold=counts.get(show.id)?.size||0;return {showId:show.id,capacity,sold,remaining:Math.max(0,capacity-sold),soldOut:capacity>0&&sold>=capacity};});
+ const holds=new Map<string,Set<string>>();
+ const heldRes=await fetch(new URL("/rest/v1/extra_payment_orders?select=show_id,seats&status=eq.pending&expires_at=gt."+encodeURIComponent(new Date().toISOString())+"&limit=10000",url).toString(),{headers:{apikey:key,Authorization:"Bearer "+key},cache:"no-store"});
+ if(heldRes.ok){const pending=await heldRes.json() as {show_id:string;seats:string[]}[];for(const row of pending){if(!holds.has(row.show_id))holds.set(row.show_id,new Set());for(const seat of row.seats||[])holds.get(row.show_id)!.add(seat)}}
+ const shows=await loadShows();const inventory=shows.map(show=>{const capacity=venues.find(v=>v.id===show.venue)?.capacity||0;const sold=counts.get(show.id)?.size||0;return {showId:show.id,capacity,sold,remaining:Math.max(0,capacity-sold),soldOut:capacity>0&&sold>=capacity,soldSeats:[...(counts.get(show.id)||new Set<string>())],heldSeats:[...(holds.get(show.id)||new Set<string>())]};});
  return NextResponse.json({available:true,inventory},{headers:{"Cache-Control":"no-store"}});
  }catch{return NextResponse.json({available:false,reason:"inventory_unavailable"},{status:503});}
 }
