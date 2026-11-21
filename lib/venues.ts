@@ -12,7 +12,7 @@ export function seatsFor(venue:VenueId):Seat[]{
  if(venue==="laocai"){
    for(let r=0;r<15;r++)for(let n=1;n<=40;n++){const x=n<=20?7+(n-1)*2.05:55+(n-21)*2.05;out.push({id:String.fromCharCode(65+r)+String(n).padStart(2,"0"),row:String.fromCharCode(65+r),number:n,x,y:16+r*4.65,zone:zoneFor(r,15)});}
  } else if(venue==="ccc"){
-   for(let r=0;r<11;r++)for(let n=1;n<=50;n++){const row=String.fromCharCode(65+r);const center=Math.abs(n-25.5)/24.5;const x=10+r*6.9+4.8*center*center;const y=6+(n-1)*1.78;out.push({id:row+String(n).padStart(2,"0"),row,number:n,x,y,zone:zoneFor(r,11)});}
+   for(let r=0;r<11;r++)for(let n=1;n<=50;n++){const row=String.fromCharCode(65+r);const center=Math.abs(n-25.5)/24.5;const x=10+(10-r)*6.9+4.8*center*center;const y=6+(n-1)*1.78;out.push({id:row+String(n).padStart(2,"0"),row,number:n,x,y,zone:zoneFor(r,11)});}
  }else{
    // 10 curved arcs of 40 seats = 400, plus 2 straight rear rows of 50 = 500.
    for(let r=0;r<10;r++)for(let n=1;n<=40;n++){const angle=(Math.PI*.12)+(n-1)/39*(Math.PI*.76);const radius=12+r*3.05;const x=50+radius*Math.cos(angle);const y=8+radius*Math.sin(angle)*1.42;out.push({id:String.fromCharCode(65+r)+String(n).padStart(2,"0"),row:String.fromCharCode(65+r),number:n,x,y,zone:zoneFor(r,12)});}
