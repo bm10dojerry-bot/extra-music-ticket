@@ -20,7 +20,7 @@ export async function POST(req:NextRequest){
  try{
  const outcome=await staffDb("rpc/extra_confirm_payment",{method:"POST",body:JSON.stringify({p_tx:id,p_code:code,p_amount:amount,p_payload:payload})});
  const order=code?await paidOrder(code):null;
- if(order?.status==="paid"){try{await deliverTickets(code)}catch(e){console.error("[sepay-webhook] ticket delivery issue",e instanceof Error?e.message:"unknown")}try{await sendMetaPurchase(code)}catch(e){console.error("[sepay-webhook] CAPI issue",e instanceof Error?e.message:"unknown")}}
+ if(order?.status==="paid"){await deliverTickets(code);try{await sendMetaPurchase(code)}catch(e){console.error("[sepay-webhook] CAPI issue",e instanceof Error?e.message:"unknown")}}
  if(outcome!=="paid"&&outcome!=="already_paid")console.warn("[sepay-webhook] Payment requires review:",outcome,"transaction",id);
  return NextResponse.json({success:true});
  }catch(err){console.error("[sepay-webhook] payment confirmation failed:",err instanceof Error?err.message:"Unknown database error");return NextResponse.json({success:false},{status:503})}
