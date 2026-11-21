@@ -127,3 +127,14 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .artist-detail-image::before{z-index:1;background:linear-gradient(90deg,#08090c30,transparent 38%),linear-gradient(0deg,#08090c55,transparent 30%)}
 .artist-photo-placeholder{position:relative;z-index:2}
 @media(max-width:750px){.artist-detail{grid-template-columns:1fr}.artist-detail-image{grid-row:1;min-height:340px;max-height:500px}.artist-detail-image img{height:auto;max-height:500px}.artist-detail-info{padding:26px 20px 34px}}
+
+/* Seamless approved black-and-gold artist presentation: no card border or image divider. */
+.artist-detail{border:0;border-radius:0;box-shadow:none;overflow:hidden;background:radial-gradient(ellipse 42% 80% at 78% 53%,#76502a68 0%,#38261940 38%,transparent 90%),linear-gradient(90deg,#070709 0%,#09090b 58%,#17110e 100%)}
+.artist-detail-info{background:transparent;z-index:3}
+.artist-detail-image{background:transparent;overflow:visible}
+.artist-detail-image::before{background:linear-gradient(90deg,#09090b88 0%,transparent 35%),linear-gradient(0deg,#09090b66,transparent 33%)}
+.artist-detail-image::after{content:"";position:absolute;inset:9% -10% 8% -25%;z-index:0;pointer-events:none;background:radial-gradient(ellipse at 65% 50%,#e6a95544 0%,#c38b3020 30%,transparent 67%);filter:blur(28px)}
+.artist-detail-image img{z-index:2;filter:drop-shadow(-14px 0 30px #b47a2c33)}
+.artist-detail-rule{background:linear-gradient(90deg,#f4c16c 0%,#b08036 55%,transparent 100%);box-shadow:0 0 14px #c18c4250}
+.artist-detail-info h2{text-shadow:0 2px 20px #a46c2c35}
+@media(max-width:750px){.artist-detail{background:radial-gradient(ellipse at 60% 26%,#50331d77,transparent 55%),#08090b}.artist-detail-image{overflow:hidden}}
