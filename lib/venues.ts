@@ -14,9 +14,20 @@ export function seatsFor(venue:VenueId):Seat[]{
  } else if(venue==="ccc"){
    for(let r=0;r<11;r++)for(let n=1;n<=50;n++){const row=String.fromCharCode(65+r);const center=Math.abs(n-25.5)/24.5;const x=10+r*6.9-4.8*center*center;const y=6+(n-1)*1.78;out.push({id:row+String(n).padStart(2,"0"),row,number:n,x,y,zone:zoneFor(r,11)});}
  }else{
-   // 10 curved arcs of 40 seats = 400, plus 2 straight rear rows of 50 = 500.
-   for(let r=0;r<10;r++)for(let n=1;n<=40;n++){const angle=(Math.PI*.12)+(n-1)/39*(Math.PI*.76);const radius=12+r*3.05;const x=50+radius*Math.cos(angle);const y=8+radius*Math.sin(angle)*1.42;out.push({id:String.fromCharCode(65+r)+String(n).padStart(2,"0"),row:String.fromCharCode(65+r),number:n,x,y,zone:zoneFor(r,12)});}
-   for(let r=0;r<2;r++)for(let n=1;n<=50;n++){out.push({id:String.fromCharCode(75+r)+String(n).padStart(2,"0"),row:String.fromCharCode(75+r),number:n,x:5+(n-1)*1.83,y:79+r*5.5,zone:"D"});}
+   // Moana (Đình Dũng): stage is on the RIGHT. The ends of each curved row face TOWARD the stage.
+   // Preserve all 500 seat IDs, zone assignments, and capacity; change coordinates only.
+   for(let r=0;r<10;r++)for(let n=1;n<=40;n++){
+    const row=String.fromCharCode(65+r);
+    const edge=Math.abs(n-20.5)/19.5;
+    const x=76-r*5.65+5.5*edge*edge;
+    const y=8+(n-1)*2.12;
+    out.push({id:row+String(n).padStart(2,"0"),row,number:n,x,y,zone:zoneFor(r,12)});
+   }
+   // Two straight rear rows (100 seats) are farthest from the stage.
+   for(let r=0;r<2;r++)for(let n=1;n<=50;n++){
+    const row=String.fromCharCode(75+r);
+    out.push({id:row+String(n).padStart(2,"0"),row,number:n,x:13-r*5,y:5+(n-1)*1.8,zone:"D"});
+   }
  }
  return out;
 }
