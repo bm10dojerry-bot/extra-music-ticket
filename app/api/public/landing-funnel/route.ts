@@ -5,7 +5,7 @@ export const dynamic="force-dynamic";
 export async function POST(req:NextRequest){
  const origin=req.headers.get("origin")||"";
  const host=req.headers.get("host")||"";
- if(!origin||new URL(origin).host!==host)return NextResponse.json({error:"Origin not allowed"},{status:403});
+ let originHost="";try{originHost=new URL(origin).host}catch{}if(!originHost||originHost!==host)return NextResponse.json({error:"Origin not allowed"},{status:403});
  const data=await req.json().catch(()=>null);
  const showId=String(data?.showId||""),sessionId=String(data?.sessionId||""),eventName=String(data?.eventName||"");
  if(data?.consent!==true||!/^[a-z0-9-]{3,100}$/.test(showId)||!/^[0-9a-f]{8}-[0-9a-f-]{27,40}$/i.test(sessionId)||!["view","checkout"].includes(eventName))return NextResponse.json({error:"Invalid event"},{status:400});
