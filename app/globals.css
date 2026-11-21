@@ -182,3 +182,22 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .artist-detail-image::before,.artist-detail-image::after{display:none!important}
 .artist-detail-image img{position:relative;z-index:2;background:transparent;filter:drop-shadow(0 0 22px #9b62202b)}
 @media(max-width:750px){.artist-detail{overflow:hidden}.artist-detail-image{overflow:hidden!important}}
+
+/* Unified artist profile administration */
+.admin-artist-manager{margin-top:24px}
+.admin-artist-layout{display:grid;grid-template-columns:minmax(210px,260px) minmax(0,1fr);gap:20px}
+.admin-artist-sidebar{display:flex;flex-direction:column;gap:7px;max-height:650px;overflow:auto;padding:13px;border:1px solid #35343a;border-radius:15px;background:#101115}
+.admin-artist-sidebar input{width:100%;padding:13px;border:1px solid #444;border-radius:9px;background:#1b1b20;color:#fff;margin-bottom:10px}
+.admin-artist-sidebar button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;text-align:left;padding:13px;border:1px solid transparent;border-radius:10px;background:#1b1c22;color:#fff;cursor:pointer}
+.admin-artist-sidebar button.active{border-color:#e63850;background:#39161e}
+.admin-artist-sidebar small{font-size:11px;color:#aaa}
+.admin-artist-editor{min-width:0;border:1px solid #34343b;border-radius:15px;background:#121317;padding:24px}
+.admin-artist-editor h3{font-size:24px;margin:0 0 12px}
+.admin-artist-editor-grid{display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,1.5fr);gap:22px;margin-top:22px}
+.admin-artist-editor .admin-media-preview{height:330px;display:flex;align-items:center;justify-content:center;border-radius:12px;overflow:hidden}
+.admin-artist-editor .admin-media-preview img{max-width:100%;max-height:100%;object-fit:contain}
+.admin-artist-editor .admin-upload{display:block;margin-top:14px;text-align:center}
+.admin-artist-bio-label{display:block;font-weight:700;margin-bottom:12px}
+.admin-artist-editor textarea{width:100%;min-height:300px;resize:vertical;padding:14px;border:1px solid #49474c;border-radius:12px;background:#0c0d10;color:#fff;font:inherit;line-height:1.6}
+.admin-artist-editor textarea+small{display:block;color:#aaa;margin:8px 0 16px}
+@media(max-width:850px){.admin-artist-layout{grid-template-columns:1fr}.admin-artist-sidebar{max-height:250px}.admin-artist-editor-grid{grid-template-columns:1fr}}
