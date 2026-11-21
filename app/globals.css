@@ -383,3 +383,23 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 :is(.moana-seatmap,.laocai-seatmap) .seat.selected{background:#fff!important;color:#111827;box-shadow:0 0 0 2px #fbbf24,0 0 8px #fbbf2470;z-index:4}
 :is(.moana-seatmap,.laocai-seatmap) .seat.sold,:is(.moana-seatmap,.laocai-seatmap) .seat.held,:is(.moana-seatmap,.laocai-seatmap) .seat.demo-unavailable{background:#535966!important;color:#c1c6d0;opacity:.5}
 :is(.moana-seatmap,.laocai-seatmap) .seat:hover:not(:disabled),:is(.moana-seatmap,.laocai-seatmap) .seat:focus-visible{outline:2px solid #fff;outline-offset:2px;z-index:5;transform:translate(-50%,-50%) scale(1.35)}
+
+/* Unified Admin: ticket reconciliation visual alignment */
+.ticket-admin-embedded{width:100%;min-width:0}
+.ticket-admin-inner{width:100%;min-width:0}
+.ticket-admin-description{color:#b9bbc4;font-size:13px;line-height:1.65;margin:0 0 18px}
+.ticket-admin-kpi{background:linear-gradient(135deg,#23191d,#15161b)!important;box-shadow:0 3px 15px #00000020}
+.ticket-admin-kpi strong{font-size:clamp(21px,2vw,29px)!important;margin-top:12px!important}
+.ticket-admin-filters{background:#17181e;border:1px solid #383941;border-radius:14px;padding:16px;margin:16px 0 20px!important}
+.ticket-admin-filters input,.ticket-admin-filters select{min-height:42px}
+.ticket-admin-filters button{min-height:42px;font-weight:700}
+.ticket-admin-panel{border:1px solid #393a42;border-radius:15px;background:#17181e;padding:21px 22px;margin:16px 0 20px;min-width:0}
+.ticket-admin-panel h2{margin:0 0 17px;font-size:17px!important}
+.ticket-admin-panel table{width:100%;border-collapse:collapse}
+.ticket-admin-panel th{font-size:12px;color:#c7c8cf;background:#202127;font-weight:700}
+.ticket-admin-panel td{font-size:13px;color:#e9e9ed}
+.ticket-admin-panel th,.ticket-admin-panel td{padding:13px 12px!important;border-bottom:1px solid #363740}
+.ticket-admin-panel tbody tr:hover{background:#23242b}
+.ticket-admin-empty{color:#aeb0b8;font-size:13px;margin:17px 4px}
+@media(max-width:1250px){.ticket-admin-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:700px){.ticket-admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}.ticket-admin-filters>*{flex:1 1 100%!important;width:100%;max-width:none!important}.ticket-admin-panel{padding:15px 12px}}
