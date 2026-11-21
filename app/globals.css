@@ -70,3 +70,16 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 @keyframes split-glow{from{opacity:.83}to{opacity:1}}
 @media(max-width:700px){.split-landing{height:calc(100svh - 76px);min-height:560px;max-height:850px;margin:0 -28px}.split-side{min-height:560px}.split-copy{max-width:98%;gap:12px;padding:6px}.split-copy small{font-size:9px;letter-spacing:1px}.split-copy strong{font-size:clamp(17px,5vw,27px);gap:6px}.split-title-second::after{margin-top:11px}.split-subtitle{font-size:11px;max-width:150px}.split-shows .split-copy{transform:translateX(-3%)}.split-places .split-copy{transform:translateX(3%)}.split-light{transform:rotate(12deg);width:2px}}
 @media(prefers-reduced-motion:reduce){.split-light{animation:none}}
+
+/* Venue detail: large actual venue image, introduction and filtered shows. */
+.venue-detail{margin:30px 0 38px;scroll-margin-top:20px}
+.venue-detail-cover{position:relative;min-height:440px;border-radius:20px;overflow:hidden;display:flex;align-items:flex-end;padding:clamp(24px,5vw,62px);border:1px solid #383338;background-size:cover;background-position:center;background-color:#16191e;box-shadow:0 15px 55px #0007}
+.venue-detail-cover::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#07090cf0 0%,#07090c99 44%,#07090c10 100%);pointer-events:none}
+.venue-detail-content{position:relative;z-index:1;max-width:650px}
+.venue-detail-content h2{font-size:clamp(30px,4.6vw,62px);line-height:1.08;letter-spacing:-1.5px;margin:16px 0}
+.venue-detail-address{font-size:16px;color:#f4d3c1}
+.venue-detail-description{font-size:15px;color:#e0dfe0;line-height:1.8;max-width:550px}
+.venue-detail-facts{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.venue-detail-facts span{border:1px solid #ffffff52;border-radius:30px;padding:10px 15px;background:#090a0d9e;font-size:13px}
+.venue-detail-facts strong{font-size:19px;color:#fff}
+@media(max-width:700px){.venue-detail{margin:20px 0 28px}.venue-detail-cover{min-height:460px;padding:24px 18px;background-position:center}.venue-detail-cover::before{background:linear-gradient(0deg,#07090cf5 0%,#07090c99 62%,#07090c24 100%)}.venue-detail-content h2{letter-spacing:-.5px}.venue-detail-description{font-size:14px}.venue-detail-facts{gap:8px}.venue-detail-facts span{font-size:12px;padding:8px 11px}}
