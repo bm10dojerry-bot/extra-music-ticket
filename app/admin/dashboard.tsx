@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import StaffWorkspace from "../staff/workspace";
-import TicketAdmin from "./tickets/page";
+import TicketAdmin from "./tickets/ticket-dashboard";
 import type {Staff} from "../../lib/staff-auth";
 import {mediaSlots} from "../../lib/media";
 import {shows as defaultShows} from "../../lib/shows";
