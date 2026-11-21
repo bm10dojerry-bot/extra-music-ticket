@@ -1,5 +1,5 @@
 import {NextResponse} from "next/server";
-import {shows} from "../../../../lib/shows";
+import {loadShows} from "../../../../lib/show-data";
 import {venues} from "../../../../lib/venues";
 export const dynamic="force-dynamic";
 export async function GET(){
@@ -17,7 +17,7 @@ export async function GET(){
  const rows=await res.json() as {show_id:string;seats:string[]}[];
  const counts=new Map<string,Set<string>>();
  for(const row of rows){if(!counts.has(row.show_id))counts.set(row.show_id,new Set());for(const seat of row.seats||[])counts.get(row.show_id)!.add(seat);}
- const inventory=shows.map(show=>{const capacity=venues.find(v=>v.id===show.venue)?.capacity||0;const sold=counts.get(show.id)?.size||0;return {showId:show.id,capacity,sold,remaining:Math.max(0,capacity-sold),soldOut:capacity>0&&sold>=capacity};});
+ const shows=await loadShows();const inventory=shows.map(show=>{const capacity=venues.find(v=>v.id===show.venue)?.capacity||0;const sold=counts.get(show.id)?.size||0;return {showId:show.id,capacity,sold,remaining:Math.max(0,capacity-sold),soldOut:capacity>0&&sold>=capacity};});
  return NextResponse.json({available:true,inventory},{headers:{"Cache-Control":"no-store"}});
  }catch{return NextResponse.json({available:false,reason:"inventory_unavailable"},{status:503});}
 }
