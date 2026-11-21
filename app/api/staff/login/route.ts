@@ -6,5 +6,6 @@ export async function POST(req:NextRequest){let body:{username?:string;password?
  if(!/^[a-z0-9._-]{3,40}$/.test(username)||!password||password.length>256)return NextResponse.json({error:"Tài khoản hoặc mật khẩu không đúng"},{status:401});
  try{const rows=await staffDb("staff_accounts?username=eq."+encodeURIComponent(username)+"&select=*&limit=1") as (Staff&{password_hash:string})[];
  const account=rows[0];if(!account||!account.active||!verifyPassword(password,account.password_hash))return NextResponse.json({error:"Tài khoản hoặc mật khẩu không đúng"},{status:401});
+ if(req.nextUrl.hostname==="sale.iextra.net"&&account.role!=="sale")return NextResponse.json({error:"Chỉ tài khoản nhân viên Sale được đăng nhập tại sale.iextra.net"},{status:403});
  const response=NextResponse.json({ok:true,role:account.role});response.cookies.set(STAFF_COOKIE,createStaffSession(account),{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"strict",path:"/",maxAge:8*3600});return response;
  }catch{return NextResponse.json({error:"Không thể kết nối dữ liệu nhân viên. Kiểm tra SQL 005."},{status:503})}}
