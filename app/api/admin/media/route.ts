@@ -9,7 +9,7 @@ export async function POST(req:NextRequest){
  if(!url||!key)return fail("Thiếu cấu hình Supabase.",503);
  const form=await req.formData();
  const slot=form.get("slot"),file=form.get("file");
- if(typeof slot!=="string"||!validSlot(slot))return fail("Địa điểm không hợp lệ.",400);
+ if(typeof slot!=="string"||!validSlot(slot))return fail("Vị trí ảnh không hợp lệ. Hãy tải lại trang Admin.",400);
  if(!(file instanceof File))return fail("Vui lòng chọn ảnh.",400);
  if(!["image/jpeg","image/png","image/webp"].includes(file.type))return fail("Chỉ nhận JPG, PNG hoặc WebP.",400);
  if(file.size>5*1024*1024||file.size===0)return fail("Ảnh phải nhỏ hơn 5 MB.",400);
@@ -24,8 +24,8 @@ export async function POST(req:NextRequest){
  const path=slot+"/"+crypto.randomUUID()+"."+ext;
  const headers={apikey:key,Authorization:"Bearer "+key};
  const uploaded=await fetch(url+"/storage/v1/object/extra-media/"+path,{method:"POST",headers:{...headers,"Content-Type":file.type,"x-upsert":"false"},body:bytes});
- if(!uploaded.ok)return fail("Chưa tải được ảnh lên Supabase. Hãy kiểm tra đã chạy SQL tạo bucket.",502);
+ if(!uploaded.ok){const detail=(await uploaded.text()).slice(0,500);return fail("Supabase Storage lỗi "+uploaded.status+": "+detail,502);}
  const saved=await fetch(url+"/rest/v1/site_media?on_conflict=slot",{method:"POST",headers:{...headers,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({slot,image_path:path,updated_at:new Date().toISOString()})});
- if(!saved.ok)return fail("Đã tải ảnh nhưng chưa lưu được thông tin. Kiểm tra bảng site_media.",502);
+ if(!saved.ok){const detail=(await saved.text()).slice(0,500);return fail("Ảnh đã tải nhưng không lưu được vào site_media ("+saved.status+"): "+detail,502);}
  return NextResponse.json({ok:true,url:mediaPublicUrl(path)});
 }
