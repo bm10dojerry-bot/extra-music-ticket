@@ -1,10 +1,11 @@
+import {ADMIN_COOKIE,validAdminSession} from "../../../../lib/admin-session";
 import {NextRequest,NextResponse} from "next/server";
 import {isAdminSecret} from "../../../../lib/admin-auth";
 import {mediaPublicUrl} from "../../../../lib/media";
 export const runtime="nodejs";
 const error=(message:string,status:number)=>NextResponse.json({error:message},{status});
 export async function POST(req:NextRequest){
- if(!isAdminSecret(req.headers.get("x-admin-secret")))return error("Mật khẩu quản trị không đúng.",401);
+ if(!validAdminSession(req.cookies.get(ADMIN_COOKIE)?.value))return error("Mật khẩu quản trị không đúng.",401);
  const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)return error("Thiếu cấu hình Supabase.",503);
  const form=await req.formData();const id=form.get("showId"),file=form.get("file");
