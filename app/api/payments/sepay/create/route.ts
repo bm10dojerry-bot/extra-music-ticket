@@ -37,8 +37,8 @@ export async function POST(req:NextRequest){
  if(!rows?.length)throw Error("Reservation failed");
  // Attribution is optional and must never prevent a successful seat reservation.
  if(body?.adsConsent===true&&body?.landingShowId===show.id){
-  const fbp=typeof body.fbp==="string"&&/^fb\\.1\\.\\d{10,16}\\.\\d+$/.test(body.fbp)?body.fbp:"";
-  const fbc=typeof body.fbc==="string"&&/^fb\\.1\\.\\d{10,16}\\.[A-Za-z0-9_-]+$/.test(body.fbc)?body.fbc:"";
+  const fbp=typeof body.fbp==="string"&&/^fb\.1\.\d{10,16}\.\d+$/.test(body.fbp)?body.fbp:"";
+  const fbc=typeof body.fbc==="string"&&/^fb\.1\.\d{10,16}\.[A-Za-z0-9_-]+$/.test(body.fbc)?body.fbc:"";
   const utmSource=typeof body.utmSource==="string"?body.utmSource.slice(0,100):"";
   const utmCampaign=typeof body.utmCampaign==="string"?body.utmCampaign.slice(0,100):"";
   try{await staffDb("extra_order_attribution",{method:"POST",body:JSON.stringify({order_code:code,show_id:show.id,consent:true,fbp,fbc,landing_path:"/show/"+show.id,utm_source:utmSource,utm_campaign:utmCampaign})})}catch(e){console.warn("[ads] Attribution unavailable for",code)}
