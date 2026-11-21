@@ -1,0 +1,13 @@
+"use client";
+import {useEffect,useState} from "react";
+const names:Record<string,string>={"gioi-thieu":"Giới thiệu","tuyen-dung":"Tuyển dụng","lien-he":"Liên hệ"};
+const defaults:Record<string,string>={
+ "gioi-thieu":"+1 EXTRA MUSIC SHOW mang đến những đêm nhạc trực tiếp tại Sa Pa và Lào Cai, kết nối nghệ sĩ với khán giả trong không gian biểu diễn được tổ chức chuyên nghiệp.",
+ "tuyen-dung":"Chúng tôi chào đón các ứng viên quan tâm đến tổ chức sự kiện, bán vé, chăm sóc khách hàng, kỹ thuật sân khấu và vận hành. Liên hệ EXTRA để tìm hiểu cơ hội phù hợp.",
+ "lien-he":"Hotline đặt vé: 094 865 02 59\nĐiện thoại công ty: 0965 361 001\nEmail: info@snapgo.vn\nTrụ sở: Căn 1204, Tòa nhà The Manor, Phường Cam Đường, Tỉnh Lào Cai, Việt Nam"
+};
+export default function InformationPage({slug}:{slug:string}){
+ const [page,setPage]=useState<{title:string;body:string}|null>(null),[error,setError]=useState("");
+ useEffect(()=>{fetch("/api/public/site-pages?slug="+encodeURIComponent(slug),{cache:"no-store"}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được");setPage(d.page||null)}).catch(e=>setError(e instanceof Error?e.message:"Lỗi tải nội dung"))},[slug]);
+ return <main style={{background:"#0c0d11",color:"#fff",minHeight:"100vh",padding:"30px 20px",fontFamily:"Arial,sans-serif"}}><div style={{maxWidth:850,margin:"auto"}}><header style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:54}}><a href="/" style={{color:"#fff",fontSize:23,fontWeight:900,textDecoration:"none"}}>+1 <span style={{color:"#ed2839"}}>EXTRA</span> MUSIC</a><nav style={{display:"flex",gap:18,flexWrap:"wrap"}}>{Object.entries(names).map(([id,label])=><a key={id} href={"/"+id} style={{color:id===slug?"#ff6878":"#ddd",textDecoration:"none"}}>{label}</a>)}</nav></header><div style={{color:"#f36a74",fontSize:12,letterSpacing:3}}>+1 EXTRA MUSIC SHOW</div><h1 style={{fontSize:"clamp(30px,5vw,46px)",margin:"16px 0 25px"}}>{page?.title||names[slug]}</h1>{error&&<p role="alert" style={{color:"#fca5a5"}}>{error}</p>}<section style={{whiteSpace:"pre-wrap",lineHeight:1.95,color:"#ddd",fontSize:16,background:"#18191f",border:"1px solid #34353c",borderRadius:16,padding:"26px 30px"}}>{page?.body||defaults[slug]}</section>{slug==="lien-he"&&<p style={{marginTop:24}}><a href="tel:0948650259" style={{display:"inline-block",padding:"13px 22px",background:"#c52e3c",color:"#fff",borderRadius:9,textDecoration:"none"}}>Gọi hotline đặt vé</a></p>}<p style={{marginTop:42}}><a href="/" style={{color:"#ff8590"}}>← Về trang chủ</a></p></div></main>
+}
