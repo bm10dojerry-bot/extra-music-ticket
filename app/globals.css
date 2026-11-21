@@ -340,3 +340,9 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .admin-venue-bio-footer button:hover{background:#c23440}
 .admin-venue-bio-footer button:disabled{opacity:.55;cursor:wait}
 @media(max-width:550px){.admin-venue-bio-editor{padding:14px}.admin-venue-bio-footer button{width:100%}}
+
+/* SePay checkout */
+.sepay-payment{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-top:16px;padding:18px;border:1px solid #644047;border-radius:14px;background:#1c181c;color:#fff;overflow-wrap:anywhere}
+.sepay-payment h3{margin:0 0 4px;font-size:18px}
+.sepay-payment p{margin:0;font-size:13px;line-height:1.6}
+.sepay-payment img{display:block;max-width:100%;width:250px;height:auto;align-self:center;padding:12px;border-radius:12px;background:#fff}
