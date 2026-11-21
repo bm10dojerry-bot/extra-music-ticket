@@ -14,12 +14,12 @@ export function seatsFor(venue:VenueId):Seat[]{
  } else if(venue==="ccc"){
    for(let r=0;r<11;r++)for(let n=1;n<=50;n++){const row=String.fromCharCode(65+r);const center=Math.abs(n-25.5)/24.5;const x=10+r*6.9-4.8*center*center;const y=6+(n-1)*1.78;out.push({id:row+String(n).padStart(2,"0"),row,number:n,x,y,zone:zoneFor(r,11)});}
  }else{
-   // Moana (Đình Dũng): stage is on the RIGHT. The ends of each curved row face TOWARD the stage.
+   // Moana (Đình Dũng): stage is on the RIGHT. The center of each curved row protrudes TOWARD the right-side stage; the ends sweep back.
    // Preserve all 500 seat IDs, zone assignments, and capacity; change coordinates only.
    for(let r=0;r<10;r++)for(let n=1;n<=40;n++){
     const row=String.fromCharCode(65+r);
     const edge=Math.abs(n-20.5)/19.5;
-    const x=76-r*5.65+5.5*edge*edge;
+    const x=76-r*5.65-5.5*edge*edge;
     const y=8+(n-1)*2.12;
     out.push({id:row+String(n).padStart(2,"0"),row,number:n,x,y,zone:zoneFor(r,12)});
    }
