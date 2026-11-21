@@ -173,3 +173,12 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .admin-media-manager .admin-upload{margin-top:auto;text-align:center}
 @media(max-width:950px){.admin-media-manager .admin-media-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.admin-media-heading{display:block}.admin-media-count{display:inline-block;margin-top:12px}.admin-media-manager .admin-media-grid{grid-template-columns:1fr}.admin-media-venue-filter{align-items:stretch;flex-direction:column}.admin-media-categories button{flex:1}}
+
+/* Fix the visible vertical seam: single shared background, not a second image-panel gradient. */
+.artist-detail{isolation:isolate;background:#08090b!important}
+.artist-detail::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 40% 85% at 86% 54%,#9b632d52 0%,#4b2d1a2e 47%,transparent 100%),linear-gradient(90deg,#08090b 0%,#08090b 55%,#0b090a 100%)}
+.artist-detail-info{position:relative;z-index:2;background:none!important}
+.artist-detail-image{position:relative;z-index:1;background:none!important;overflow:visible!important}
+.artist-detail-image::before,.artist-detail-image::after{display:none!important}
+.artist-detail-image img{position:relative;z-index:2;background:transparent;filter:drop-shadow(0 0 22px #9b62202b)}
+@media(max-width:750px){.artist-detail{overflow:hidden}.artist-detail-image{overflow:hidden!important}}
