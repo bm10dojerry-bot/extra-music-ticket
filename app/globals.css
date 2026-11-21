@@ -59,11 +59,11 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .split-side:hover{filter:brightness(1.08)}
 .split-copy{position:relative;z-index:3;display:flex;flex-direction:column;align-items:center;gap:16px;max-width:86%;padding:18px;pointer-events:none}
 .split-copy small{font-size:12px;letter-spacing:3px;font-weight:700;opacity:.8}
-.split-copy strong{font-size:clamp(28px,3.6vw,58px);font-weight:900;letter-spacing:-1px;line-height:1.1}
+.split-copy strong{display:flex;flex-direction:column;gap:10px;font-size:clamp(28px,3.6vw,58px);font-weight:900;letter-spacing:-1px;line-height:1.1}.split-title-first{display:block;font-size:.62em;letter-spacing:2px}.split-title-second{display:block}
 .split-copy span{font-size:clamp(12px,1.25vw,17px);opacity:.8}
 .split-shows .split-copy{transform:translateX(-7%);text-shadow:0 3px 20px #000}
 .split-places .split-copy{transform:translateX(7%)}
-.split-light{position:absolute;z-index:6;top:-35%;bottom:-35%;left:50%;width:5px;transform:rotate(17deg);transform-origin:center;pointer-events:none;background:linear-gradient(180deg,#fff0,#fff 17%,#fff 83%,#fff0);box-shadow:0 0 7px 3px #fff,0 0 25px 9px #ffffffc9,0 0 65px 24px #ffffff75,0 0 115px 42px #ffffff35;animation:split-glow 5s ease-in-out infinite alternate}
-@keyframes split-glow{from{opacity:.78;filter:brightness(1)}to{opacity:1;filter:brightness(1.35)}}
-@media(max-width:700px){.split-landing{height:calc(100svh - 76px);min-height:560px;max-height:850px;margin:0 -28px}.split-side{min-height:560px}.split-copy{gap:10px;padding:7px;max-width:98%}.split-copy strong{font-size:clamp(18px,5vw,28px)}.split-copy small{font-size:9px;letter-spacing:1px}.split-copy span{font-size:11px}.split-shows .split-copy{transform:translateX(-3%)}.split-places .split-copy{transform:translateX(3%)}.split-light{transform:rotate(12deg);width:4px}}
+.split-light{position:absolute;z-index:6;top:-35%;bottom:-35%;left:50%;width:2px;transform:rotate(17deg);transform-origin:center;pointer-events:none;background:linear-gradient(180deg,transparent,#ffffff80 25%,#ffffffb3 50%,#ffffff80 75%,transparent);box-shadow:0 0 9px 2px #ffffff5c,0 0 30px 9px #ffffff2b,0 0 65px 22px #ffffff12;animation:split-glow 7s ease-in-out infinite alternate}
+@keyframes split-glow{from{opacity:.4}to{opacity:.7}}
+@media(max-width:700px){.split-landing{height:calc(100svh - 76px);min-height:560px;max-height:850px;margin:0 -28px}.split-side{min-height:560px}.split-copy{gap:10px;padding:7px;max-width:98%}.split-copy strong{font-size:clamp(18px,5vw,28px)}.split-copy small{font-size:9px;letter-spacing:1px}.split-copy span{font-size:11px}.split-shows .split-copy{transform:translateX(-3%)}.split-places .split-copy{transform:translateX(3%)}.split-light{transform:rotate(12deg);width:2px}}
 @media(prefers-reduced-motion:reduce){.split-light{animation:none}}
