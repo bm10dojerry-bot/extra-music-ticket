@@ -97,3 +97,24 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .venue-amenities-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:17px}
 .venue-amenities-grid span{font-size:14px;color:#ddd;line-height:1.6}
 @media(max-width:700px){.venue-gallery-head{display:block}.venue-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.venue-gallery-photo:first-child{grid-column:span 2;aspect-ratio:16/9}.venue-amenities-grid{grid-template-columns:1fr}.venue-amenities{padding:17px}}
+
+/* Artist detail: editorial biography left, full-height uncropped poster right. */
+.artist-detail{scroll-margin-top:24px;position:relative;display:grid;grid-template-columns:1fr 1fr;min-height:650px;margin:32px 0 42px;overflow:hidden;border-radius:20px;border:1px solid #37302b;background:radial-gradient(ellipse at 70% 40%,#3b281d,#100e0e 58%,#08090d 100%);box-shadow:0 18px 65px #0009}
+.artist-detail-info{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;padding:clamp(25px,4vw,66px);background:linear-gradient(90deg,#08090cf2,#08090ce8 76%,#08090c44)}
+.artist-detail-info h2{font-family:Georgia,"Times New Roman",serif;font-size:clamp(44px,5.4vw,86px);font-style:italic;font-weight:500;line-height:1.1;margin:16px 0 22px;color:#fff1d9}
+.artist-detail-rule{height:1px;background:linear-gradient(90deg,#d5a667,transparent);margin-bottom:28px}
+.artist-detail-info h3{font-size:19px;margin:14px 0 12px;color:#fff}
+.artist-detail-info p{font-size:15px;line-height:1.8;color:#ddd;margin:0 0 14px}
+.artist-detail-info .artist-bio-note{font-size:13px;color:#b9afa5}
+.artist-show-facts{display:flex;flex-direction:column;gap:12px;padding:17px 0;color:#f1e7da;font-size:15px}
+.artist-ticket-actions{display:flex;flex-direction:column;align-items:flex-start;gap:12px;margin-top:15px}
+.artist-seat-button{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:14px 28px;border-radius:35px;border:1px solid #f98b73;background:linear-gradient(115deg,#a01024,#e3373b,#a01024);color:#fff;font-weight:800;letter-spacing:.4px;text-decoration:none;box-shadow:0 0 22px #d32a4055}
+.artist-seat-button:hover{filter:brightness(1.15)}
+.artist-ticket-actions>span{font-size:12px;color:#b7aca8}
+.artist-detail-image{position:relative;display:flex;align-items:center;justify-content:center;min-width:0;background:radial-gradient(ellipse at center,#55402e,#151013 65%);overflow:hidden}
+.artist-detail-image::before{content:"";position:absolute;z-index:1;inset:0;pointer-events:none;background:linear-gradient(90deg,#08090c8c,transparent 32%),linear-gradient(0deg,#08090caa,transparent 30%)}
+.artist-detail-image img{display:block;width:100%;height:100%;max-height:800px;object-fit:contain;object-position:center}
+.artist-photo-placeholder{display:flex;flex-direction:column;align-items:center;gap:20px;padding:35px;text-align:center;color:#f5e5ce}
+.artist-photo-placeholder strong{font-family:Georgia,serif;font-size:clamp(30px,4vw,60px);font-style:italic}
+.artist-photo-placeholder span,.artist-photo-placeholder small{letter-spacing:2px}
+@media(max-width:750px){.artist-detail{grid-template-columns:1fr;min-height:0}.artist-detail-image{grid-row:1;min-height:370px;max-height:520px}.artist-detail-image img{height:auto;max-height:520px}.artist-detail-info{padding:28px 22px 35px}.artist-detail-info h2{font-size:46px}.artist-detail-info p{font-size:14px}.artist-ticket-actions{align-items:stretch}.artist-seat-button{width:100%}}
