@@ -18,7 +18,7 @@ export async function POST(req:NextRequest){
  try{
  const rows=await staffDb("rpc/extra_reserve_order",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:seats,p_amount:amount,p_name:name,p_phone:phone,p_email:email})}) as {order_code:string;expires_at:string}[];
  if(!rows?.length)throw Error("Reservation failed");
- const account=process.env.SEPAY_BANK_ACCOUNT!,bank=process.env.SEPAY_BANK_CODE!,holder=process.env.SEPAY_ACCOUNT_NAME!;
+ const account=process.env.SEPAY_BANK_ACCOUNT!,bank=(process.env.SEPAY_BANK_CODE||"").toUpperCase(),holder=process.env.SEPAY_ACCOUNT_NAME!;\n if(bank!=="ACB")return NextResponse.json({error:"Ngân hàng nhận tiền phải được cấu hình là ACB trong Vercel."},{status:503});
  const qr="https://img.vietqr.io/image/"+encodeURIComponent(bank)+"-"+encodeURIComponent(account)+"-compact2.png?amount="+amount+"&addInfo="+encodeURIComponent(code)+"&accountName="+encodeURIComponent(holder);
  return NextResponse.json({code,token,amount,expiresAt:rows[0].expires_at,bank,account,holder,qr,status:"pending"},{headers:{"Cache-Control":"no-store"}});
  }catch{return NextResponse.json({error:"Không thể giữ ghế. Có thể ghế đã được khách khác chọn hoặc chưa chạy SQL 012."},{status:409})}
