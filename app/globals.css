@@ -403,3 +403,15 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .ticket-admin-empty{color:#aeb0b8;font-size:13px;margin:17px 4px}
 @media(max-width:1250px){.ticket-admin-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:700px){.ticket-admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}.ticket-admin-filters>*{flex:1 1 100%!important;width:100%;max-width:none!important}.ticket-admin-panel{padding:15px 12px}}
+
+/* Financial ratio dashboard */
+.admin-financials{min-width:0;width:100%}
+.admin-financial-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}
+.admin-financial-kpis article{padding:22px;border:1px solid #38383e;border-radius:15px;background:linear-gradient(135deg,#25191c,#111216)}
+.admin-financial-kpis span{display:block;color:#c6c6cd;font-size:13px;margin-bottom:12px}
+.admin-financial-kpis strong{font-size:clamp(20px,2.1vw,30px);overflow-wrap:anywhere}
+.admin-financial-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.admin-financial-fields label{display:grid;gap:7px;font-size:13px;color:#ddd}
+.admin-financial-fields input{width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid #47474f;border-radius:9px;background:#1b1d24;color:#fff}
+@media(max-width:900px){.admin-financial-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.admin-financial-kpis,.admin-financial-fields{grid-template-columns:1fr}}
