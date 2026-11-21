@@ -24,3 +24,19 @@ try{
  if(result!==true)return fail("Trạng thái đã xác nhận không thể sửa. Riêng đơn Hủy được phép chọn lại trạng thái.",409);
  return NextResponse.json({ok:true});
 }catch{return fail("Không cập nhật được. Admin cần chạy SQL 016.",503)}}
+
+export async function DELETE(req:NextRequest){
+ const actor=await requireRole(["admin"]);
+ if(!actor)return fail("Chỉ Admin được xóa yêu cầu đã hủy.",403);
+ let input:unknown;try{input=await req.json()}catch{return fail("Dữ liệu không hợp lệ",400)}
+ const id=String((input as {id?:unknown})?.id||"");
+ if(!/^[0-9a-f-]{36}$/.test(id))return fail("Mã yêu cầu không hợp lệ",400);
+ try{
+  const existing=await staffDb("sale_requests?id=eq."+encodeURIComponent(id)+"&select=id,status&limit=1") as {id:string;status:string}[];
+  if(!existing.length)return fail("Yêu cầu không tồn tại hoặc đã được xóa.",404);
+  if(existing[0].status!=="cancelled")return fail("Chỉ được xóa yêu cầu có trạng thái Hủy.",409);
+  const deleted=await staffDb("sale_requests?id=eq."+encodeURIComponent(id)+"&status=eq.cancelled&select=id",{method:"DELETE",headers:{Prefer:"return=representation"}}) as {id:string}[];
+  if(!deleted?.length)return fail("Trạng thái đã thay đổi, vui lòng tải lại.",409);
+  return NextResponse.json({ok:true,deletedId:id},{headers:{"Cache-Control":"no-store"}});
+ }catch{return fail("Không xóa được yêu cầu. Vui lòng kiểm tra dữ liệu.",503)}
+}
