@@ -28,3 +28,7 @@ create table if not exists public.sale_requests (
 );
 create index if not exists sale_requests_owner_idx on public.sale_requests(created_by,created_at desc);
 alter table public.sale_requests enable row level security;
+
+-- Additional lifecycle states for show managers.
+alter table public.managed_shows drop constraint if exists managed_shows_status_check;
+alter table public.managed_shows add constraint managed_shows_status_check check (status in ('announced','pending','hidden','sold_out','live','ended'));
