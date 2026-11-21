@@ -6,7 +6,7 @@ create table if not exists public.extra_tickets (
  show_id text not null,
  venue_id text not null,
  seat_id text not null,
- qr_secret text not null unique default encode(gen_random_bytes(24),'hex'),
+ qr_secret text not null unique default substr(replace(gen_random_uuid()::text,'-','') || replace(gen_random_uuid()::text,'-',''),1,48),
  issued_at timestamptz not null default now(),
  checked_in_at timestamptz,
  checked_in_by text,
