@@ -7,7 +7,7 @@ export async function POST(req:NextRequest){
  if(!await requireRole(["admin"]))return NextResponse.json({error:"Chỉ Admin được sửa số lượng ghế"},{status:403});
  const input=await req.json().catch(()=>null) as {venue?:string;row?:string;count?:number}|null;
  const venue=input?.venue,row=input?.row,count=input?.count;
- if(!venue||!venues.some(v=>v.id===venue)||!row||!/^[A-M]$/.test(row)||!Number.isSafeInteger(count)||count!<2||count!>80)return NextResponse.json({error:"Số ghế phải từ 2 đến 80"},{status:400});
+ if(!venue||!venues.some(v=>v.id===venue)||!row||!/^[A-O]$/.test(row)||!Number.isSafeInteger(count)||count!<2||count!>80)return NextResponse.json({error:"Số ghế phải từ 2 đến 80"},{status:400});
  const base=seatsFor(venue as VenueId),currentRows=new Set(base.map(s=>s.row));
  if(!currentRows.has(row))return NextResponse.json({error:"Hàng ghế không tồn tại"},{status:400});
  try{
