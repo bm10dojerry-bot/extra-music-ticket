@@ -14,14 +14,15 @@ export async function POST(req:NextRequest){
  if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>(body?.promotion&&body.promotion!=="none"?20:12)||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
  const promotion=String(body?.promotion||"none");
  const giftSeats=body?.giftSeats??[];
- const giftCounts:Record<string,number>={none:0,buy5:1,buy10:2,buy20:3};
+ const giftCounts:Record<string,number>={none:0,couple5:0,buy5:1,buy10:2,buy20:3};
  if(!Object.prototype.hasOwnProperty.call(giftCounts,promotion)||!Array.isArray(giftSeats)||giftSeats.some((x:unknown)=>typeof x!=="string")||new Set(giftSeats).size!==giftSeats.length||giftSeats.some((x:string)=>seats.includes(x)))return NextResponse.json({error:"Ghế tặng hoặc chương trình khuyến mại không hợp lệ."},{status:400});
- if(giftSeats.length!==giftCounts[promotion]||promotion==="buy5"&&seats.length!==5||promotion==="buy10"&&seats.length!==10||promotion==="buy20"&&seats.length!==20||promotion==="none"&&giftSeats.length>0)return NextResponse.json({error:"Số ghế mua và ghế tặng không đúng chương trình."},{status:400});
- if(giftSeats.length&&!(await requireRole(["sale"])))return NextResponse.json({error:"Ưu đãi ghế tặng chỉ áp dụng qua tài khoản Sale."},{status:403});
+ if(giftSeats.length!==giftCounts[promotion]||promotion==="buy5"&&seats.length!==5||promotion==="buy10"&&seats.length!==10||promotion==="buy20"&&seats.length!==20||promotion==="none"&&giftSeats.length>0||promotion==="couple5"&&seats.length!==2)return NextResponse.json({error:"Số ghế mua và ghế tặng không đúng chương trình."},{status:400});
+ if(promotion!=="none"&&!(await requireRole(["sale"])))return NextResponse.json({error:"Ưu đãi ghế tặng chỉ áp dụng qua tài khoản Sale."},{status:403});
  const show=(await loadShows()).find(x=>x.id===showId);
  if(!show||!venues.some(v=>v.id===show.venue)||["sold_out","ended","live","pending"].includes(show.status))return NextResponse.json({error:"Show không mở bán."},{status:400});
  const valid=new Map(seatsFor(show.venue as VenueId).map(s=>[s.id,s.zone]));
  let amount=0;for(const id of seats as string[]){const zone=valid.get(id),price=zone?show.prices[zone as "A"|"B"|"C"|"D"]:null;if(!zone||!Number.isSafeInteger(price)||!price||price<=0)return NextResponse.json({error:"Ghế hoặc giá vé không hợp lệ."},{status:400});amount+=price}
+ if(promotion==="couple5")amount=Math.round(amount*95/100);
  if(giftSeats.length){
   const rank:Record<string,number>={A:0,B:1,C:2,D:3};
   const lowest=Math.max(...(seats as string[]).map(id=>rank[valid.get(id)!]));
