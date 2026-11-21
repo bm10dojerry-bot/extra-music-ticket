@@ -6,7 +6,7 @@ type Report={bySeller:{seller:string;orders:number;tickets:number;revenue:number
 const money=(n:number)=>new Intl.NumberFormat("vi-VN").format(n)+" đ";
 const roleNames:Record<Role,string>={admin:"Quản trị viên",sale:"Nhân viên Sale",show_manager:"Quản lý show",accountant:"Kế toán"};
 export default function StaffWorkspace({actor}:{actor:Staff}){
-const [tab,setTab]=useState<"overview"|"users"|"reports"|"sales"|"shows">("overview");
+const [tab,setTab]=useState<"overview"|"users"|"reports"|"sales"|"shows">(()=>{if(typeof window==="undefined")return "overview";const value=new URLSearchParams(window.location.search).get("tab");return value==="users"||value==="reports"||value==="sales"||value==="shows"?value:"overview"});
 const [accounts,setAccounts]=useState<Account[]>([]),[report,setReport]=useState<Report|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
 const [username,setUsername]=useState(""),[displayName,setDisplayName]=useState(""),[email,setEmail]=useState(""),[role,setRole]=useState<Role>("sale"),[password,setPassword]=useState("");
 const [requests,setRequests]=useState<{id:string;show_id:string;customer_name:string;customer_phone:string;status:string;note:string}[]>([]),[leadShow,setLeadShow]=useState(""),[leadName,setLeadName]=useState(""),[leadPhone,setLeadPhone]=useState(""),[leadNote,setLeadNote]=useState("");
