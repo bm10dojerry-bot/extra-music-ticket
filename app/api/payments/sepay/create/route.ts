@@ -25,7 +25,7 @@ export async function POST(req:NextRequest){
  if(giftSeats.length){
   const rank:Record<string,number>={A:0,B:1,C:2,D:3};
   const lowest=Math.max(...(seats as string[]).map(id=>rank[valid.get(id)!]));
-  if(giftSeats.some((id:string)=>!valid.has(id)||rank[valid.get(id]!]<lowest))return NextResponse.json({error:"Ghế tặng phải cùng hạng hoặc thấp hơn hạng vé mua thấp nhất."},{status:400});
+  if(giftSeats.some((id:string)=>!valid.has(id)||rank[valid.get(id)!]<lowest))return NextResponse.json({error:"Ghế tặng phải cùng hạng hoặc thấp hơn hạng vé mua thấp nhất."},{status:400});
  }
  const allSeats=[...seats,...giftSeats];
  const code="EX"+randomBytes(8).toString("hex").toUpperCase(),token=randomBytes(24).toString("hex");
