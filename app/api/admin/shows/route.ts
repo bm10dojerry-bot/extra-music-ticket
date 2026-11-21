@@ -1,3 +1,4 @@
+import {ADMIN_COOKIE,validAdminSession} from "../../../../lib/admin-session";
 import {NextRequest,NextResponse} from "next/server";
 import {isAdminSecret} from "../../../../lib/admin-auth";
 import {loadAllShows} from "../../../../lib/show-data";
@@ -5,7 +6,7 @@ import {shows as initialShows} from "../../../../lib/shows";
 import {venues} from "../../../../lib/venues";
 export const runtime="nodejs";
 const error=(msg:string,status:number)=>NextResponse.json({error:msg},{status});
-const auth=(r:NextRequest)=>isAdminSecret(r.headers.get("x-admin-secret"));
+const auth=(r:NextRequest)=>validAdminSession(r.cookies.get(ADMIN_COOKIE)?.value);
 const cfg=()=>{const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)throw Error("Thiếu cấu hình Supabase");return {url,key}};
 export async function GET(req:NextRequest){if(!auth(req))return error("Mật khẩu quản trị không đúng hoặc chưa cấu hình.",401);try{return NextResponse.json({shows:await loadAllShows(),defaults:initialShows})}catch(e){return error(e instanceof Error?e.message:"Không thể tải dữ liệu.",503)}}
 export async function POST(req:NextRequest){
