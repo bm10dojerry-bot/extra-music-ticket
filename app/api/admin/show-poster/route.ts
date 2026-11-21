@@ -23,8 +23,8 @@ export async function POST(req:NextRequest){
  const ext={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}[file.type];
  const path="posters/"+id+"/"+crypto.randomUUID()+"."+ext;
  const uploaded=await fetch(url+"/storage/v1/object/extra-media/"+path,{method:"POST",headers:{...headers,"Content-Type":file.type,"x-upsert":"false"},body:bytes});
- if(!uploaded.ok)return error("Không tải được poster. Hãy chạy SQL 003 tạo bucket.",502);
+ if(!uploaded.ok){const detail=(await uploaded.text()).slice(0,450);return error("Supabase Storage lỗi "+uploaded.status+": "+detail,502);}
  const saved=await fetch(url+"/rest/v1/managed_shows?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{...headers,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({poster_path:path,updated_at:new Date().toISOString()})});
- if(!saved.ok)return error("Ảnh đã tải nhưng chưa lưu vào show.",502);
+ if(!saved.ok){const detail=(await saved.text()).slice(0,450);return error("Ảnh đã tải nhưng Supabase không lưu poster vào show ("+saved.status+"): "+detail,502);}
  return NextResponse.json({ok:true,url:mediaPublicUrl(path)});
 }
