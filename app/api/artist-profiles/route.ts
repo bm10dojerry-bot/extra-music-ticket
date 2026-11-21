@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
-import {requireRole} from "../../../../lib/staff-auth";
+import {requireRole} from "../../../lib/staff-auth";
 export const dynamic="force-dynamic";
 const config=()=>({url:process.env.SUPABASE_URL,key:process.env.SUPABASE_SERVICE_ROLE_KEY});
 export async function GET(){
