@@ -51,7 +51,7 @@ create or replace function public.extra_confirm_payment(p_tx bigint,p_code text,
 returns text language plpgsql security definer set search_path=public as $$
 declare o public.extra_payment_orders%rowtype; existing text; outcome text;
 begin
- select outcome into existing from public.extra_payment_events where transaction_id=p_tx;
+ select ev.outcome into existing from public.extra_payment_events ev where ev.transaction_id=p_tx;
  if found then return existing;end if;
  select * into o from public.extra_payment_orders where code=p_code for update;
  if not found then outcome:='unmatched';
