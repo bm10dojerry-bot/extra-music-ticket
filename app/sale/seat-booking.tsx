@@ -6,11 +6,11 @@ type Inventory={showId:string;soldSeats:string[];heldSeats:string[];soldOut:bool
 type Payment={code:string;token:string;amount:number;expiresAt:string;qr:string;bank:string;account:string;holder:string;status:string};
 const money=(n:number)=>new Intl.NumberFormat("vi-VN").format(n)+"đ";
 export default function SeatBooking({shows}:{shows:Show[]}){
- const [promotion,setPromotion]=useState("none"),[giftMode,setGiftMode]=useState(false),[giftSeats,setGiftSeats]=useState<string[]>([]);
+ const [seatRows,setSeatRows]=useState<Record<string,Record<string,number>>>({});const [promotion,setPromotion]=useState("none"),[giftMode,setGiftMode]=useState(false),[giftSeats,setGiftSeats]=useState<string[]>([]);
  const [showId,setShowId]=useState(""),[inventory,setInventory]=useState<Record<string,Inventory>|null>(null),[chosen,setChosen]=useState<string[]>([]);
  const [name,setName]=useState(""),[phone,setPhone]=useState(""),[email,setEmail]=useState(""),[payment,setPayment]=useState<Payment|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const activeShowId=shows.some(s=>s.id===showId)?showId:(shows[0]?.id||"");
- const show=shows.find(s=>s.id===activeShowId),seats=useMemo(()=>show?seatsFor(show.venue as VenueId):[],[show?.venue]);
+ const show=shows.find(s=>s.id===activeShowId),seats=useMemo(()=>show?seatsFor(show.venue as VenueId,seatRows[show.venue]||{}):[],[show?.venue,seatRows]);
  const unavailable=new Set([...(inventory?.[activeShowId]?.soldSeats||[]),...(inventory?.[activeShowId]?.heldSeats||[])]);
  const selected=seats.filter(s=>chosen.includes(s.id));
  const giftLimit=promotion==="buy5"?1:promotion==="buy10"?2:promotion==="buy20"?3:0;
@@ -21,7 +21,7 @@ export default function SeatBooking({shows}:{shows:Show[]}){
  const subtotal=selected.reduce((sum,s)=>sum+(show?.prices?.[s.zone]||0),0);
  const discount=promotion==="couple5"?Math.round(subtotal*5/100):0;
  const total=subtotal-discount;
- useEffect(()=>{let active=true;const refresh=async()=>{try{const r=await fetch("/api/public/show-inventory",{cache:"no-store"});if(!r.ok)throw Error("Không tải được trạng thái ghế");const d=await r.json();if(!d.available)throw Error("Trạng thái ghế chưa sẵn sàng");if(active)setInventory(Object.fromEntries(d.inventory.map((x:Inventory)=>[x.showId,x])))}catch{if(active)setInventory(null)}};void refresh();const t=setInterval(refresh,10000);return()=>{active=false;clearInterval(t)}},[]);
+ useEffect(()=>{let active=true;const refresh=async()=>{try{const r=await fetch("/api/public/show-inventory",{cache:"no-store"});if(!r.ok)throw Error("Không tải được trạng thái ghế");const d=await r.json();if(!d.available)throw Error("Trạng thái ghế chưa sẵn sàng");if(active){setSeatRows(d.seatRows||{});setInventory(Object.fromEntries(d.inventory.map((x:Inventory)=>[x.showId,x])))}}catch{if(active)setInventory(null)}};void refresh();const t=setInterval(refresh,10000);return()=>{active=false;clearInterval(t)}},[]);
  useEffect(()=>{if(!payment||payment.status!=="pending")return;let active=true;const check=async()=>{try{const r=await fetch("/api/payments/sepay/status?code="+encodeURIComponent(payment.code)+"&token="+encodeURIComponent(payment.token),{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(active&&d.status!=="pending")setPayment(p=>p&&p.code===d.code?{...p,status:d.status}:p)}catch{}};void check();const t=setInterval(check,5000);return()=>{active=false;clearInterval(t)}},[payment?.code,payment?.status]);
  const select=(id:string)=>{if(!inventory||unavailable.has(id)||payment||!show||["sold_out","ended","live","pending"].includes(show.status))return;
  if(giftMode){if(!eligibleGift(id)||chosen.includes(id))return;setGiftSeats(old=>old.includes(id)?old.filter(x=>x!==id):old.length>=giftLimit?old:[...old,id]);return}

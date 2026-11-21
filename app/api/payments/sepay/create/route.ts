@@ -20,7 +20,9 @@ export async function POST(req:NextRequest){
  if(promotion!=="none"&&!(await requireRole(["sale"])))return NextResponse.json({error:"Ưu đãi ghế tặng chỉ áp dụng qua tài khoản Sale."},{status:403});
  const show=(await loadShows()).find(x=>x.id===showId);
  if(!show||!venues.some(v=>v.id===show.venue)||["sold_out","ended","live","pending"].includes(show.status))return NextResponse.json({error:"Show không mở bán."},{status:400});
- const valid=new Map(seatsFor(show.venue as VenueId).map(s=>[s.id,s.zone]));
+ const layoutRows=await staffDb("venue_seat_rows?venue_id=eq."+encodeURIComponent(show.venue)+"&select=row_code,seat_count") as {row_code:string;seat_count:number}[];
+ const counts=Object.fromEntries(layoutRows.map(r=>[r.row_code,r.seat_count]));
+ const valid=new Map(seatsFor(show.venue as VenueId,counts).map(s=>[s.id,s.zone]));
  let amount=0;for(const id of seats as string[]){const zone=valid.get(id),price=zone?show.prices[zone as "A"|"B"|"C"|"D"]:null;if(!zone||!Number.isSafeInteger(price)||!price||price<=0)return NextResponse.json({error:"Ghế hoặc giá vé không hợp lệ."},{status:400});amount+=price}
  if(promotion==="couple5")amount=Math.round(amount*95/100);
  if(giftSeats.length){
