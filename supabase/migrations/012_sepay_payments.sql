@@ -35,7 +35,7 @@ begin
  if cardinality(p_seats) is null or cardinality(p_seats)<1 or cardinality(p_seats)>12 or cardinality(p_seats)<> (select count(distinct x) from unnest(p_seats) x) then raise exception 'Invalid seats';end if;
  perform pg_advisory_xact_lock(hashtext(p_show));
  select array_agg(distinct x) into taken from (
-  select unnest(seats) x from public.extra_payment_orders where show_id=p_show and (status='paid' or (status='pending' and expires_at>now()))
+  select unnest(e.seats) x from public.extra_payment_orders e where e.show_id=p_show and (e.status='paid' or (e.status='pending' and e.expires_at>now()))
   union all
   select unnest(seats) x from public.ticket_sales where show_id=p_show and payment_verified=true
  ) q;
