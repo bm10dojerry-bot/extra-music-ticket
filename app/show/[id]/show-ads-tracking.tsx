@@ -10,7 +10,7 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,event,amoun
  useEffect(()=>{try{const v=sessionStorage.getItem(consentKey);if(v==="yes"||v==="no")setConsent(v)}catch{}},[]);
  useEffect(()=>{if(consent!=="yes")return;const w=window as AdsWindow;let mounted=true;const jobs:Promise<void>[]=[];
  if(pixelId&&/^[0-9]{8,25}$/.test(pixelId)){
-  if(!w.fbq){const fn=((...args:unknown[])=>{(fn as typeof fn&{queue:unknown[][]}).queue.push(args)}) as typeof w.fbq &{queue:unknown[][];loaded?:boolean;version?:string};fn.queue=[];fn.loaded=true;fn.version="2.0";w.fbq=fn;const script=document.createElement("script");script.async=true;script.src="https://connect.facebook.net/en_US/fbevents.js";document.head.appendChild(script)}
+  if(!w.fbq){type QueuedFbq=((...args:unknown[])=>void)&{queue:unknown[][];loaded?:boolean;version?:string};const fn=function(...args:unknown[]){fn.queue.push(args)} as QueuedFbq;fn.queue=[];fn.loaded=true;fn.version="2.0";w.fbq=fn;const script=document.createElement("script");script.async=true;script.src="https://connect.facebook.net/en_US/fbevents.js";document.head.appendChild(script)}
   w.fbq?.("init",pixelId);
  }
  if(ga4Id&&/^G-[A-Z0-9]{6,20}$/.test(ga4Id)){
