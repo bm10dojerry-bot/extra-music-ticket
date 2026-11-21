@@ -10,7 +10,7 @@ const auth=()=>requireRole(["admin","show_manager"]);
 const cfg=()=>{const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)throw Error("Thiếu cấu hình Supabase");return {url,key}};
 export async function GET(req:NextRequest){if(!await auth())return error("Mật khẩu quản trị không đúng hoặc chưa cấu hình.",401);try{return NextResponse.json({shows:await loadAllShows(),defaults:initialShows})}catch(e){return error(e instanceof Error?e.message:"Không thể tải dữ liệu.",503)}}
 export async function POST(req:NextRequest){
- if(!auth(req))return error("Mật khẩu quản trị không đúng hoặc chưa cấu hình.",401);
+ if(!await auth())return error("Bạn không có quyền quản lý show hoặc phiên đăng nhập đã hết hạn.",403);
  let input:Record<string,unknown>;try{input=await req.json()}catch{return error("Dữ liệu không hợp lệ.",400)}
  const id=String(input.id||"").trim(),artist=String(input.artist||"").trim(),title=String(input.title||"").trim();
  const date=String(input.date||""),time=String(input.time||""),venue=String(input.venue||""),status=String(input.status||"announced");
