@@ -1,5 +1,5 @@
 import type {VenueId} from "./venues";
-export type Show={id:string;artist:string;date:string;time:string;venue:VenueId;title:string;status:"announced"|"pending"};
+export type Show={id:string;artist:string;date:string;time:string;venue:VenueId;title:string;status:"announced"|"pending"|"sold_out"};
 export const shows:Show[]=[
 {id:"dinh-dung-2811",artist:"Đình Dũng",date:"2026-11-28",time:"19:30",venue:"moana",title:"Đình Dũng – Chuyện tình giữa Sa Pa",status:"announced"},
 {id:"minh-vuong-0512",artist:"Minh Vương & SOLPA",date:"2026-12-05",time:"19:30",venue:"ccc",title:"Minh Vương & các thành viên SOLPA",status:"announced"},
