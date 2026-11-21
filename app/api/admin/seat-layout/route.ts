@@ -13,7 +13,8 @@ export async function POST(req:NextRequest){
  try{
   const [existing,shows]=await Promise.all([staffDb("venue_seat_rows?venue_id=eq."+encodeURIComponent(venue)+"&select=row_code,seat_count") as Promise<{row_code:string;seat_count:number}[]>,loadShows()]);
   const counts=Object.fromEntries(existing.map(x=>[x.row_code,x.seat_count]));
-  const next={...counts,[row]:count};
+  const seatCount=Number(count);
+  const next:Record<string,number>={...counts,[row]:seatCount};
   const valid=new Set(seatsFor(venue as VenueId,next).map(s=>s.id));
   const ids=shows.filter(s=>s.venue===venue).map(s=>s.id);
   for(const id of ids){
@@ -24,7 +25,7 @@ export async function POST(req:NextRequest){
    const used=[...sales.flatMap(x=>x.seats||[]),...orders.filter(x=>x.status==="paid"||x.expires_at&&Date.parse(x.expires_at)>Date.now()).flatMap(x=>x.seats||[])];
    if(used.some(seat=>!valid.has(seat)))return NextResponse.json({error:"Không thể giảm hàng "+row+": có ghế đã bán hoặc đang giữ sẽ bị loại khỏi sơ đồ."},{status:409});
   }
-  await staffDb("venue_seat_rows?on_conflict=venue_id,row_code",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({venue_id:venue,row_code:row,seat_count:count,updated_at:new Date().toISOString()})});
-  return NextResponse.json({ok:true,venue,row,count,capacity:seatsFor(venue as VenueId,next).length});
+  await staffDb("venue_seat_rows?on_conflict=venue_id,row_code",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({venue_id:venue,row_code:row,seat_count:seatCount,updated_at:new Date().toISOString()})});
+  return NextResponse.json({ok:true,venue,row,count:seatCount,capacity:seatsFor(venue as VenueId,next).length});
  }catch{return NextResponse.json({error:"Không cập nhật được sơ đồ ghế. Vui lòng kiểm tra dữ liệu."},{status:503})}
 }
