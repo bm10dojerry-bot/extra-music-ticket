@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from "react";
 type EventName="view"|"checkout"|"purchase";
 type AdsWindow=Window&{fbq?:(...args:unknown[])=>void;gtag?:(...args:unknown[])=>void;dataLayer?:unknown[]};
 const consentKey="extra_ads_consent_v1";
+const sessionKey="extra_ads_session_v1";
 export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,event,amount,orderCode}:{showId:string;artist:string;pixelId:string;ga4Id:string;event:EventName;amount:number;orderCode?:string}){
  const [consent,setConsent]=useState<"yes"|"no"|null>(null);
  const [ready,setReady]=useState(false);
@@ -25,8 +26,9 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,event,amoun
  useEffect(()=>{if(consent!=="yes"||!ready)return;const w=window as AdsWindow;const key=event==="purchase"?"purchase:"+orderCode:event+":"+showId;if(event==="purchase"&&!orderCode)return;if(fired.current.has(key))return;
  if(event==="purchase"){try{const seen=localStorage.getItem("extra_ads_"+key);if(seen)return}catch{}}
  fired.current.add(key);
+ if(event!=="purchase"){try{let sessionId=sessionStorage.getItem(sessionKey);if(!sessionId){sessionId=crypto.randomUUID();sessionStorage.setItem(sessionKey,sessionId)}void fetch("/api/public/landing-funnel",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({showId,sessionId,eventName:event,consent:true})}).catch(()=>{})}catch{}}
  const common={content_ids:[showId],content_name:artist,content_type:"product",currency:"VND",value:amount};
- if(pixelId&&w.fbq){if(event==="view")w.fbq("trackSingle",pixelId,"ViewContent",common);if(event==="checkout")w.fbq("trackSingle",pixelId,"InitiateCheckout",common);if(event==="purchase")w.fbq("trackSingle",pixelId,"Purchase",{...common,order_id:orderCode})}
+ if(pixelId&&w.fbq){if(event==="view")w.fbq("trackSingle",pixelId,"ViewContent",common);if(event==="checkout")w.fbq("trackSingle",pixelId,"InitiateCheckout",common);if(event==="purchase")w.fbq("trackSingle",pixelId,"Purchase",{...common,order_id:orderCode},{eventID:"extra_purchase_"+orderCode})}
  if(ga4Id&&w.gtag){const ecommerce={currency:"VND",value:amount,items:[{item_id:showId,item_name:artist,quantity:1,price:amount}]};w.gtag("event",event==="view"?"view_item":event==="checkout"?"begin_checkout":"purchase",event==="purchase"?{...ecommerce,transaction_id:orderCode}:{...ecommerce})}
  if(event==="purchase")try{localStorage.setItem("extra_ads_"+key,"1")}catch{}
  },[consent,ready,event,showId,artist,amount,orderCode,pixelId,ga4Id]);

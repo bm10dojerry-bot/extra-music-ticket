@@ -35,6 +35,14 @@ export async function POST(req:NextRequest){
  try{
  const rows=await staffDb("rpc/extra_reserve_order",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:allSeats,p_amount:amount,p_name:name,p_phone:phone,p_email:email})}) as {order_code:string;expires_at:string}[];
  if(!rows?.length)throw Error("Reservation failed");
+ // Attribution is optional and must never prevent a successful seat reservation.
+ if(body?.adsConsent===true&&body?.landingShowId===show.id){
+  const fbp=typeof body.fbp==="string"&&/^fb\.1\.\d{10,16}\.\d+$/.test(body.fbp)?body.fbp:"";
+  const fbc=typeof body.fbc==="string"&&/^fb\.1\.\d{10,16}\.[A-Za-z0-9_-]+$/.test(body.fbc)?body.fbc:"";
+  const utmSource=typeof body.utmSource==="string"?body.utmSource.slice(0,100):"";
+  const utmCampaign=typeof body.utmCampaign==="string"?body.utmCampaign.slice(0,100):"";
+  try{await staffDb("extra_order_attribution",{method:"POST",body:JSON.stringify({order_code:code,show_id:show.id,consent:true,fbp,fbc,landing_path:"/show/"+show.id,utm_source:utmSource,utm_campaign:utmCampaign})})}catch(e){console.warn("[ads] Attribution unavailable for",code)}
+ }
  const account=process.env.SEPAY_BANK_ACCOUNT!,bank=(process.env.SEPAY_BANK_CODE||"").toUpperCase(),holder=process.env.SEPAY_ACCOUNT_NAME!;
  const qr="https://img.vietqr.io/image/"+encodeURIComponent(bank)+"-"+encodeURIComponent(account)+"-compact2.png?amount="+amount+"&addInfo="+encodeURIComponent(code)+"&accountName="+encodeURIComponent(holder);
  return NextResponse.json({code,token,amount,expiresAt:rows[0].expires_at,bank,account,holder,qr,status:"pending"},{headers:{"Cache-Control":"no-store"}});
