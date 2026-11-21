@@ -32,7 +32,7 @@ async function saveShow(){
   const stored=(verified.shows as ManagedShow[]).find(x=>x.id===form.id);
   if(!stored)throw Error("Chưa tìm thấy show trong dữ liệu đã lưu.");
   if(selectedPoster&&!stored.posterUrl)throw Error("Chưa tìm thấy poster đã lưu. Vui lòng thử lại.");
-  setForm(toForm({...stored,status:stored.rawStatus||stored.status}));
+  setForm(toForm({...stored,status:stored.status}));
   setSelectedPoster(null);setPosterPreview(null);
   setPosterStatus("✅ Đã lưu và đăng show thành công! Đang mở trang chủ...");
   setMessage("✅ Đã lưu thông tin và poster thành công.");
