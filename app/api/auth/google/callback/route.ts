@@ -15,17 +15,18 @@ export async function GET(req:NextRequest){
  if(!clientId||!clientSecret)return failure("google_not_configured",destination);
  try{
  const exchange=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({code,client_id:clientId,client_secret:clientSecret,redirect_uri:origin+"/api/auth/google/callback",grant_type:"authorization_code"}),cache:"no-store"});
- if(!exchange.ok)return failure("google_failed",destination);
+ if(!exchange.ok){const details=await exchange.json().catch(()=>({})) as {error?:string};return failure(details.error==="invalid_client"?"invalid_client":details.error==="invalid_grant"?"invalid_grant":"token_exchange_failed",destination)}
  const token=await exchange.json() as {access_token?:string};
- if(!token.access_token)return failure("google_failed",destination);
+ if(!token.access_token)return failure("token_missing",destination);
  const profileRes=await fetch("https://openidconnect.googleapis.com/v1/userinfo",{headers:{Authorization:"Bearer "+token.access_token},cache:"no-store"});
- if(!profileRes.ok)return failure("google_failed",destination);
+ if(!profileRes.ok)return failure("profile_failed",destination);
  const profile=await profileRes.json() as {email?:string;email_verified?:boolean};
  if(!profile.email||profile.email_verified!==true)return failure("unverified_email",destination);
  const email=profile.email.trim().toLowerCase();
  const owner="bm10dojerry@gmail.com";
  const res=NextResponse.redirect(origin+(destination==="admin"?"/admin":"/staff"));
  if(owner&&email===owner){
+ if(!process.env.ADMIN_MEDIA_SECRET||process.env.ADMIN_MEDIA_SECRET.length<24)return failure("admin_session_secret_short",destination);
  res.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:true,sameSite:"strict",path:"/",maxAge:8*3600});
  }else{
  const rows=await staffDb("staff_accounts?email=eq."+encodeURIComponent(email)+"&active=eq.true&select=id,username,display_name,role,active&limit=1") as Staff[];
@@ -34,5 +35,5 @@ export async function GET(req:NextRequest){
  }
  res.cookies.set("extra_google_oauth","",{httpOnly:true,secure:true,sameSite:"lax",path:"/api/auth/google",maxAge:0});
  return res;
- }catch{return failure("google_failed",destination)}
+ }catch{return failure("server_error",destination)}
 }
