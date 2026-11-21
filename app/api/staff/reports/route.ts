@@ -13,10 +13,11 @@ export async function GET(req:NextRequest){const actor=await requireRole(["admin
  if(to){const end=new Date(new Date(to+"T00:00:00+07:00").getTime()+86400000).toISOString();onlineFilters.push("paid_at=lt."+encodeURIComponent(end))}
  if(showId)onlineFilters.push("show_id=eq."+encodeURIComponent(showId));
  const online=await staffDb("extra_payment_orders?"+onlineFilters.join("&")) as {code:string;show_id:string;seats:string[];amount_vnd:number;paid_at:string|null;sale_staff_id:string|null}[];
+ const paidByCode=new Map(online.map(o=>[o.code.toUpperCase(),o]));
  const known=new Set(rows.map(r=>r.order_code.toUpperCase()));
  const onlineRows=online.filter(o=>!known.has(o.code.toUpperCase())&&o.paid_at).map(o=>({order_code:o.code,show_id:o.show_id,event_name:shows.find(s=>s.id===o.show_id)?.artist||o.show_id,venue_name:"",seats:o.seats,amount_vnd:o.amount_vnd,payment_method:"SePay / ACB",seller_name:o.sale_staff_id===actor.id?actor.display_name:"Online / SePay",paid_at:o.paid_at!}));
  const combined=[...rows,...onlineRows];
- const visible=actor.role==="sale"?[...rows.filter(r=>r.seller_name===actor.display_name||r.seller_name===actor.username),...onlineRows.filter(r=>r.seller_name===actor.display_name)]:combined;
+ const visible=actor.role==="sale"?[...rows.filter(r=>r.seller_name===actor.display_name||r.seller_name===actor.username||paidByCode.get(r.order_code.toUpperCase())?.sale_staff_id===actor.id),...onlineRows.filter(r=>r.seller_name===actor.display_name)]:combined;
  const groups=new Map<string,{showId:string;showName:string;orders:number;tickets:number;revenue:number;byMethod:Record<string,number>}>();
  for(const r of visible){const id=r.show_id||"unassigned:"+r.event_name;const a=groups.get(id)||{showId:r.show_id||"",showName:shows.find(s=>s.id===r.show_id)?.artist||r.event_name,orders:0,tickets:0,revenue:0,byMethod:{}};a.orders++;a.tickets+=(r.seats||[]).length;a.revenue+=Number(r.amount_vnd)||0;a.byMethod[r.payment_method]=(a.byMethod[r.payment_method]||0)+(Number(r.amount_vnd)||0);groups.set(id,a)}
  const summary=[...groups.values()].sort((a,b)=>b.revenue-a.revenue);
