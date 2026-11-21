@@ -4,7 +4,7 @@ import {staffDb,STAFF_COOKIE,createStaffSession,type Staff} from "../../../../..
 import {ADMIN_COOKIE,createAdminSession} from "../../../../../lib/admin-session";
 export const runtime="nodejs";
 const origin="https://iextra.net";
-const failure=(reason:string,dest:string)=>NextResponse.redirect(origin+"/"+dest+"?login_error="+encodeURIComponent(reason));
+const failure=(reason:string,dest:string)=>NextResponse.redirect((dest==="admin"?"https://admin.iextra.net/admin":origin+"/staff")+"?login_error="+encodeURIComponent(reason));
 export async function GET(req:NextRequest){
  const saved=req.cookies.get("extra_google_oauth")?.value||"";
  const [state,dest,extra]=saved.split(".");
@@ -24,14 +24,14 @@ export async function GET(req:NextRequest){
  if(!profile.email||profile.email_verified!==true)return failure("unverified_email",destination);
  const email=profile.email.trim().toLowerCase();
  const owner="bm10dojerry@gmail.com";
- const res=NextResponse.redirect(origin+(destination==="admin"?"/admin":"/staff"));
+ const res=NextResponse.redirect(destination==="admin"?"https://admin.iextra.net/admin":origin+"/staff");
  if(owner&&email===owner){
  if(!process.env.ADMIN_MEDIA_SECRET||process.env.ADMIN_MEDIA_SECRET.length<24)return failure("admin_session_secret_short",destination);
- res.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:8*3600});
+ res.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:true,sameSite:"lax",domain:".iextra.net",path:"/",maxAge:8*3600});
  }else{
  const rows=await staffDb("staff_accounts?email=eq."+encodeURIComponent(email)+"&active=eq.true&select=id,username,display_name,role,active&limit=1") as Staff[];
  if(!rows[0])return failure("not_authorized",destination);
- res.cookies.set(STAFF_COOKIE,createStaffSession(rows[0]),{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:8*3600});
+ res.cookies.set(STAFF_COOKIE,createStaffSession(rows[0]),{httpOnly:true,secure:true,sameSite:"lax",domain:".iextra.net",path:"/",maxAge:8*3600});
  }
  res.cookies.set("extra_google_oauth","",{httpOnly:true,secure:true,sameSite:"lax",path:"/api/auth/google",maxAge:0});
  return res;
