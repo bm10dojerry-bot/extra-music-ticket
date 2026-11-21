@@ -2,6 +2,18 @@ import {NextRequest,NextResponse} from "next/server";
 export function middleware(request:NextRequest){
  const host=(request.headers.get("host")||"").split(":")[0].toLowerCase();
  const pathname=request.nextUrl.pathname;
+ if(host==="admin.iextra.net"){
+  // The admin portal is isolated from the public storefront and staff subdomains.
+  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname.startsWith("/api/admin/")||pathname.startsWith("/api/staff/")||pathname.startsWith("/api/public/")||pathname.startsWith("/api/auth/google/")||pathname.startsWith("/api/artist-profiles")||pathname.startsWith("/api/venue-profiles")||pathname==="/reset-password"||pathname.startsWith("/api/password/")||pathname.startsWith("/api/media/")||pathname.startsWith("/api/venues/"))return NextResponse.next();
+  if(pathname==="/admin"||pathname.startsWith("/admin/")||pathname==="/staff"||pathname.startsWith("/staff/"))return NextResponse.next();
+  if(pathname.startsWith("/api/"))return NextResponse.json({error:"API này không khả dụng trên cổng Admin"},{status:403});
+  const url=request.nextUrl.clone();url.pathname="/admin";url.search="";return NextResponse.rewrite(url);
+ }
+ if(host==="iextra.net"||host==="www.iextra.net"){
+  if(pathname==="/admin"||pathname.startsWith("/admin/")){
+   const url=request.nextUrl.clone();url.hostname="admin.iextra.net";url.protocol="https:";return NextResponse.redirect(url,308);
+  }
+ }
  if(host==="checkin.iextra.net"){
   if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname.startsWith("/api/staff/login")||pathname.startsWith("/api/staff/logout")||pathname.startsWith("/api/staff/checkin")||pathname.startsWith("/api/admin/login"))return NextResponse.next();
   if(pathname==="/checkin"||pathname.startsWith("/checkin/"))return NextResponse.next();
