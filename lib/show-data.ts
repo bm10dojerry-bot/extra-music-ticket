@@ -5,7 +5,7 @@ export const blankPrices={A:null,B:null,C:null,D:null};
 export function defaultShows():ManagedShow[]{return shows.map(s=>({...s,posterUrl:null,prices:{...blankPrices}}))}
 type Row={id:string;artist:string;title:string;show_date:string;show_time:string;venue_id:Show["venue"];status:string;poster_path:string|null;prices:Record<string,unknown>};
 export function normalizeShow(r:Row):ManagedShow{
- const prices={...blankPrices};
+ const prices:Record<"A"|"B"|"C"|"D",number|null>={...blankPrices};
  for(const zone of ["A","B","C","D"] as const){const n=r.prices?.[zone];prices[zone]=typeof n==="number"&&Number.isSafeInteger(n)&&n>=0?n:null}
  return {id:r.id,artist:r.artist,title:r.title,date:r.show_date,time:r.show_time,venue:r.venue_id,status:r.status==="pending"?"pending":r.status==="sold_out"?"sold_out":"announced",posterUrl:r.poster_path?mediaPublicUrl(r.poster_path):null,prices};
 }
