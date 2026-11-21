@@ -1,0 +1,4 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getVerifiedSale,sendSaleReport } from "../../../../../lib/reporting";
+export const runtime="nodejs";
+export async function POST(req:NextRequest){try{const token=req.headers.get("authorization");if(!process.env.REPORT_WEBHOOK_SECRET||token!=="Bearer "+process.env.REPORT_WEBHOOK_SECRET)return NextResponse.json({error:"Unauthorized"},{status:401});const {saleId}=await req.json();if(typeof saleId!=="string"||!/^[0-9a-f-]{36}$/i.test(saleId))return NextResponse.json({error:"Invalid saleId"},{status:400});const sale=await getVerifiedSale(saleId);if(!sale)return NextResponse.json({error:"Verified sale not found"},{status:404});return NextResponse.json(await sendSaleReport(sale));}catch(e){console.error("Sale report error",e);return NextResponse.json({error:"Report delivery failed"},{status:500});}}
