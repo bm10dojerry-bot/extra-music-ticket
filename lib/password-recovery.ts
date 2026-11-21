@@ -4,7 +4,7 @@ import {staffDb,makePasswordHash,verifyPassword} from "./staff-auth";
 import {isAdminSecret} from "./admin-auth";
 export const tokenHash=(token:string)=>createHash("sha256").update(token).digest("hex");
 export const isEmail=(s:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)&&s.length<=254;
-export async function checkOwnerPassword(password:string){const rows=await staffDb("owner_credentials?id=eq.owner&select=password_hash&limit=1") as {password_hash:string}[];return rows.length?verifyPassword(password,rows[0].password_hash):isAdminSecret(password)}
+export async function checkOwnerPassword(password:string){try{const rows=await staffDb("owner_credentials?id=eq.owner&select=password_hash&limit=1") as {password_hash:string}[];return rows.length?verifyPassword(password,rows[0].password_hash):isAdminSecret(password)}catch{return isAdminSecret(password)}}
 export async function sendResetEmail(email:string,kind:"owner"|"staff",accountId:string){
  const previous=await staffDb("password_reset_tokens?account_kind=eq."+kind+"&account_id=eq."+encodeURIComponent(accountId)+"&select=created_at&order=created_at.desc&limit=1") as {created_at:string}[];
  if(previous[0]&&Date.now()-Date.parse(previous[0].created_at)<5*60*1000)return;
