@@ -11,6 +11,7 @@ create table if not exists public.staff_accounts (
 create index if not exists staff_accounts_role_idx on public.staff_accounts(role);
 alter table public.staff_accounts enable row level security;
 -- Only service-role server endpoints can read/write credentials.
+alter table public.ticket_sales add column if not exists show_id text;
 create index if not exists ticket_sales_show_date_idx on public.ticket_sales(show_id,paid_at) where payment_verified=true;
 
 -- Sale pipeline: these are requests only, NOT paid tickets or seat reservations.
