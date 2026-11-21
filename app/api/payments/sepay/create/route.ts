@@ -11,14 +11,26 @@ export async function POST(req:NextRequest){
  try{await staffDb("extra_tickets?select=id&limit=1")}catch{return NextResponse.json({error:"Hệ thống đang kích hoạt vé QR. Vui lòng thử lại sau khi quản trị hoàn tất SQL 013."},{status:503})}
  const body=await req.json().catch(()=>null);
  const showId=String(body?.showId||""),seats=body?.seats,name=String(body?.name||"").trim(),phone=String(body?.phone||"").trim(),email=String(body?.email||"").trim();
- if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>12||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
+ if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>23||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
+ const promotion=String(body?.promotion||"none");
+ const giftSeats=body?.giftSeats??[];
+ const giftCounts:Record<string,number>={none:0,buy5:1,buy10:2,buy20:3};
+ if(!Object.prototype.hasOwnProperty.call(giftCounts,promotion)||!Array.isArray(giftSeats)||giftSeats.some((x:unknown)=>typeof x!=="string")||new Set(giftSeats).size!==giftSeats.length||giftSeats.some((x:string)=>seats.includes(x)))return NextResponse.json({error:"Ghế tặng hoặc chương trình khuyến mại không hợp lệ."},{status:400});
+ if(giftSeats.length!==giftCounts[promotion]||promotion==="buy5"&&seats.length!==5||promotion==="buy10"&&seats.length!==10||promotion==="buy20"&&seats.length!==20||promotion==="none"&&giftSeats.length>0)return NextResponse.json({error:"Số ghế mua và ghế tặng không đúng chương trình."},{status:400});
+ if(giftSeats.length&&!req.headers.get("x-extra-sale-verified"))return NextResponse.json({error:"Ưu đãi ghế tặng chỉ áp dụng qua tài khoản Sale."},{status:403});
  const show=(await loadShows()).find(x=>x.id===showId);
  if(!show||!venues.some(v=>v.id===show.venue)||["sold_out","ended","live","pending"].includes(show.status))return NextResponse.json({error:"Show không mở bán."},{status:400});
  const valid=new Map(seatsFor(show.venue as VenueId).map(s=>[s.id,s.zone]));
  let amount=0;for(const id of seats as string[]){const zone=valid.get(id),price=zone?show.prices[zone as "A"|"B"|"C"|"D"]:null;if(!zone||!Number.isSafeInteger(price)||!price||price<=0)return NextResponse.json({error:"Ghế hoặc giá vé không hợp lệ."},{status:400});amount+=price}
+ if(giftSeats.length){
+  const rank:Record<string,number>={A:0,B:1,C:2,D:3};
+  const lowest=Math.max(...(seats as string[]).map(id=>rank[valid.get(id)!]));
+  if(giftSeats.some((id:string)=>!valid.has(id)||rank[valid.get(id]!]<lowest))return NextResponse.json({error:"Ghế tặng phải cùng hạng hoặc thấp hơn hạng vé mua thấp nhất."},{status:400});
+ }
+ const allSeats=[...seats,...giftSeats];
  const code="EX"+randomBytes(8).toString("hex").toUpperCase(),token=randomBytes(24).toString("hex");
  try{
- const rows=await staffDb("rpc/extra_reserve_order",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:seats,p_amount:amount,p_name:name,p_phone:phone,p_email:email})}) as {order_code:string;expires_at:string}[];
+ const rows=await staffDb("rpc/extra_reserve_order",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:allSeats,p_amount:amount,p_name:name,p_phone:phone,p_email:email})}) as {order_code:string;expires_at:string}[];
  if(!rows?.length)throw Error("Reservation failed");
  const account=process.env.SEPAY_BANK_ACCOUNT!,bank=(process.env.SEPAY_BANK_CODE||"").toUpperCase(),holder=process.env.SEPAY_ACCOUNT_NAME!;
  const qr="https://img.vietqr.io/image/"+encodeURIComponent(bank)+"-"+encodeURIComponent(account)+"-compact2.png?amount="+amount+"&addInfo="+encodeURIComponent(code)+"&accountName="+encodeURIComponent(holder);
