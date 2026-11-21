@@ -27,8 +27,6 @@ create table if not exists public.extra_payment_events (
 );
 alter table public.extra_payment_orders enable row level security;
 alter table public.extra_payment_events enable row level security;
--- Remove obsolete eight-argument overload from earlier migration drafts.
-drop function if exists public.extra_reserve_order(text,text,text,text[],bigint,text,text,text);
 -- Serialize reservations per show and check both paid sales and active holds.
 create or replace function public.extra_reserve_order(p_code text,p_token text,p_show text,p_venue text,p_seats text[],p_amount bigint,p_name text,p_phone text,p_email text)
 returns table(order_code text,expires_at timestamptz) language plpgsql security definer set search_path=public as $$
