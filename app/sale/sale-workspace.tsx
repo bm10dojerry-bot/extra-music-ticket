@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
-type ShowOption={id:string;artist:string;date:string;time:string;venue:string;status:string};
+import SeatBooking from "./seat-booking";
+type ShowOption={id:string;artist:string;date:string;time:string;venue:string;status:string;prices?:Record<string,number|null>};
 type Lead={id:string;show_id:string;customer_name:string;customer_phone:string;note:string;status:string;created_at:string};
 type Report={totals:{orders:number;tickets:number;revenue:number};rows:{order_code:string;event_name:string;seats:string[];amount_vnd:number;paid_at:string}[]};
 export default function SaleWorkspace({name}:{name:string}){
