@@ -1,0 +1,1 @@
+export default function Home() { return <main style={{maxWidth:760,margin:"10vh auto",padding:32}}><h1>+1 EXTRA MUSIC SHOW</h1><p>Hệ thống bán vé iextra.net đang được xây dựng.</p><p>Moana Sa Pa · CCC Sa Pa · Extra Music Show Lào Cai</p><p>Chức năng thanh toán và đặt ghế chưa mở bán.</p></main>; }
