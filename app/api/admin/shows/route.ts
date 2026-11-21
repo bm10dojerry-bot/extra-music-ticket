@@ -17,7 +17,7 @@ export async function POST(req:NextRequest){
  if(!/^[a-z0-9][a-z0-9-]{2,99}$/.test(id))return error("Mã show chỉ gồm chữ thường, số và dấu gạch ngang.",400);
  if(!artist||artist.length>150||!title||title.length>200)return error("Cần tên ca sĩ và tên show (tối đa 150/200 ký tự).",400);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date))||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))return error("Ngày hoặc giờ biểu diễn không hợp lệ.",400);
- if(!venues.some(v=>v.id===venue)||!["announced","pending","hidden","sold_out"].includes(status))return error("Địa điểm hoặc trạng thái không hợp lệ.",400);
+ if(!venues.some(v=>v.id===venue)||!["announced","pending","hidden","sold_out","live","ended"].includes(status))return error("Địa điểm hoặc trạng thái không hợp lệ.",400);
  const values=input.prices&&typeof input.prices==="object"?input.prices as Record<string,unknown>:{};
  const prices:Record<string,number|null>={};
  for(const z of ["A","B","C","D"]){const v=values[z];if(v===null||v===""||v===undefined){prices[z]=null;continue}if(typeof v!=="number"||!Number.isSafeInteger(v)||v<0||v>100000000)return error("Giá hạng "+z+" không hợp lệ.",400);prices[z]=v}
