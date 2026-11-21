@@ -45,7 +45,7 @@ begin
  return query select o.code,o.expires_at from public.extra_payment_orders o where o.code=p_code;
 end $$;
 revoke all on function public.extra_reserve_order(text,text,text,text,text[],bigint,text,text,text) from public,anon,authenticated;
-grant execute on function public.extra_reserve_order(text,text,text,text[],bigint,text,text,text) to service_role;
+grant execute on function public.extra_reserve_order(text,text,text,text,text[],bigint,text,text,text) to service_role;
 -- Webhook records every verified event; late/incorrect transfers are held for manual review.
 create or replace function public.extra_confirm_payment(p_tx bigint,p_code text,p_amount bigint,p_payload jsonb)
 returns text language plpgsql security definer set search_path=public as $$
