@@ -1,14 +1,10 @@
+import {ADMIN_COOKIE,validAdminSession} from "../../../../lib/admin-session";
 import {NextRequest,NextResponse} from "next/server";
 import {validSlot,mediaPublicUrl} from "../../../../lib/media";
 export const runtime="nodejs";
 const fail=(message:string,status:number)=>NextResponse.json({error:message},{status});
 export async function POST(req:NextRequest){
- const secret=process.env.ADMIN_MEDIA_SECRET;
- if(!secret||secret.length<24)return fail("Chưa cấu hình mật khẩu quản trị trên Vercel.",503);
- const supplied=req.headers.get("x-admin-secret")||"";
- const {timingSafeEqual}=await import("node:crypto");
- const a=Buffer.from(supplied),b=Buffer.from(secret);
- if(a.length!==b.length||!timingSafeEqual(a,b))return fail("Mật khẩu quản trị không đúng.",401);
+ if(!validAdminSession(req.cookies.get(ADMIN_COOKIE)?.value))return fail("Chưa đăng nhập hoặc phiên đã hết hạn.",401);
  const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)return fail("Thiếu cấu hình Supabase.",503);
  const form=await req.formData();
