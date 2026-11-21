@@ -18,6 +18,6 @@ export async function GET(req:NextRequest){
  const venueId=show?.venue||tickets[0]?.venue_id;
  const venue=venues.find(v=>v.id===venueId);
  const zones=new Map(venue?seatsFor(venue.id as VenueId).map(s=>[s.id,s.zone]):[]);
- return NextResponse.json({code:o.code,showId:o.show_id,showTitle:show?.title||o.show_id,artist:show?.artist||null,showDate:show?.date||null,showTime:show?.time||null,venueName:venue?.name||null,venueAddress:venue?.address||null,buyerName:o.buyer_name,amount:o.amount_vnd,tickets:tickets.map(t=>({id:t.id,seat:t.seat_id,zone:zones.get(t.seat_id)||null,checkedIn:Boolean(t.checked_in_at),qrValue:"https://iextra.net/checkin?ticket="+encodeURIComponent(t.id)+"&secret="+encodeURIComponent(t.qr_secret)}))},{headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
+ return NextResponse.json({code:o.code,showId:o.show_id,showTitle:show?.title||o.show_id,artist:show?.artist||null,showDate:show?.date||null,showTime:show?.time||null,venueName:venue?.name||null,venueAddress:venue?.address||null,buyerName:o.buyer_name,isVipInvitation:o.is_vip_invitation,amount:o.amount_vnd,tickets:tickets.map(t=>({id:t.id,seat:t.seat_id,zone:zones.get(t.seat_id)||null,checkedIn:Boolean(t.checked_in_at),qrValue:"https://iextra.net/checkin?ticket="+encodeURIComponent(t.id)+"&secret="+encodeURIComponent(t.qr_secret)}))},{headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
  }catch{return NextResponse.json({error:"Chưa tải được vé. Kiểm tra SQL 013."},{status:503})}
 }
