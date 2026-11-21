@@ -2,7 +2,7 @@ import "server-only";
 import {createHmac,randomBytes,scryptSync,timingSafeEqual} from "node:crypto";
 import {cookies} from "next/headers";
 import {ADMIN_COOKIE,validAdminSession} from "./admin-session";
-export type Role="admin"|"sale"|"show_manager"|"accountant";
+export type Role="admin"|"sale"|"show_manager"|"accountant"|"checkin";
 export type Staff={id:string;username:string;display_name:string;role:Role;active:boolean};
 export const STAFF_COOKIE="extra_staff_session";
 const TTL=8*60*60;
