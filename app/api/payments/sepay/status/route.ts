@@ -7,7 +7,7 @@ export async function GET(req:NextRequest){
  const token=req.nextUrl.searchParams.get("token")||"";
  if(!/^EX[0-9A-F]{16}$/.test(code)||!token||token.length>256)return NextResponse.json({error:"Thông tin đơn hàng không hợp lệ."},{status:400});
  try{
- const rows=await staffDb("extra_payment_orders?code=eq."+code+"&select=code,status,amount_vnd,expires_at,buyer_email&limit=1") as {code:string;status:string;amount_vnd:number;expires_at:string;buyer_email:string}[];
+ const rows=await staffDb("extra_payment_orders?code=eq."+code+"&select=code,status,amount_vnd,expires_at,access_token&limit=1") as {code:string;status:string;amount_vnd:number;expires_at:string;access_token:string}[];
  const o=rows[0];if(!o)return NextResponse.json({error:"Không tìm thấy đơn hàng."},{status:404});
  const hash=createHash("sha256").update(o.buyer_email.toLowerCase()).digest("hex");
  if(token!==hash)return NextResponse.json({error:"Không có quyền xem đơn hàng."},{status:403});
