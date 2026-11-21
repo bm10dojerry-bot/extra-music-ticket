@@ -5,7 +5,7 @@ export const venues = [
   {id:"ccc" as const,name:"Không gian Văn hóa Sa Pa – CCC",city:"Sa Pa",address:"002 Phan Xi Păng, Sa Pa, Lào Cai",capacity:550,description:"11 hàng × 50 ghế · sân khấu bên phải"},
   {id:"laocai" as const,name:"+1 Extra Music Show Lào Cai",city:"Lào Cai",address:"68P Phú Thịnh, Cam Đường, Lào Cai",capacity:600,description:"15 hàng × 40 ghế · lối đi giữa"}
 ];
-export const zoneColors:Record<string,string>={A:"#dcb875",B:"#b7a6df",C:"#6eb3b7",D:"#92a77d"};
+export const zoneColors:Record<string,string>={A:"#ed2839",B:"#b8b7d6",C:"#6bb9bd",D:"#8faf84"};
 const zoneFor=(r:number,total:number)=>r<Math.ceil(total*.18)?"A":r<Math.ceil(total*.36)?"B":r<Math.ceil(total*.64)?"C":"D";
 export function seatsFor(venue:VenueId):Seat[]{
  const out:Seat[]=[];
