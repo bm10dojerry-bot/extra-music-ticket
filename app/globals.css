@@ -266,3 +266,12 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .admin-stage-actions button+button{background:#202127;border-color:#55555c}
 @media(max-width:1100px){.admin-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.admin-stage-grid{grid-template-columns:1fr}}
+
+.admin-stage-toolbar{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:10px 0 25px}.admin-stage-toolbar h2{margin:0 0 8px;font-size:26px}.admin-stage-toolbar p{margin:0;color:#aaa;font-size:13px}
+.admin-stage-toolbar>button{background:#d92735;color:#fff;border:1px solid #f04b56;border-radius:11px;padding:15px 18px;font-weight:800;cursor:pointer}
+.admin-stage-form{padding:24px;margin-bottom:25px;border:1px solid #7e3038;border-radius:15px;background:#181317}
+.admin-stage-form h3{margin:0 0 18px}.admin-stage-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.admin-stage-fields label{display:flex;flex-direction:column;gap:8px;font-size:13px;font-weight:700}
+.admin-stage-fields input,.admin-stage-fields textarea{width:100%;border:1px solid #48444b;border-radius:9px;background:#0e0f13;color:#fff;padding:13px;font:inherit}
+.admin-stage-description{grid-column:1/-1}.admin-stage-form .admin-help{margin-top:18px;color:#c9b1b4;font-size:12px}
+@media(max-width:650px){.admin-stage-toolbar{align-items:stretch;flex-direction:column}.admin-stage-fields{grid-template-columns:1fr}}
