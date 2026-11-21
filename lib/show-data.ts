@@ -17,7 +17,9 @@ export async function loadShows():Promise<ManagedShow[]>{
  if(!res.ok)return defaultShows();
  const rows=await res.json() as Row[];
  if(!rows.length)return defaultShows();
- return rows.filter(r=>r.status!=="hidden").map(normalizeShow);
+ const overrides=new Map(rows.map(r=>[r.id,r]));
+ const defaults=defaultShows().filter(d=>!overrides.has(d.id));
+ return [...defaults,...rows.filter(r=>r.status!=="hidden").map(normalizeShow)].sort((a,b)=>a.date.localeCompare(b.date));
  }catch{return defaultShows()}
 }
 export async function loadAllShows():Promise<(ManagedShow&{rawStatus?:string})[]>{
