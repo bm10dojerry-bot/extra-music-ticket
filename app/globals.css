@@ -83,3 +83,17 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 .venue-detail-facts span{border:1px solid #ffffff52;border-radius:30px;padding:10px 15px;background:#090a0d9e;font-size:13px}
 .venue-detail-facts strong{font-size:19px;color:#fff}
 @media(max-width:700px){.venue-detail{margin:20px 0 28px}.venue-detail-cover{min-height:460px;padding:24px 18px;background-position:center}.venue-detail-cover::before{background:linear-gradient(0deg,#07090cf5 0%,#07090c99 62%,#07090c24 100%)}.venue-detail-content h2{letter-spacing:-.5px}.venue-detail-description{font-size:14px}.venue-detail-facts{gap:8px}.venue-detail-facts span{font-size:12px;padding:8px 11px}}
+
+/* Venue gallery: uses only photos uploaded by admins, no invented venue imagery. */
+.venue-gallery{margin-top:26px}
+.venue-gallery-head{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:16px}
+.venue-gallery-head h3,.venue-amenities h3{font-size:24px;margin:9px 0}
+.venue-gallery-head p{color:#aaa;font-size:13px}
+.venue-gallery-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.venue-gallery-photo{display:block;aspect-ratio:4/3;overflow:hidden;border-radius:15px;border:1px solid #333;background:#17191c}
+.venue-gallery-photo img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s}
+.venue-gallery-photo:hover img{transform:scale(1.04)}
+.venue-amenities{margin:27px 0 0;padding:22px;border-radius:16px;border:1px solid #2d3036;background:#131519}
+.venue-amenities-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:17px}
+.venue-amenities-grid span{font-size:14px;color:#ddd;line-height:1.6}
+@media(max-width:700px){.venue-gallery-head{display:block}.venue-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.venue-gallery-photo:first-child{grid-column:span 2;aspect-ratio:16/9}.venue-amenities-grid{grid-template-columns:1fr}.venue-amenities{padding:17px}}
