@@ -42,9 +42,9 @@ async function saveShow(){
   if(selectedPoster&&!stored.posterUrl)throw Error("Chưa tìm thấy poster đã lưu. Vui lòng thử lại.");
   setForm(toForm({...stored,status:stored.status}));
   setSelectedPoster(null);setPosterPreview(null);
-  setPosterStatus("✅ Đã lưu và đăng show thành công! Đang mở trang chủ...");
+  setPosterStatus("✅ Đã lưu và đăng show thành công! Bạn có thể tiếp tục chỉnh sửa tại đây.");
   setMessage("✅ Đã lưu thông tin và poster thành công.");
-  window.setTimeout(()=>window.location.assign("https://iextra.net/"),1800);
+  // Stay on the current admin tab after saving; no automatic navigation.
  }catch(e){const msg=e instanceof Error?e.message:"Có lỗi khi lưu show.";setPosterStatus("❌ "+msg);setMessage(msg)}
  finally{setShowBusy(false)}
 }
