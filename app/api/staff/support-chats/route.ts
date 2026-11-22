@@ -5,6 +5,7 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const reply=(payload:Record<string,unknown>,status=200)=>NextResponse.json(payload,{status,headers:{"Cache-Control":"no-store"}});
 const validId=(id:string)=>/^[a-f0-9-]{36}$/i.test(id);
+const allowedOrigin=(req:NextRequest)=>{try{const origin=req.headers.get("origin");return !!origin&&new URL(origin).host===req.headers.get("host")}catch{return false}};
 const access=()=>requireRole(["admin","sale","show_manager"]);
 type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:string;created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null};
 const chatsPath="extra_support_chats?select=id,show_id,customer_name,customer_phone,status,created_at,updated_at,last_customer_at,last_staff_at&order=updated_at.desc&limit=120";
@@ -20,10 +21,11 @@ export async function GET(req:NextRequest){
    return reply({chat:chats[0],messages});
   }
   const chats=await staffDb(chatsPath) as Chat[];
-  return reply({chats,openCount:chats.filter(c=>c.status==="open").length,needReplyCount:chats.filter(c=>c.status==="open"&&c.last_customer_at&&(!c.last_staff_at||new Date(c.last_customer_at)>new Date(c.last_staff_at))).length});
+  return reply({chats,openCount:chats.filter(c=>c.status==="open").length,needReplyCount:chats.filter(c=>c.status==="open"&&c.last_customer_at&&(!c.last_staff_at||new Date(c.last_customer_at).getTime()>new Date(c.last_staff_at).getTime())).length});
  }catch(e){console.warn("[support-chat] Staff read failed",e instanceof Error?e.message:"unknown");return reply({error:"Chưa tải được tin nhắn hỗ trợ"},503)}
 }
 export async function POST(req:NextRequest){
+ if(!allowedOrigin(req))return reply({error:"Nguồn yêu cầu không hợp lệ"},403);
  const actor=await access();if(!actor)return reply({error:"Cần đăng nhập tài khoản Sale hoặc Admin"},403);
  const input=await req.json().catch(()=>null);
  const id=String(input?.chatId||""),body=typeof input?.message==="string"?input.message.trim():"";
@@ -38,6 +40,7 @@ export async function POST(req:NextRequest){
  }catch(e){console.warn("[support-chat] Staff send failed",e instanceof Error?e.message:"unknown");return reply({error:"Không gửi được phản hồi"},503)}
 }
 export async function PATCH(req:NextRequest){
+ if(!allowedOrigin(req))return reply({error:"Nguồn yêu cầu không hợp lệ"},403);
  const actor=await access();if(!actor)return reply({error:"Cần đăng nhập tài khoản Sale hoặc Admin"},403);
  const input=await req.json().catch(()=>null);
  const id=String(input?.chatId||""),status=String(input?.status||"");
