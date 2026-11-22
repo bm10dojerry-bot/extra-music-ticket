@@ -5,7 +5,7 @@ import {createPortal} from "react-dom";
 
 type ChatSession={id:string;token:string};
 type Message={id:number;sender:"customer"|"staff";body:string;staff_name:string|null;created_at:string};
-type PublicChat={id:string;status:string;showId:string|null;customerName:string};
+type PublicChat={id:string;status:string;showId:string|null;customerName:string;assigned:boolean};
 type Props={showId?:string;showName?:string;mode?:"inline"|"floating";label?:string};
 const defaultName="Khách truy cập";
 const formatTime=(s:string)=>{try{return new Date(s).toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"})}catch{return ""}};
@@ -62,6 +62,7 @@ export default function SupportChat({showId="",showName="",mode="inline",label="
      <button type="button" className="extra-support-close" onClick={()=>setOpen(false)} aria-label="Đóng hộp chat">×</button>
     </header>
     {showName&&<div className="extra-support-context">🎤 Đang tư vấn show: <strong>{showName}</strong></div>}
+    {chat&&<div className={"extra-support-routing "+(chat.assigned?"extra-support-assigned":"extra-support-queued")} role="status">{chat.assigned?"✓ Tin nhắn đã chuyển tới nhân viên Sale phụ trách.":"⏳ Sale đang bận. Tin nhắn của bạn đã được lưu và đang chờ phân công."}</div>}
     <div className="extra-support-messages" aria-live="polite" aria-relevant="additions text">
      <div className="extra-support-welcome"><strong>Chào mừng bạn đến với +1 Extra! ❤️</strong><p>Bạn cần tư vấn hạng chỗ, giá, sơ đồ ghế hoặc thanh toán QR? Hãy nhắn ngay tại đây. Tin nhắn sẽ được gửi tới hộp thư Sale/Admin của Extra.</p></div>
      {messages.map(item=><article key={item.id} className={"extra-support-bubble "+(item.sender==="customer"?"extra-support-mine":"extra-support-theirs")}>
