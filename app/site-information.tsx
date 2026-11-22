@@ -1,13 +1,124 @@
 "use client";
+
 import {useEffect,useState} from "react";
+import "./information-pages.css";
+
+type PublicPage={title:string;body:string};
 const names:Record<string,string>={"gioi-thieu":"Giới thiệu","tuyen-dung":"Tuyển dụng","lien-he":"Liên hệ"};
 const defaults:Record<string,string>={
  "gioi-thieu":"+1 EXTRA MUSIC SHOW mang đến những đêm nhạc trực tiếp tại Sa Pa và Lào Cai, kết nối nghệ sĩ với khán giả trong không gian biểu diễn được tổ chức chuyên nghiệp.",
- "tuyen-dung":"Chúng tôi chào đón các ứng viên quan tâm đến tổ chức sự kiện, bán vé, chăm sóc khách hàng, kỹ thuật sân khấu và vận hành. Liên hệ EXTRA để tìm hiểu cơ hội phù hợp.",
- "lien-he":"Hotline đặt vé: 094 865 02 59\nĐiện thoại công ty: 0965 361 001\nEmail: info@snapgo.vn\nTrụ sở: Căn 1204, Tòa nhà The Manor, Phường Cam Đường, Tỉnh Lào Cai, Việt Nam"
+ "tuyen-dung":"Cùng +1 Extra Music Show tạo nên những đêm nhạc đáng nhớ. Chúng tôi đang tìm kiếm người đồng hành trong công tác quản lý và điều phối show âm nhạc.",
+ "lien-he":"Bạn cần hỗ trợ đặt chỗ, nhận mã QR, tìm hiểu chương trình hoặc kết nối công việc? +1 Extra Music Show luôn sẵn sàng lắng nghe."
 };
+const contactPhone="0948650259";
+const recruitmentPhone="0965361001";
+
+function PageHeader({slug}:{slug:string}){
+ return <header className="extra-info-nav">
+  <a href="/" className="extra-info-brand" aria-label="+1 Extra Music Show - Trang chủ">+1 <span>EXTRA</span><small>MUSIC SHOW</small></a>
+  <nav aria-label="Điều hướng trang thông tin" className="extra-info-nav-links">
+   <a href="/show/dinh-dung-2811">Các đêm diễn</a>
+   {Object.entries(names).map(([key,label])=><a key={key} href={"/"+key} aria-current={key===slug?"page":undefined} className={key===slug?"active":""}>{label}</a>)}
+  </nav>
+ </header>;
+}
+
+function Intro({slug,page}:{slug:string;page:PublicPage|null}){
+ const isRecruitment=slug==="tuyen-dung",isContact=slug==="lien-he";
+ return <section className="extra-info-hero" aria-labelledby="extra-page-title">
+  <div className="extra-info-hero-copy">
+   <div className="extra-info-eyebrow"><span className="extra-info-eyebrow-line"/> +1 EXTRA MUSIC SHOW / {isRecruitment?"CAREERS":isContact?"CONNECT":"ABOUT"}</div>
+   <h1 id="extra-page-title">{page?.title||names[slug]||"Thông tin"}</h1>
+   <p className="extra-info-lead">{page?.body||defaults[slug]||""}</p>
+   <div className="extra-info-hero-actions">
+    {isRecruitment?<><a className="extra-info-primary" href="#vi-tri">Xem vị trí đang tuyển <span aria-hidden="true">↗</span></a><a className="extra-info-secondary" href={"tel:"+recruitmentPhone}>Gọi ứng tuyển</a></>:
+     isContact?<><a className="extra-info-primary" href={"tel:"+contactPhone}>Gọi hỗ trợ đặt chỗ <span aria-hidden="true">↗</span></a><a className="extra-info-secondary" href="#kenh-lien-he">Các kênh liên hệ</a></>:
+     <a className="extra-info-primary" href="/">Khám phá +1 Extra <span aria-hidden="true">↗</span></a>}
+   </div>
+  </div>
+  <div className="extra-info-hero-scene" aria-hidden="true">
+   <div className="extra-info-stage-glow"/><div className="extra-info-stage-line"/>
+   <span className="extra-info-scene-overline">THE SHOW GOES ON</span>
+   <strong>+1<span> EXTRA</span></strong><span className="extra-info-scene-sub">MUSIC SHOW</span>
+   <span className="extra-info-scene-note">{isRecruitment?"BEHIND EVERY GREAT SHOW":isContact?"LET'S STAY CONNECTED":"MUSIC · PEOPLE · EXPERIENCE"}</span>
+  </div>
+ </section>;
+}
+
+function RecruitmentContent(){
+ const tasks=[
+  "Hỗ trợ Giám đốc lập kế hoạch, theo dõi tiến độ và điều phối các đêm diễn.",
+  "Phối hợp với các bộ phận nghệ sĩ, sân khấu, kỹ thuật, truyền thông và chăm sóc khách hàng.",
+  "Chuẩn bị lịch trình, phân công công việc, tổng hợp thông tin và xử lý phát sinh trong quá trình tổ chức.",
+  "Theo sát vận hành trước, trong và sau mỗi chương trình."
+ ];
+ const requirements=[
+  "Chủ động, trách nhiệm, giao tiếp và sắp xếp công việc tốt.",
+  "Có khả năng làm việc nhóm, phối hợp nhiều đầu mối và linh hoạt theo lịch chương trình.",
+  "Có kỹ năng chụp ảnh, quay vlog, chỉnh sửa ảnh hoặc dựng video là một lợi thế."
+ ];
+ return <>
+  <section className="extra-info-section" id="vi-tri">
+   <div className="extra-info-section-heading"><div><span className="extra-info-kicker">CƠ HỘI ĐỒNG HÀNH</span><h2>Vị trí đang tuyển</h2></div><p>Tham gia đội ngũ tổ chức và điều phối các chương trình biểu diễn của +1 Extra Music Show.</p></div>
+   <article className="extra-info-job">
+    <div className="extra-info-job-heading">
+     <div><span className="extra-info-tag">ĐANG TUYỂN</span><h3>Trợ lý Giám đốc</h3><p>Quản lý & Điều phối Show Âm nhạc</p></div>
+     <span className="extra-info-job-mark" aria-hidden="true">01</span>
+    </div>
+    <div className="extra-info-job-meta"><span>⌖ &nbsp;542 An Dương Vương</span><span>♬ &nbsp;Tổ chức sự kiện âm nhạc</span><span>✦ &nbsp;Kỹ năng media là lợi thế</span></div>
+    <div className="extra-info-job-columns">
+     <div><h4>Công việc chính</h4><ul>{tasks.map(task=><li key={task}>{task}</li>)}</ul></div>
+     <div><h4>Chúng tôi tìm kiếm</h4><ul>{requirements.map(req=><li key={req}>{req}</li>)}</ul></div>
+    </div>
+    <div className="extra-info-job-footer"><div><strong>Bạn quan tâm vị trí này?</strong><p>Liên hệ trực tiếp hoặc nhắn tin cho Fanpage <b>+1 Extra Music Show</b> và giới thiệu ngắn về bản thân. Có thể gửi kèm CV hoặc sản phẩm quay dựng nếu có.</p></div><a className="extra-info-primary" href={"tel:"+recruitmentPhone}>Liên hệ 0965 361 001 <span aria-hidden="true">↗</span></a></div>
+   </article>
+  </section>
+  <section className="extra-info-section extra-info-next">
+   <div><span className="extra-info-kicker">HÀNH TRÌNH CÙNG EXTRA</span><h2>Mỗi đêm nhạc là một dự án đáng tự hào</h2><p>Không chỉ ở hậu trường, bạn còn góp phần tạo nên trải nghiệm chỉn chu cho nghệ sĩ và khán giả – từ khâu chuẩn bị đến những phút cuối chương trình.</p></div>
+   <div className="extra-info-step-cards"><div><span>01</span><strong>Kết nối</strong><p>Trao đổi qua số điện thoại hoặc Fanpage.</p></div><div><span>02</span><strong>Giới thiệu năng lực</strong><p>Chia sẻ kinh nghiệm và thế mạnh phù hợp.</p></div><div><span>03</span><strong>Trao đổi công việc</strong><p>Thảo luận về vị trí và kế hoạch hợp tác.</p></div></div>
+  </section>
+ </>;
+}
+
+function ContactContent(){
+ return <>
+  <section className="extra-info-section" id="kenh-lien-he">
+   <div className="extra-info-section-heading"><div><span className="extra-info-kicker">CHÚNG TÔI Ở ĐÂY</span><h2>Chọn kênh liên hệ phù hợp</h2></div><p>Để được hỗ trợ nhanh, vui lòng chọn đúng bộ phận theo nhu cầu của bạn.</p></div>
+   <div className="extra-info-contact-grid">
+    <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">☎</span><span className="extra-info-card-label">HỖ TRỢ KHÁCH HÀNG</span><h3>Đặt chỗ & mã QR</h3><p>Hỗ trợ chọn chỗ, xác nhận thanh toán, nhận lại email mã QR và thông tin chương trình.</p><a className="extra-info-contact-value" href={"tel:"+contactPhone}>094 865 02 59</a><a className="extra-info-text-link" href={"tel:"+contactPhone}>Gọi hỗ trợ <span aria-hidden="true">↗</span></a></article>
+    <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">✦</span><span className="extra-info-card-label">NHÂN SỰ & HỢP TÁC</span><h3>Tuyển dụng & công việc</h3><p>Kết nối ứng tuyển, trao đổi cơ hội làm việc và phối hợp tổ chức sự kiện.</p><a className="extra-info-contact-value" href={"tel:"+recruitmentPhone}>0965 361 001</a><a className="extra-info-text-link" href="/tuyen-dung">Xem thông tin tuyển dụng <span aria-hidden="true">↗</span></a></article>
+    <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">♬</span><span className="extra-info-card-label">KÊNH CẬP NHẬT</span><h3>Fanpage +1 Extra</h3><p>Theo dõi thông tin show, thông báo mới và nhắn tin trực tiếp tới Fanpage <b>+1 Extra Music Show</b>.</p><div className="extra-info-contact-value">+1 Extra Music Show</div><a className="extra-info-text-link" href="/">Xem lịch các đêm diễn <span aria-hidden="true">↗</span></a></article>
+   </div>
+  </section>
+  <section className="extra-info-section extra-info-location">
+   <div><span className="extra-info-kicker">ĐỊA ĐIỂM LIÊN HỆ</span><h2>Văn phòng & nơi làm việc</h2><p>Với nhu cầu gặp trực tiếp, vui lòng gọi điện trước để được hướng dẫn đúng đầu mối tiếp nhận.</p></div>
+   <div className="extra-info-location-grid">
+    <div className="extra-info-location-card"><span>01 / ĐỊA ĐIỂM LÀM VIỆC</span><h3>542 An Dương Vương</h3><p>Địa điểm làm việc và trao đổi tuyển dụng.</p></div>
+    <div className="extra-info-location-card"><span>02 / ĐỊA CHỈ CÔNG TY</span><h3>Căn 1204, Tòa nhà The Manor</h3><p>Phường Cam Đường, tỉnh Lào Cai, Việt Nam.</p></div>
+   </div>
+  </section>
+  <section className="extra-info-contact-help"><div><span className="extra-info-kicker">HỖ TRỢ NHẬN MÃ QR</span><h2>Đã thanh toán nhưng chưa thấy email?</h2><p>Hãy kiểm tra Hộp thư đến, mục Quảng cáo và Spam. Nếu vẫn chưa nhận được, liên hệ hotline và cung cấp số điện thoại hoặc email dùng khi đặt chỗ để được đối soát.</p></div><a className="extra-info-primary" href={"tel:"+contactPhone}>Gọi 094 865 02 59 <span aria-hidden="true">↗</span></a></section>
+ </>;
+}
+
 export default function InformationPage({slug}:{slug:string}){
- const [page,setPage]=useState<{title:string;body:string}|null>(null),[error,setError]=useState("");
- useEffect(()=>{fetch("/api/public/site-pages?slug="+encodeURIComponent(slug),{cache:"no-store"}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được");setPage(d.page||null)}).catch(e=>setError(e instanceof Error?e.message:"Lỗi tải nội dung"))},[slug]);
- return <main style={{background:"#0c0d11",color:"#fff",minHeight:"100vh",padding:"30px 20px",fontFamily:"Arial,sans-serif"}}><div style={{maxWidth:850,margin:"auto"}}><header style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:54}}><a href="/" style={{color:"#fff",fontSize:23,fontWeight:900,textDecoration:"none"}}>+1 <span style={{color:"#ed2839"}}>EXTRA</span> MUSIC</a><nav style={{display:"flex",gap:18,flexWrap:"wrap"}}>{Object.entries(names).map(([id,label])=><a key={id} href={"/"+id} style={{color:id===slug?"#ff6878":"#ddd",textDecoration:"none"}}>{label}</a>)}</nav></header><div style={{color:"#f36a74",fontSize:12,letterSpacing:3}}>+1 EXTRA MUSIC SHOW</div><h1 style={{fontSize:"clamp(30px,5vw,46px)",margin:"16px 0 25px"}}>{page?.title||names[slug]}</h1>{error&&<p role="alert" style={{color:"#fca5a5"}}>{error}</p>}<section style={{whiteSpace:"pre-wrap",lineHeight:1.95,color:"#ddd",fontSize:16,background:"#18191f",border:"1px solid #34353c",borderRadius:16,padding:"26px 30px"}}>{page?.body||defaults[slug]}</section>{slug==="lien-he"&&<p style={{marginTop:24}}><a href="tel:0948650259" style={{display:"inline-block",padding:"13px 22px",background:"#c52e3c",color:"#fff",borderRadius:9,textDecoration:"none"}}>Gọi hotline đặt vé</a></p>}<p style={{marginTop:42}}><a href="/" style={{color:"#ff8590"}}>← Về trang chủ</a></p></div></main>
+ const [page,setPage]=useState<PublicPage|null>(null),[error,setError]=useState("");
+ useEffect(()=>{
+  const controller=new AbortController();
+  setPage(null);setError("");
+  fetch("/api/public/site-pages?slug="+encodeURIComponent(slug),{cache:"no-store",signal:controller.signal})
+   .then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error||"Không tải được nội dung");setPage(data.page||null)})
+   .catch(e=>{if(e instanceof Error&&e.name==="AbortError")return;setError("Nội dung tùy chỉnh đang tạm thời không khả dụng; trang vẫn hiển thị thông tin cơ bản.")});
+  return ()=>controller.abort();
+ },[slug]);
+ return <main className="extra-info-shell">
+  <div className="extra-info-container">
+   <PageHeader slug={slug}/>
+   <Intro slug={slug} page={page}/>
+   {error&&<p className="extra-info-notice" role="status">{error}</p>}
+   {slug==="tuyen-dung"?<RecruitmentContent/>:slug==="lien-he"?<ContactContent/>:
+    <section className="extra-info-section"><div className="extra-info-section-heading"><div><span className="extra-info-kicker">VỀ CHÚNG TÔI</span><h2>Âm nhạc, không gian và trải nghiệm</h2></div></div><p className="extra-info-about">{page?.body||defaults["gioi-thieu"]}</p></section>}
+   <footer className="extra-info-footer"><div className="extra-info-footer-brand">+1 <span>EXTRA</span> MUSIC SHOW<small>Âm nhạc sẽ hay hơn khi có bạn ở đó.</small></div><div className="extra-info-footer-links"><a href="/">Trang chủ</a><a href="/tuyen-dung">Tuyển dụng</a><a href="/lien-he">Liên hệ</a><a href="https://iextra.net">iextra.net</a></div></footer>
+  </div>
+ </main>;
 }
