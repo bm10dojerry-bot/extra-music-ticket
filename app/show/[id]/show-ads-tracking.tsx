@@ -96,7 +96,7 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
  function choose(value:"yes"|"no"){try{sessionStorage.setItem(consentKey,value)}catch{}setConsent(value)}
  if((!meta&&!ga4&&!ads)||consent!==null)return null;
  return <div className="extra-ads-consent" role="dialog" aria-label="Tùy chọn đo lường quảng cáo">
-  <p><strong>Quyền riêng tư</strong> · EXTRA sử dụng Meta Pixel và công cụ đo lường của Google nếu bạn đồng ý, để đo hiệu quả đặt vé. Từ chối không ảnh hưởng đến việc mua vé.</p>
+  <p><strong>Quyền riêng tư</strong> · EXTRA sử dụng Meta Pixel và công cụ đo lường của Google nếu bạn đồng ý, để đo hiệu quả đặt chỗ. Từ chối không ảnh hưởng đến việc đặt chỗ.</p>
   <div><button type="button" onClick={()=>choose("no")}>Không đồng ý</button><button type="button" onClick={()=>choose("yes")}>Đồng ý</button></div>
  </div>;
 }
