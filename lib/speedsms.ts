@@ -21,7 +21,7 @@ export async function sendSpeedSmsTicket(code:string):Promise<"accepted"|"failed
  let requested=false;
  try{
   const url=ticketLinkUrl(code,order.access_token);
-  const message="EXTRA MUSIC SHOW: Ve "+code+" da xac nhan. Xem ve QR: "+url+" . Vui long giu kin link.";
+  const message="EXTRA: Ve da xac nhan. Xem QR: "+url+" (giu kin link).";
   const type=Number(process.env.SPEEDSMS_SMS_TYPE||"2");
   const sender=process.env.SPEEDSMS_SENDER||"";
   const authorization=Buffer.from(process.env.SPEEDSMS_ACCESS_TOKEN+":x").toString("base64");
