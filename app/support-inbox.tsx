@@ -94,7 +94,7 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
     visible.map(c=><button type="button" key={c.id} onClick={()=>setSelected(c.id)} className={"extra-inbox-person "+(selected===c.id?"active":"")+(overdue(c,now)?" extra-inbox-late":"")}>
      <span className="extra-inbox-person-head"><b>{c.customer_name}</b>{overdue(c,now)?<em className="extra-inbox-late-tag">Quá 60s</em>:unread(c)?<i title="Khách chưa được trả lời" aria-label="Cần phản hồi"/>:null}</span>
      <span className="extra-inbox-person-meta">{c.show_id?slugNames[c.show_id]||c.show_id:"Tư vấn chung"}{c.customer_phone?" · "+c.customer_phone:""}</span>
-     <small>{c.assigned_staff_id?c.assigned_staff_id===actorId?"Đang giao cho bạn":"Phụ trách: "+assignedName(c):"⏳ Chờ phân công"} · {time(c.updated_at)}</small>
+     <small>{c.assigned_staff_id?c.assigned_staff_id===actorId?"Đang giao cho bạn":"Phụ trách: "+assignedName(c):"⏳ Chờ phân công"} · {fmt(c.updated_at)}</small>
     </button>)}
    </div>
    <div className="extra-inbox-thread">
