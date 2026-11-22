@@ -75,7 +75,7 @@ export async function PATCH(req:NextRequest){
  const input=await req.json().catch(()=>null);
  const action=String(input?.action||""),id=String(input?.chatId||""),status=String(input?.status||"");
  if(action==="dispatch"){
-  try{const result=await dbRpc("extra_support_dispatch_queue",{p_limit:64});return reply({ok:true,...result});}
+  try{const result=await dbRpc<{assigned:number}>("extra_support_dispatch_queue",{p_limit:64});return reply({ok:true,assigned:result.assigned});}
   catch{return reply({error:"Chưa phân công được hàng chờ"},503)}
  }
  if(!validId(id))return reply({error:"Mã cuộc trò chuyện không hợp lệ"},400);
