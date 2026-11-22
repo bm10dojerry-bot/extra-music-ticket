@@ -90,3 +90,33 @@
 .extra-info-notice{font-size:12px;color:#efa8aa;padding:12px 16px;border:1px solid #73444a;border-radius:10px;background:#3a1e2a66}
 @media(max-width:900px){.extra-info-hero{grid-template-columns:1fr;gap:0;padding:45px 0 40px}.extra-info-hero-copy{padding:13px 0 30px}.extra-info-hero-scene{min-height:230px}.extra-info-hero-scene strong{font-size:58px}.extra-info-contact-grid{grid-template-columns:1fr 1fr}.extra-info-contact-grid .extra-info-contact-card:last-child{grid-column:1/-1}.extra-info-job-footer{align-items:flex-start;flex-direction:column}}
 @media(max-width:620px){.extra-info-container{width:min(100% - 32px,1200px)}.extra-info-nav{align-items:flex-start;flex-direction:column;gap:24px;padding:21px 0}.extra-info-nav-links{gap:14px 18px}.extra-info-nav-links a{font-size:12px}.extra-info-nav-links a.active:after{bottom:-8px}.extra-info-hero{padding:31px 0 28px}.extra-info-hero h1{font-size:43px;letter-spacing:-1.1px;margin:20px 0 16px}.extra-info-lead{font-size:15px;line-height:1.8}.extra-info-hero-actions{margin-top:26px;width:100%}.extra-info-primary,.extra-info-secondary{font-size:13px}.extra-info-hero-scene{min-height:207px;border-radius:17px}.extra-info-scene-overline{margin-bottom:15px}.extra-info-hero-scene strong{font-size:48px;letter-spacing:-3px}.extra-info-scene-sub{font-size:10px;letter-spacing:6px;margin-bottom:18px}.extra-info-scene-note{font-size:8px}.extra-info-section{padding:30px 0 36px}.extra-info-section-heading{align-items:flex-start;flex-direction:column;gap:12px}.extra-info-section-heading h2,.extra-info-next h2,.extra-info-location h2,.extra-info-contact-help h2{font-size:29px}.extra-info-job{padding:21px;border-radius:16px}.extra-info-job-heading h3{font-size:28px}.extra-info-job-heading p{font-size:15px}.extra-info-job-mark{font-size:32px}.extra-info-job-meta{margin:22px 0}.extra-info-job-columns{grid-template-columns:1fr;gap:28px}.extra-info-job-footer{margin-top:24px;padding-top:23px}.extra-info-job-footer .extra-info-primary{white-space:normal}.extra-info-next,.extra-info-location{padding:25px 20px;margin:12px 0 45px}.extra-info-step-cards,.extra-info-contact-grid,.extra-info-location-grid{grid-template-columns:1fr}.extra-info-contact-grid .extra-info-contact-card:last-child{grid-column:auto}.extra-info-contact-card{padding:23px}.extra-info-contact-card p{min-height:0}.extra-info-contact-help{margin-bottom:44px;padding:23px;align-items:flex-start;flex-direction:column}.extra-info-contact-help .extra-info-primary{white-space:normal}.extra-info-footer{flex-direction:column;align-items:flex-start;gap:20px}.extra-info-footer-links{gap:13px 17px}}
+
+
+/* Department recruitment directory */
+.extra-info-recruitment-directory{margin-top:76px}
+.extra-info-department-jump{display:flex;gap:11px;flex-wrap:wrap;margin:8px 0 30px}
+.extra-info-department-jump a{display:inline-flex;gap:12px;align-items:center;color:#f0e8eb;text-decoration:none;font-size:13px;font-weight:700;border:1px solid #744249;background:#341c2661;padding:12px 16px;border-radius:12px;transition:background .2s,border-color .2s}
+.extra-info-department-jump a:hover{background:#512732;border-color:#dc6570}
+.extra-info-department-jump a span{color:#f5a2ab}
+.extra-info-departments{display:grid;gap:24px}
+.extra-info-department{padding:30px;background:linear-gradient(135deg,#211820,#141419 75%);border:1px solid #614148;border-radius:22px;scroll-margin-top:28px}
+.extra-info-department-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:23px}
+.extra-info-department-label{display:flex;gap:13px;align-items:center;color:#eea2a5;font-weight:800;letter-spacing:1.8px;font-size:11px}
+.extra-info-department-label span{display:inline-grid;place-items:center;border-radius:8px;width:34px;height:34px;color:#fff;background:#ba3043}
+.extra-info-department-heading h3{font-size:clamp(23px,3vw,32px);margin:13px 0 9px;letter-spacing:-.5px;color:#fff}
+.extra-info-department-heading p{font-size:14px;line-height:1.7;color:#b9afb7;margin:0;max-width:740px}
+.extra-info-department-contact{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;color:#f7afbb;border:1px solid #7c4b55;border-radius:9px;padding:12px 14px;text-decoration:none;font-size:12px;font-weight:800}
+.extra-info-department-contact:hover{border-color:#ff7f89;color:#fff}
+.extra-info-open-roles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.extra-info-role{background:#0c0e14a8;border:1px solid #ffffff1d;border-radius:13px;padding:21px;display:flex;flex-direction:column;gap:13px;min-height:173px}
+.extra-info-role h4{font-size:17px;line-height:1.35;margin:0 0 9px;color:#fff}
+.extra-info-role p{font-size:13px;line-height:1.7;margin:0;color:#b8aeb7}
+.extra-info-role a{align-self:flex-start;margin-top:auto;color:#f7a4ad;font-size:12px;font-weight:800;text-decoration:none}
+.extra-info-role a:hover{color:#fff}
+.extra-info-recruitment-note{margin-top:25px;padding:24px 26px;border-radius:18px;border:1px solid #85505d;background:linear-gradient(115deg,#3d1d2a,#251923);display:flex;justify-content:space-between;gap:24px;align-items:center}
+.extra-info-recruitment-note strong{font-size:17px}
+.extra-info-recruitment-note p{max-width:760px;margin:9px 0 0;color:#dec9cd;line-height:1.8;font-size:13px}
+.extra-info-recruitment-note p a{font-weight:800;color:#fff;text-decoration:underline;text-underline-offset:3px}
+.extra-info-recruitment-note>.extra-info-primary{white-space:nowrap}
+@media(max-width:900px){.extra-info-department-heading{align-items:flex-start;flex-direction:column}.extra-info-recruitment-note{align-items:flex-start;flex-direction:column}}
+@media(max-width:620px){.extra-info-recruitment-directory{margin-top:43px}.extra-info-department-jump{gap:9px}.extra-info-department-jump a{font-size:12px;padding:10px 12px}.extra-info-department{padding:20px;border-radius:16px}.extra-info-open-roles{grid-template-columns:1fr}.extra-info-role{min-height:0;padding:18px}.extra-info-department-heading h3{font-size:25px}.extra-info-department-contact{white-space:normal}.extra-info-recruitment-note{padding:20px}.extra-info-recruitment-note>.extra-info-primary{white-space:normal}}
