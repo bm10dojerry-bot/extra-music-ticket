@@ -56,8 +56,34 @@
 .extra-show-page :is(a,button,input,select):focus-visible{outline:3px solid #ffcd91;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.extra-show-page *, .extra-show-page *::before,.extra-show-page *::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 
-/* Quick consultation alongside the booking CTA: Đình Dũng campaign */
-.extra-show-hero-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
-.extra-show-support-cta{display:inline-flex;justify-content:center;align-items:center;padding:15px 18px;min-height:53px;border:1px solid #f2b1b188;border-radius:10px;background:#ffffff17;color:#fff;text-decoration:none;font-weight:800;font-size:13px;transition:background .2s}
-.extra-show-support-cta:hover{background:#ffffff2a}
-@media(max-width:650px){.extra-show-hero-actions{align-items:stretch;gap:9px}.extra-show-hero-actions .extra-show-main-cta,.extra-show-hero-actions .extra-show-support-cta{width:100%;min-height:47px;padding:12px 14px;font-size:12px}}
+/* Polished secondary consultation action across all show landing pages.
+   Keep seat booking as the single prominent primary CTA. */
+.extra-show-hero-actions{display:flex;align-items:center;flex-wrap:wrap;gap:13px}
+.extra-show-hero-actions .extra-show-main-cta{min-height:54px;flex-shrink:0}
+.extra-show-hero-actions .extra-support-trigger{flex:0 0 auto;width:auto;min-width:0}
+.extra-show-hero-actions .extra-show-support-cta{
+ display:inline-flex;align-items:center;justify-content:center;gap:9px;
+ min-height:45px;width:auto;padding:8px 16px 8px 10px;
+ border:1px solid rgba(245,188,198,.27);border-radius:999px;
+ color:#f2e7eb;background:rgba(20,18,25,.70);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.065);
+ font-size:13px;font-weight:700;letter-spacing:.06px;line-height:1.2;
+ white-space:nowrap;cursor:pointer;
+ transition:background .2s,border-color .2s,transform .2s,box-shadow .2s
+}
+.extra-show-hero-actions .extra-show-support-cta:hover{
+ background:#35202b;border-color:rgba(245,171,186,.6);
+ box-shadow:0 5px 18px rgba(0,0,0,.22);
+ transform:translateY(-1px)
+}
+.extra-show-hero-actions .extra-show-support-cta:active{transform:translateY(0)}
+@media(max-width:750px){
+ .extra-show-hero-actions{flex-direction:column;align-items:stretch;gap:8px}
+ .extra-show-hero-actions .extra-show-main-cta{width:100%;min-height:50px;padding:14px 13px}
+ .extra-show-hero-actions .extra-support-trigger{align-self:center;flex:0 0 auto}
+ .extra-show-hero-actions .extra-show-support-cta{
+  width:auto;min-height:44px;padding:7px 15px 7px 9px;
+  background:rgba(23,20,29,.62);font-size:12px
+ }
+}
+@media(prefers-reduced-motion:reduce){.extra-show-hero-actions .extra-show-support-cta{transition:none}}
