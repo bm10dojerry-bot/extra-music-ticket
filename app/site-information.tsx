@@ -57,6 +57,46 @@ function RecruitmentContent(){
   "Có khả năng làm việc nhóm, phối hợp nhiều đầu mối và linh hoạt theo lịch chương trình.",
   "Có kỹ năng chụp ảnh, quay vlog, chỉnh sửa ảnh hoặc dựng video là một lợi thế."
  ];
+ const departments=[
+  {
+   id:"bar",index:"01",label:"KHU VỰC BAR",title:"Bar & Phục vụ",
+   description:"Đội ngũ trực tiếp phục vụ đồ uống, chăm sóc trải nghiệm khách hàng và vận hành khu Bar.",
+   jobs:[
+    {title:"Quản lý / Trưởng ca Bar",description:"Điều phối nhân sự trong ca, kiểm soát chất lượng phục vụ và phối hợp vận hành khu Bar."},
+    {title:"Nhân viên pha chế",description:"Chuẩn bị đồ uống, giữ vệ sinh quầy và quản lý nguyên liệu theo định mức."},
+    {title:"Nhân viên phục vụ Bar",description:"Đón tiếp, nhận yêu cầu, phục vụ khách và giữ khu vực sạch, gọn gàng."},
+    {title:"Nhân viên thu ngân Bar",description:"Tiếp nhận thanh toán, đối soát doanh thu ca và bàn giao tiền, chứng từ."}
+   ]
+  },
+  {
+   id:"24h",index:"02",label:"KHU DỊCH VỤ 24 GIỜ",title:"Cửa hàng & Dịch vụ 24h",
+   description:"Vận hành khu vực hoạt động 24 giờ, hỗ trợ mua sắm, chăm sóc khách hàng và không gian dịch vụ.",
+   jobs:[
+    {title:"Ca trưởng khu vực 24 giờ",description:"Sắp xếp ca làm, kiểm soát chất lượng dịch vụ và xử lý tình huống trong ca."},
+    {title:"Nhân viên bán hàng / Thu ngân",description:"Tư vấn sản phẩm, thanh toán và hỗ trợ khách tại cửa hàng tiện ích 24 giờ."},
+    {title:"Nhân viên phục vụ khu vực 24 giờ",description:"Hỗ trợ khách hàng, sắp xếp khu vực phục vụ và phối hợp với Bar, camping khi cần."},
+    {title:"Nhân viên vệ sinh & chăm sóc khu vực",description:"Duy trì vệ sinh, chuẩn bị không gian và kiểm tra vật tư phục vụ hằng ngày."}
+   ]
+  },
+  {
+   id:"backoffice",index:"03",label:"TÀI CHÍNH & KHO",title:"Kế toán & Quản lý kho",
+   description:"Các vị trí hậu cần giúp hoạt động của Extra minh bạch, chính xác và liên tục.",
+   jobs:[
+    {title:"Kế toán nội bộ",description:"Theo dõi thu chi, công nợ, chứng từ, đối soát bán hàng và lập báo cáo nội bộ."},
+    {title:"Thủ kho / Quản lý kho",description:"Quản lý nhập – xuất – tồn, kiểm kê, bảo quản hàng hóa và phối hợp các bộ phận."},
+    {title:"Nhân viên kho / Kiểm hàng",description:"Nhận hàng, sắp xếp, kiểm đếm và cấp phát hàng hóa cho Bar và khu 24 giờ."}
+   ]
+  },
+  {
+   id:"operations",index:"04",label:"SỰ KIỆN & VẬN HÀNH",title:"Đội ngũ Show & Hậu cần",
+   description:"Cùng tổ chức, đón tiếp và hỗ trợ khách trong các chương trình biểu diễn.",
+   jobs:[
+    {title:"Nhân viên đón khách & Check-in",description:"Hướng dẫn lối vào, hỗ trợ khách tìm đúng chỗ và kiểm tra mã QR tại chương trình."},
+    {title:"Nhân viên hậu cần sự kiện",description:"Chuẩn bị vật tư, bố trí khu vực và phối hợp lắp đặt, thu dọn sau show."},
+    {title:"Nhân viên chăm sóc khách hàng",description:"Giải đáp thông tin chương trình, hỗ trợ đặt chỗ và xử lý yêu cầu của khách."}
+   ]
+  }
+ ];
  return <>
   <section className="extra-info-section" id="vi-tri">
    <div className="extra-info-section-heading"><div><span className="extra-info-kicker">CƠ HỘI ĐỒNG HÀNH</span><h2>Vị trí đang tuyển</h2></div><p>Tham gia đội ngũ tổ chức và điều phối các chương trình biểu diễn của +1 Extra Music Show.</p></div>
@@ -72,6 +112,33 @@ function RecruitmentContent(){
     </div>
     <div className="extra-info-job-footer"><div><strong>Bạn quan tâm vị trí này?</strong><p>Liên hệ trực tiếp hoặc nhắn tin cho Fanpage <b>+1 Extra Music Show</b> và giới thiệu ngắn về bản thân. Có thể gửi kèm CV hoặc sản phẩm quay dựng nếu có.</p></div><a className="extra-info-primary" href={"tel:"+recruitmentPhone}>Liên hệ 0965 361 001 <span aria-hidden="true">↗</span></a></div>
    </article>
+   <div className="extra-info-recruitment-directory" id="cac-bo-phan">
+    <div className="extra-info-section-heading">
+     <div><span className="extra-info-kicker">NHIỀU BỘ PHẬN · MỘT ĐỘI NGŨ</span><h2>Cơ hội việc làm tại Extra</h2></div>
+     <p>Tìm vị trí phù hợp ở khu Bar, dịch vụ 24 giờ, kế toán, kho và vận hành show.</p>
+    </div>
+    <div className="extra-info-department-jump" aria-label="Chọn bộ phận tuyển dụng">
+     {departments.map(group=><a href={"#tuyen-"+group.id} key={group.id}>{group.title}<span aria-hidden="true">↗</span></a>)}
+    </div>
+    <div className="extra-info-departments">
+     {departments.map(group=><section className="extra-info-department" id={"tuyen-"+group.id} key={group.id}>
+      <div className="extra-info-department-heading">
+       <div><div className="extra-info-department-label"><span>{group.index}</span>{group.label}</div><h3>{group.title}</h3><p>{group.description}</p></div>
+       <a className="extra-info-department-contact" href={"tel:"+recruitmentPhone}>Liên hệ ứng tuyển <span aria-hidden="true">↗</span></a>
+      </div>
+      <div className="extra-info-open-roles">
+       {group.jobs.map(job=><article className="extra-info-role" key={job.title}>
+        <div><h4>{job.title}</h4><p>{job.description}</p></div>
+        <a href={"tel:"+recruitmentPhone} aria-label={"Gọi ứng tuyển vị trí "+job.title}>Ứng tuyển <span aria-hidden="true">↗</span></a>
+       </article>)}
+      </div>
+     </section>)}
+    </div>
+    <div className="extra-info-recruitment-note">
+     <div><strong>Thông tin ứng tuyển</strong><p>Liên hệ <a href={"tel:"+recruitmentPhone}>0965 361 001</a> hoặc nhắn Fanpage <b>+1 Extra Music Show</b>, ghi rõ vị trí mong muốn. Ca làm, số lượng cần tuyển, yêu cầu cụ thể và thu nhập sẽ được trao đổi trực tiếp.</p></div>
+     <a className="extra-info-primary" href={"tel:"+recruitmentPhone}>Gọi bộ phận tuyển dụng <span aria-hidden="true">↗</span></a>
+    </div>
+   </div>
   </section>
   <section className="extra-info-section extra-info-next">
    <div><span className="extra-info-kicker">HÀNH TRÌNH CÙNG EXTRA</span><h2>Mỗi đêm nhạc là một dự án đáng tự hào</h2><p>Không chỉ ở hậu trường, bạn còn góp phần tạo nên trải nghiệm chỉn chu cho nghệ sĩ và khán giả – từ khâu chuẩn bị đến những phút cuối chương trình.</p></div>
