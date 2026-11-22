@@ -13,6 +13,6 @@ export async function GET(req:NextRequest){
  await staffDb("extra_zalo_oauth_attempts",{method:"POST",body:JSON.stringify({state_hash:digest(state).toString("hex"),code_verifier:verifier,expires_at:new Date(Date.now()+10*60*1000).toISOString()})});
  const url=new URL("https://oauth.zaloapp.com/v4/oa/permission");
  url.searchParams.set("app_id",appId);url.searchParams.set("redirect_uri",callback);
- url.searchParams.set("code_challenge",challenge);url.searchParams.set("state",state);
+ url.searchParams.set("code_challenge",challenge);url.searchParams.set("code_challenge_method","S256");url.searchParams.set("state",state);
  return NextResponse.redirect(url.toString(),302);
 }
