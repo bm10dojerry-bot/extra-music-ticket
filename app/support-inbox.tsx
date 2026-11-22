@@ -6,7 +6,7 @@ type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:str
 type Message={id:number;sender:"staff"|"customer";body:string;staff_name:string|null;created_at:string};
 const slugNames:Record<string,string>={"dinh-dung-2811":"Đình Dũng 28/11","minh-vuong-0512":"Minh Vương 05/12","trinh-dinh-quang-1212":"Trịnh Đình Quang 12/12","khanh-phuong-1912":"Khánh Phương 19/12","ho-quang-hieu-2412":"Hồ Quang Hiếu 24/12","khac-viet-2612":"Khắc Việt 26/12","thai-hoc-3112":"Thái Học 31/12"};
 const time=(x:string)=>{try{return new Date(x).toLocaleString("vi-VN",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}catch{return ""}};
-const unread=(c:Chat)=>c.status==="open"&&!!c.last_customer_at&&(!c.last_staff_at||new Date(c.last_customer_at)>new Date(c.last_staff_at));
+const unread=(c:Chat)=>c.status==="open"&&!!c.last_customer_at&&(!c.last_staff_at||new Date(c.last_customer_at).getTime()>new Date(c.last_staff_at).getTime());
 export default function SupportInbox({embedded=false}:{embedded?:boolean}){
  const [chats,setChats]=useState<Chat[]>([]),[selected,setSelected]=useState(""),[current,setCurrent]=useState<Chat|null>(null),[messages,setMessages]=useState<Message[]>([]);
  const [filter,setFilter]=useState<"all"|"unread"|"open">("open"),[search,setSearch]=useState("");
