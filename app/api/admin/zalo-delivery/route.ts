@@ -5,16 +5,17 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export async function GET(){
  if(!await requireRole(["admin"]))return NextResponse.json({error:"Không có quyền"},{status:403});
+ const connected=await staffDb("extra_zalo_oauth_tokens?singleton=eq.true&select=expires_at,refresh_token&limit=1").catch(()=>[]) as {expires_at:string;refresh_token:string}[];
  const keys=["ZALO_APP_ID","ZALO_APP_SECRET","ZALO_OA_REFRESH_TOKEN","ZALO_OA_ACCESS_TOKEN","ZALO_ZBS_TEMPLATE_ID","ZALO_ZBS_TEMPLATE_FIELDS"];
  const configured=Object.fromEntries(keys.map(k=>[k,Boolean(process.env[k])]));
  try{
   const rows=await staffDb("extra_zalo_delivery?select=order_code,status,attempts,accepted_at,last_error&order=updated_at.desc&limit=50") as {order_code:string;status:string;attempts:number;accepted_at:string|null;last_error:string|null}[];
-  return NextResponse.json({ready:zaloConfigured(),configured,rows},{headers:{"Cache-Control":"no-store"}});
- }catch{return NextResponse.json({ready:zaloConfigured(),configured,rows:[],error:"Không tải được nhật ký Zalo"},{headers:{"Cache-Control":"no-store"}})}
+  return NextResponse.json({ready:await zaloConfigured(),oaConnected:Boolean(connected[0]?.refresh_token),appId:process.env.ZALO_APP_ID||"4502345524689201342",configured,rows},{headers:{"Cache-Control":"no-store"}});
+ }catch{return NextResponse.json({ready:await zaloConfigured(),oaConnected:Boolean(connected[0]?.refresh_token),appId:process.env.ZALO_APP_ID||"4502345524689201342",configured,rows:[],error:"Không tải được nhật ký Zalo"},{headers:{"Cache-Control":"no-store"}})}
 }
 export async function POST(){
  if(!await requireRole(["admin"]))return NextResponse.json({error:"Không có quyền"},{status:403});
- if(!zaloConfigured())return NextResponse.json({error:"Chưa cấu hình Zalo App, OA và template đã duyệt."},{status:503});
+ if(!await zaloConfigured())return NextResponse.json({error:"Chưa cấu hình Zalo App, OA và template đã duyệt."},{status:503});
  try{
   const rows=await staffDb("extra_zalo_delivery?status=in.(pending,failed)&attempts=lt.5&select=order_code&order=updated_at.asc&limit=5") as {order_code:string}[];
   const candidates=rows.map(r=>({code:r.order_code}));

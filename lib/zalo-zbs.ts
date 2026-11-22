@@ -4,8 +4,11 @@ import {loadShows} from "./show-data";
 type TokenRow={access_token:string;refresh_token:string;expires_at:string};
 type Delivery={status:string;attempts:number};
 const clean=(s:string)=>s.replace(/[\r\n]/g," ").slice(0,160);
-export function zaloConfigured(){
- return Boolean(process.env.ZALO_APP_ID&&process.env.ZALO_APP_SECRET&&process.env.ZALO_ZBS_TEMPLATE_ID&&process.env.ZALO_ZBS_TEMPLATE_FIELDS&&(process.env.ZALO_OA_REFRESH_TOKEN||process.env.ZALO_OA_ACCESS_TOKEN));
+export async function zaloConfigured(){
+ const configured=Boolean(process.env.ZALO_APP_SECRET&&process.env.ZALO_ZBS_TEMPLATE_ID&&process.env.ZALO_ZBS_TEMPLATE_FIELDS);
+ if(!configured)return false;
+ if(process.env.ZALO_OA_REFRESH_TOKEN||process.env.ZALO_OA_ACCESS_TOKEN)return true;
+ try{const rows=await staffDb("extra_zalo_oauth_tokens?singleton=eq.true&select=refresh_token&limit=1") as {refresh_token:string}[];return Boolean(rows[0]?.refresh_token)}catch{return false}
 }
 function templateMapping():Record<string,string>|null{
  try{const value=JSON.parse(process.env.ZALO_ZBS_TEMPLATE_FIELDS||"") as unknown;if(!value||typeof value!=="object"||Array.isArray(value))return null;const entries=Object.entries(value);if(!entries.length||entries.length>15||entries.some(([key,v])=>!/^[A-Za-z0-9_]{1,64}$/.test(key)||typeof v!=="string"||!["name","phone","code","seat","artist","show","date","venue","url","vip","amount"].includes(v)))return null;return Object.fromEntries(entries) as Record<string,string>}catch{return null}
@@ -29,7 +32,7 @@ async function token(){
  return result.access_token;
 }
 export async function sendZaloTicket(code:string):Promise<"accepted"|"skipped"|"failed">{
- if(!zaloConfigured())return "skipped";
+ if(!await zaloConfigured())return "skipped";
  const mapping=templateMapping();if(!mapping)return "skipped";
  const order=await paidOrder(code);if(!order||order.status!=="paid")return "skipped";
  const phone=phoneVN(order.buyer_phone||"");if(!phone)return "skipped";
