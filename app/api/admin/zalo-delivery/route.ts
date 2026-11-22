@@ -16,10 +16,8 @@ export async function POST(){
  if(!await requireRole(["admin"]))return NextResponse.json({error:"Không có quyền"},{status:403});
  if(!zaloConfigured())return NextResponse.json({error:"Chưa cấu hình Zalo App, OA và template đã duyệt."},{status:503});
  try{
-  const rows=await staffDb("extra_payment_orders?status=eq.paid&select=code&order=paid_at.desc&limit=100") as {code:string}[];
-  const existing=await staffDb("extra_zalo_delivery?select=order_code,status,attempts&limit=1000") as {order_code:string;status:string;attempts:number}[];
-  const byCode=new Map(existing.map(r=>[r.order_code,r]));
-  const candidates=rows.filter(r=>!byCode.has(r.code)||["pending","failed"].includes(byCode.get(r.code)!.status)&&byCode.get(r.code)!.attempts<5).slice(0,5);
+  const rows=await staffDb("extra_zalo_delivery?status=in.(pending,failed)&attempts=lt.5&select=order_code&order=updated_at.asc&limit=5") as {order_code:string}[];
+  const candidates=rows.map(r=>({code:r.order_code}));
   const summary={accepted:0,failed:0,skipped:0};
   for(const r of candidates){const status=await sendZaloTicket(r.code);summary[status]++}
   return NextResponse.json({ok:true,processed:candidates.length,...summary});
