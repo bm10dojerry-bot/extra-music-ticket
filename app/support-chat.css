@@ -38,3 +38,10 @@
 
 .extra-support-routing{font-size:11px;line-height:1.55;padding:9px 14px;border-bottom:1px solid #ffffff18}
 .extra-support-assigned{color:#c9f4dc;background:#21433388}.extra-support-queued{color:#ffe0b6;background:#57411e99}
+
+/* Crisp, reusable message icon — the consultation CTA is intentionally secondary. */
+.extra-support-button-icon{width:26px;height:26px;display:inline-grid;place-items:center;flex:none;border-radius:50%;background:rgba(225,86,112,.15);color:#f5a9b8}
+.extra-support-button-icon svg{display:block;width:17px;height:17px}
+.extra-support-fab{display:inline-flex;align-items:center;gap:9px}
+.extra-support-fab .extra-support-button-icon{background:rgba(255,255,255,.15);color:#fff}
+@media(max-width:650px){.extra-support-fab .extra-support-button-icon{width:25px;height:25px}}
