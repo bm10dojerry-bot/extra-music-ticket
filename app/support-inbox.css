@@ -46,3 +46,38 @@
 .extra-inbox-empty,.extra-inbox-muted{padding:18px;color:#aaa2ad;font-size:13px;line-height:1.65}
 .extra-inbox-empty{display:grid;place-items:center;min-height:400px;text-align:center}
 @media(max-width:750px){.extra-inbox{padding:15px;border-radius:12px}.extra-inbox-main{grid-template-columns:1fr}.extra-inbox-list{display:flex;border-right:0;border-bottom:1px solid #423a46;max-height:160px;overflow:auto}.extra-inbox-person{flex:0 0 min(250px,74vw);border-right:1px solid #37333b;border-bottom:0}.extra-inbox-title{align-items:flex-start}.extra-inbox-title h2{font-size:20px}.extra-inbox-title p{font-size:12px}.extra-inbox-counts{min-width:86px}.extra-inbox-controls input{min-width:0;width:100%}.extra-inbox-controls label{width:100%}.extra-inbox-thread-head{padding:12px}.extra-inbox-messages{padding:12px;min-height:240px}.extra-inbox-msg{max-width:92%}}
+
+
+/* Chat allocation, SLA warning, quick replies and transfer controls */
+.extra-inbox-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:21px 0 10px}
+.extra-inbox-kpis>div{padding:14px 17px;border-radius:12px;border:1px solid #4c3c49;background:#211e28;display:flex;flex-direction:column;gap:8px}
+.extra-inbox-kpis strong{color:#fff;font-size:25px;line-height:1;font-weight:900}
+.extra-inbox-kpis strong span{font-size:15px;color:#a99aa8}
+.extra-inbox-kpis small{font-size:11px;color:#c8b8c4;line-height:1.35}
+.extra-inbox-kpis .extra-inbox-danger{background:#511f30;border-color:#f05d77}
+.extra-inbox-kpis .extra-inbox-danger strong{color:#ff93a3}
+.extra-inbox-alert{background:#50212c;border:1px solid #f47889;color:#ffd4d9;font-size:12px;line-height:1.65;padding:11px 14px;border-radius:10px;margin:12px 0}
+.extra-inbox-team{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 18px;padding:12px 15px;border:1px solid #594351;background:#241d27;border-radius:12px;font-size:12px}
+.extra-inbox-team>span{background:#ffffff0c;padding:8px 10px;border-radius:8px;color:#f0e6ed}
+.extra-inbox-team>button{margin-left:auto;border:1px solid #a65d6c;color:white;border-radius:8px;padding:9px 11px;background:#623044;font-size:12px;cursor:pointer}
+.extra-inbox-team>button:disabled{opacity:.5;cursor:not-allowed}
+.extra-inbox-person.extra-inbox-late{box-shadow:inset 3px 0 #fa6b7e;background:#43212e}
+.extra-inbox-person-head em.extra-inbox-late-tag{font-style:normal;background:#a8233c;color:#fff;border-radius:20px;padding:5px 7px;font-size:10px;font-weight:800;white-space:nowrap}
+.extra-inbox-head-actions{display:flex;align-items:center;gap:6px}
+.extra-inbox-queue-intro{padding:14px 18px;border-bottom:1px solid #624b57;background:#3a2631}
+.extra-inbox-queue-intro p{color:#ead6e0;font-size:12px;line-height:1.6;margin:0 0 10px}
+.extra-inbox-queue-intro button{background:#d9354d;color:#fff;font-size:12px;font-weight:800;border:0;border-radius:9px;padding:10px 13px;cursor:pointer}
+.extra-inbox-queue-intro button:disabled{opacity:.55;cursor:not-allowed}
+.extra-inbox-transfer{border-top:1px solid #39323b;display:flex;gap:9px;align-items:center;flex-wrap:wrap;background:#261e29;padding:13px 14px}
+.extra-inbox-transfer>span{display:flex;flex-direction:column;gap:4px;flex:1 1 170px}
+.extra-inbox-transfer>span strong{font-size:12px}
+.extra-inbox-transfer>span small{font-size:10px;color:#c3aeb9}
+.extra-inbox-transfer select{background:#1b1b24;border:1px solid #735365;color:#f8f2f6;padding:10px;border-radius:8px;max-width:225px;min-width:125px;flex:1 1 160px;font-size:12px}
+.extra-inbox-transfer button{background:#633247;color:#fff;border:1px solid #a65b6f;border-radius:8px;padding:10px 11px;font-size:12px;cursor:pointer;font-weight:700}
+.extra-inbox-transfer button:disabled{opacity:.45;cursor:not-allowed}
+.extra-inbox-quick-replies{display:flex;flex-wrap:wrap;gap:7px}
+.extra-inbox-quick-replies button{background:#342630;color:#ffd8df;border:1px solid #704254;border-radius:999px;padding:7px 9px;font-size:11px}
+.extra-inbox-quick-replies button:hover{background:#5e2f42}
+.extra-inbox-reply>div:last-child{align-items:center}
+.extra-inbox-reply>div:last-child .extra-inbox-muted{padding:0;font-size:10px;max-width:310px}
+@media(max-width:750px){.extra-inbox-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.extra-inbox-kpis>div{padding:13px}.extra-inbox-team{gap:8px}.extra-inbox-transfer select{max-width:100%}.extra-inbox-reply>div:last-child{align-items:flex-start}}
