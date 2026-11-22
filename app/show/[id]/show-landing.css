@@ -55,3 +55,9 @@
 .extra-show-help-link:hover{color:#fff}
 .extra-show-page :is(a,button,input,select):focus-visible{outline:3px solid #ffcd91;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.extra-show-page *, .extra-show-page *::before,.extra-show-page *::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Quick consultation alongside the booking CTA: Đình Dũng campaign */
+.extra-show-hero-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.extra-show-support-cta{display:inline-flex;justify-content:center;align-items:center;padding:15px 18px;min-height:53px;border:1px solid #f2b1b188;border-radius:10px;background:#ffffff17;color:#fff;text-decoration:none;font-weight:800;font-size:13px;transition:background .2s}
+.extra-show-support-cta:hover{background:#ffffff2a}
+@media(max-width:650px){.extra-show-hero-actions{align-items:stretch;gap:9px}.extra-show-hero-actions .extra-show-main-cta,.extra-show-hero-actions .extra-show-support-cta{width:100%;min-height:47px;padding:12px 14px;font-size:12px}}
