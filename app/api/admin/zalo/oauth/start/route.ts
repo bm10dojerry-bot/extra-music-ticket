@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createHash,randomBytes} from "node:crypto";
-import {requireRole,staffDb} from "../../../../../lib/staff-auth";
+import {requireRole,staffDb} from "../../../../../../lib/staff-auth";
 export const runtime="nodejs";
 const callback="https://iextra.net/api/zalo/oauth/callback";
 export async function GET(req:NextRequest){
