@@ -1,6 +1,7 @@
 import {staffDb} from "./staff-auth";
 import {paidOrder} from "./extra-ticketing";
 import {loadShows} from "./show-data";
+import {ticketLinkToken,ticketLinkUrl} from "./ticket-link";
 type TokenRow={access_token:string;refresh_token:string;expires_at:string};
 type Delivery={status:string;attempts:number};
 const clean=(s:string)=>s.replace(/[\r\n]/g," ").slice(0,160);
@@ -11,7 +12,7 @@ export async function zaloConfigured(){
  try{const rows=await staffDb("extra_zalo_oauth_tokens?singleton=eq.true&select=refresh_token&limit=1") as {refresh_token:string}[];return Boolean(rows[0]?.refresh_token)}catch{return false}
 }
 function templateMapping():Record<string,string>|null{
- try{const value=JSON.parse(process.env.ZALO_ZBS_TEMPLATE_FIELDS||"") as unknown;if(!value||typeof value!=="object"||Array.isArray(value))return null;const entries=Object.entries(value);if(!entries.length||entries.length>15||entries.some(([key,v])=>!/^[A-Za-z0-9_]{1,64}$/.test(key)||typeof v!=="string"||!["name","phone","code","seat","artist","show","date","venue","url","vip","amount"].includes(v)))return null;return Object.fromEntries(entries) as Record<string,string>}catch{return null}
+ try{const value=JSON.parse(process.env.ZALO_ZBS_TEMPLATE_FIELDS||"") as unknown;if(!value||typeof value!=="object"||Array.isArray(value))return null;const entries=Object.entries(value);if(!entries.length||entries.length>15||entries.some(([key,v])=>!/^[A-Za-z0-9_]{1,64}$/.test(key)||typeof v!=="string"||!["name","phone","code","seat","artist","show","date","venue","url","ticket","vip","amount"].includes(v)))return null;return Object.fromEntries(entries) as Record<string,string>}catch{return null}
 }
 function phoneVN(raw:string){let v=raw.replace(/\D/g,"");if(v.startsWith("0"))v="84"+v.slice(1);if(!/^84\d{9}$/.test(v))return null;return v}
 async function token(){
@@ -42,7 +43,7 @@ export async function sendZaloTicket(code:string):Promise<"accepted"|"skipped"|"
  if(claimed!==true)return "skipped";
  try{
   const show=(await loadShows()).find(s=>s.id===order.show_id);
-  const values:Record<string,string>={name:clean(order.buyer_name),phone,code,seat:order.seats.join(", "),artist:clean(show?.artist||""),show:clean(show?.title||""),date:show?.date||"",venue:show?.venue||"",url:"https://iextra.net/ve?code="+encodeURIComponent(code)+"&token="+encodeURIComponent(order.access_token),vip:order.is_vip_invitation?"Vé mời VIP":"Vé điện tử",amount:order.is_vip_invitation?"Miễn phí":new Intl.NumberFormat("vi-VN").format(order.amount_vnd)+"đ"};
+  const values:Record<string,string>={name:clean(order.buyer_name),phone,code,seat:order.seats.join(", "),artist:clean(show?.artist||""),show:clean(show?.title||""),date:show?.date||"",venue:show?.venue||"",url:ticketLinkUrl(code,order.access_token),ticket:ticketLinkToken(code,order.access_token),vip:order.is_vip_invitation?"Vé mời VIP":"Vé điện tử",amount:order.is_vip_invitation?"Miễn phí":new Intl.NumberFormat("vi-VN").format(order.amount_vnd)+"đ"};
   const template_data=Object.fromEntries(Object.entries(mapping).map(([key,field])=>[key,values[field]||""]));
   const response=await fetch("https://business.openapi.zalo.me/message/template",{method:"POST",headers:{"Content-Type":"application/json","access_token":await token()},body:JSON.stringify({phone,template_id:process.env.ZALO_ZBS_TEMPLATE_ID,template_data,tracking_id:code}),signal:AbortSignal.timeout(12000),cache:"no-store"});
   const result=await response.json() as {error?:number;message?:string;data?:{msg_id?:string}};

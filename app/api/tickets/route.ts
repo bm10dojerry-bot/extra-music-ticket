@@ -1,18 +1,20 @@
 import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
 import {paidOrder,ticketsFor} from "../../../lib/extra-ticketing";
+import {resolveTicketLink} from "../../../lib/ticket-link";
 import {loadShows} from "../../../lib/show-data";
 import {venues,seatsFor,type VenueId} from "../../../lib/venues";
 export const dynamic="force-dynamic";
 export async function GET(req:NextRequest){
+ const ticket=req.nextUrl.searchParams.get("ticket")||"";
  const code=req.nextUrl.searchParams.get("code")||"",token=req.nextUrl.searchParams.get("token")||"";
- if(!/^EX[0-9A-F]{16}$/.test(code)||!/^[a-f0-9]{48}$/.test(token))return NextResponse.json({error:"Thông tin vé không hợp lệ"},{status:400});
+ if(ticket&&!/^EX[0-9A-F]{16}\.[a-f0-9]{64}$/.test(ticket))return NextResponse.json({error:"Mã vé không hợp lệ"},{status:400});
+ if(!ticket&&(!/^EX[0-9A-F]{16}$/.test(code)||!/^[a-f0-9]{48}$/.test(token)))return NextResponse.json({error:"Thông tin vé không hợp lệ"},{status:400});
  try{
- const o=await paidOrder(code);if(!o)return NextResponse.json({error:"Không tìm thấy đơn"},{status:404});
- const a=Buffer.from(token),b=Buffer.from(o.access_token);
- if(a.length!==b.length||!timingSafeEqual(a,b))return NextResponse.json({error:"Không có quyền xem vé"},{status:403});
+ const o=ticket?await resolveTicketLink(ticket):await paidOrder(code);if(!o)return NextResponse.json({error:"Không tìm thấy vé hoặc liên kết không hợp lệ"},{status:404});
+ if(!ticket){const a=Buffer.from(token),b=Buffer.from(o.access_token);if(a.length!==b.length||!timingSafeEqual(a,b))return NextResponse.json({error:"Không có quyền xem vé"},{status:403})}
  if(o.status!=="paid")return NextResponse.json({error:"Đơn hàng chưa được xác nhận thanh toán"},{status:409});
- const tickets=await ticketsFor(code);
+ const tickets=await ticketsFor(o.code);
  const shows=await loadShows();
  const show=shows.find(s=>s.id===o.show_id);
  const venueId=show?.venue||tickets[0]?.venue_id;
