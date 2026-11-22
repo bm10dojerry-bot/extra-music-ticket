@@ -51,8 +51,11 @@ export default function SupportChat({showId="",showName="",mode="inline",label="
   }catch(e){setError(e instanceof Error?e.message:"Không gửi được tin nhắn")}finally{postLock.current=false;setBusy(false)}
  }
  return <div className={mode==="floating"?"extra-support-trigger extra-support-trigger-floating":"extra-support-trigger"}>
-  <button type="button" className={mode==="floating"?"extra-support-fab":"extra-show-support-cta"} onClick={()=>setOpen(true)} aria-label={label}>
-   <span aria-hidden="true">☏</span> {label}
+  <button type="button" className={mode==="floating"?"extra-support-fab":"extra-show-support-cta"} onClick={()=>setOpen(true)} aria-label={label} title={mode==="floating"?"Mở chat hỗ trợ":"Chat với EXTRA ngay trên trang này"}>
+   <span className="extra-support-button-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" focusable="false"><path d="M20 11.5a7.7 7.7 0 0 1-7.8 7.7 8.6 8.6 0 0 1-3.5-.7L4 20l1.5-4.5A7.7 7.7 0 1 1 20 11.5Z"/><path d="M9 11.7h6"/></svg>
+   </span>
+   <span>{mode==="floating"?label:"Tư vấn chọn chỗ"}</span>
   </button>
   {open&&createPortal(<div className="extra-support-backdrop" role="presentation">
    <section className="extra-support-window" role="dialog" aria-modal="false" aria-label="Chat tư vấn trực tiếp trên website +1 Extra">
