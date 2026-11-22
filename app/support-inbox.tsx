@@ -79,7 +79,7 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
  return <section className={"extra-inbox "+(embedded?"extra-inbox-embedded":"")} aria-label="Hộp thư tư vấn đặt chỗ">
   <div className="extra-inbox-title"><div><small>+1 EXTRA · SALE SUPPORT</small><h2>Hộp thư tư vấn trực tuyến</h2><p>Khách được tự phân công cho Sale còn chỗ. Mỗi Sale tối đa 8 cuộc chat đang mở.</p></div><div className="extra-inbox-counts"><strong>{needs}</strong><span>Cần phản hồi</span></div></div>
   <div className="extra-inbox-kpis">
-   <div><strong>{myOpen}<span>/8</span></strong><small>Khách của tôi</small></div>
+   <div><strong>{isManager?chats.filter(c=>c.status==="open"&&Boolean(c.assigned_staff_id)).length:myOpen}<span>/{isManager?staff.length*8:8}</span></strong><small>{isManager?"Đã phân công cho Sale":"Khách của tôi"}</small></div>
    <div><strong>{waiting}</strong><small>Khách chờ phân công</small></div>
    <div className={lateCount?"extra-inbox-danger":""}><strong>{lateCount}</strong><small>Chờ quá 60 giây</small></div>
    <div><strong>{staff.length}</strong><small>Sale đang hoạt động</small></div>
