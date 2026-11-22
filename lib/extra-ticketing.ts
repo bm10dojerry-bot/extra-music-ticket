@@ -2,9 +2,9 @@ import {loadShows} from "./show-data";
 import {venues} from "./venues";
 import {staffDb} from "./staff-auth";
 type Ticket={id:string;order_code:string;show_id:string;venue_id:string;seat_id:string;qr_secret:string;issued_at:string;checked_in_at:string|null};
-type Order={code:string;access_token:string;status:string;buyer_name:string;buyer_email:string;amount_vnd:number;show_id:string;seats:string[];email_status:string;is_vip_invitation:boolean};
+type Order={code:string;access_token:string;status:string;buyer_name:string;buyer_email:string;buyer_phone:string;amount_vnd:number;show_id:string;seats:string[];email_status:string;is_vip_invitation:boolean};
 export async function paidOrder(code:string):Promise<Order|null>{
- const rows=await staffDb("extra_payment_orders?code=eq."+encodeURIComponent(code)+"&select=code,access_token,status,buyer_name,buyer_email,amount_vnd,show_id,seats,email_status,is_vip_invitation&limit=1") as Order[];
+ const rows=await staffDb("extra_payment_orders?code=eq."+encodeURIComponent(code)+"&select=code,access_token,status,buyer_name,buyer_email,buyer_phone,amount_vnd,show_id,seats,email_status,is_vip_invitation&limit=1") as Order[];
  return rows[0]||null;
 }
 export async function ticketsFor(code:string):Promise<Ticket[]>{
