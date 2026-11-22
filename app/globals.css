@@ -480,37 +480,40 @@ body,button,input,select{font-family:Arial,Helvetica,sans-serif;font-weight:400;
 /* Admin: dedicated Landingpage ADS management */
 .admin-landing-ads{display:grid;gap:16px;min-width:0}.admin-landing-ads .admin-media-heading{margin-bottom:0}.admin-landing-ads-selector{display:grid;gap:10px;padding:22px;border:1px solid #393940;background:#17181e;border-radius:14px}.admin-landing-ads-selector label{font-weight:750;color:#fff}.admin-landing-ads-selector select{width:100%;max-width:620px;min-height:46px;padding:12px 14px;background:#111217;color:#fff;border:1px solid #59525c;border-radius:10px;font-size:15px}.admin-landing-ads-selector .admin-help{margin:0;color:#b8b8c1;font-size:12px;line-height:1.6}
 
-/* EXTRA homepage: mobile-first next-show booking without disrupting existing cinematic split hero */
-.extra-home-quick{margin:18px 0 24px;border:1px solid #4b3036;border-radius:20px;overflow:hidden;background:linear-gradient(112deg,#28161c 0%,#151519 62%,#0c0d11 100%);box-shadow:0 16px 48px #0005}
-.extra-home-quick-main{display:grid;grid-template-columns:minmax(0,1fr) 200px;min-height:230px}
-.extra-home-quick-copy{padding:25px 28px;display:flex;flex-direction:column;justify-content:center;min-width:0}
-.extra-home-quick-eyebrow{color:#ffb2a5;font-size:11px;letter-spacing:1.6px;font-weight:800}
-.extra-home-quick h1{font-size:clamp(26px,3.3vw,43px);line-height:1.12;margin:12px 0 15px;color:#fff;overflow-wrap:anywhere}
-.extra-home-quick-meta{color:#e4d5d7;font-size:14px;margin:0 0 8px}
-.extra-home-quick-bottom{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:14px}
-.extra-home-quick-bottom>span{font-size:16px;font-weight:800;color:#ffe0b4}
-.extra-home-quick-cta{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:12px 19px;border-radius:10px;background:#ed2839;color:#fff;font-weight:900;font-size:13px;letter-spacing:.3px;box-shadow:0 5px 20px #ed283944}
-.extra-home-quick-cta:hover{background:#ff4554}
+/* Compact show notice: preserve diagonal hero as the homepage centerpiece */
+.extra-home-quick{margin:12px 0 18px;border:1px solid #3b2a30;border-radius:12px;overflow:hidden;background:linear-gradient(100deg,#21181b,#111217);box-shadow:none}
+.extra-home-quick-main{display:grid;grid-template-columns:minmax(0,1fr) 100px;min-height:0;align-items:stretch}
+.extra-home-quick-copy{padding:13px 17px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.extra-home-quick-eyebrow{color:#f0b2a7;font-size:9px;letter-spacing:1px;font-weight:800}
+.extra-home-quick h1{font-size:clamp(18px,2vw,25px);line-height:1.15;margin:5px 0 7px;color:#fff;overflow-wrap:anywhere}
+.extra-home-quick-meta{color:#d4c9cc;font-size:11px;margin:0 0 3px}
+.extra-home-quick-bottom{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:7px}
+.extra-home-quick-bottom>span{font-size:12px;font-weight:800;color:#ffe0b4}
+.extra-home-quick-cta{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:7px 12px;border-radius:7px;background:#d93443;color:#fff;font-weight:800;font-size:10px;box-shadow:none}
+.extra-home-quick-cta:hover{background:#ee4453}
 .extra-home-quick-unavailable{color:#ffadb5}
 .extra-home-quick-art{display:block;overflow:hidden;background:#141217}
-.extra-home-quick-art img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
-.extra-home-quick-trust{display:flex;gap:12px;justify-content:space-around;align-items:center;flex-wrap:wrap;padding:13px 16px;background:#17171b;border-top:1px solid #4b3036;color:#f4d6d8;font-size:12px;font-weight:700}
-.extra-home-quick-empty{padding:24px}
+.extra-home-quick-art img{display:block;width:100%;height:100%;max-height:135px;object-fit:contain;object-position:center}
+.extra-home-quick-trust{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;padding:6px 10px;background:#16161a;border-top:1px solid #3b2a30;color:#d3c7cb;font-size:10px;font-weight:600}
+.extra-home-quick-trust span+span:before{content:"·";margin-right:8px;color:#9d8990}
+.extra-home-quick-empty{padding:15px}
 .extra-home-quick-empty a{color:#ff9eac;text-decoration:underline}
 @media(max-width:700px){
- .extra-home-quick{margin:10px 0 14px;border-radius:14px}
- .extra-home-quick-main{grid-template-columns:minmax(0,1fr) 100px;min-height:178px}
- .extra-home-quick-copy{padding:16px 12px 15px 15px}
- .extra-home-quick-eyebrow{font-size:9px;letter-spacing:.8px}
- .extra-home-quick h1{font-size:clamp(21px,5.8vw,30px);margin:7px 0 10px}
- .extra-home-quick-meta{font-size:11px;line-height:1.3;margin-bottom:5px}
- .extra-home-quick-bottom{gap:8px;margin-top:8px;align-items:flex-start;flex-direction:column}
- .extra-home-quick-bottom>span{font-size:13px}
- .extra-home-quick-cta{min-height:43px;font-size:11px;padding:10px 12px;width:100%;max-width:245px}
- .extra-home-quick-trust{justify-content:center;gap:7px 13px;font-size:10px;padding:10px}
+ .extra-home-quick{margin:10px 0 14px;border-radius:10px}
+ .extra-home-quick-main{grid-template-columns:minmax(0,1fr) 75px}
+ .extra-home-quick-copy{padding:10px 10px 10px 12px}
+ .extra-home-quick-eyebrow{font-size:8px;letter-spacing:.4px}
+ .extra-home-quick h1{font-size:18px;margin:4px 0 6px}
+ .extra-home-quick-meta{font-size:10px;line-height:1.3;margin-bottom:3px}
+ .extra-home-quick-bottom{gap:6px;margin-top:5px}
+ .extra-home-quick-bottom>span{font-size:11px}
+ .extra-home-quick-cta{min-height:31px;font-size:9px;padding:6px 9px}
+ .extra-home-quick-art img{max-height:145px}
+ .extra-home-quick-trust{font-size:9px;padding:7px 8px;gap:4px 7px}
+ .extra-home-quick-trust span+span:before{margin-right:7px}
  .home-banner{max-height:135px;overflow:hidden}
  .home-banner img{max-height:135px;object-fit:contain}
  .split-landing{margin-top:12px}
 }
-@media(max-width:390px){.extra-home-quick-main{grid-template-columns:minmax(0,1fr) 80px}.extra-home-quick-copy{padding-left:12px}.extra-home-quick h1{font-size:20px}.extra-home-quick-cta{font-size:10px}}
+@media(max-width:390px){.extra-home-quick-main{grid-template-columns:minmax(0,1fr) 64px}.extra-home-quick h1{font-size:17px}.extra-home-quick-cta{font-size:8px}}
 @media(prefers-reduced-motion:reduce){.extra-home-quick-cta{transition:none}}
