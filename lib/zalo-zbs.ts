@@ -16,6 +16,8 @@ async function token(){
  const current=rows[0];
  if(current&&Date.parse(current.expires_at)>Date.now()+300000)return current.access_token;
  if(!current&&process.env.ZALO_OA_ACCESS_TOKEN&&!process.env.ZALO_OA_REFRESH_TOKEN)return process.env.ZALO_OA_ACCESS_TOKEN;
+ const claimed=await staffDb("rpc/extra_claim_zalo_refresh",{method:"POST",body:"{}"});
+ if(claimed!==true){for(let i=0;i<8;i++){await new Promise(resolve=>setTimeout(resolve,350));const other=await staffDb("extra_zalo_oauth_tokens?singleton=eq.true&select=access_token,expires_at&limit=1") as TokenRow[];if(other[0]?.access_token&&Date.parse(other[0].expires_at)>Date.now()+60000)return other[0].access_token}throw Error("Zalo token refresh is in progress")}
  const refresh=current?.refresh_token||process.env.ZALO_OA_REFRESH_TOKEN;
  if(!refresh)throw Error("Zalo OAuth refresh token not configured");
  const body=new URLSearchParams({refresh_token:refresh,app_id:process.env.ZALO_APP_ID||"",grant_type:"refresh_token"});
@@ -23,7 +25,7 @@ async function token(){
  const result=await response.json() as {access_token?:string;refresh_token?:string;expires_in?:number;error?:number;message?:string};
  if(!response.ok||!result.access_token||!result.refresh_token)throw Error("Zalo OAuth refresh rejected");
  const expiresAt=new Date(Date.now()+Math.min(24*3600,Math.max(600,Number(result.expires_in)||24*3600))*1000).toISOString();
- await staffDb("extra_zalo_oauth_tokens?on_conflict=singleton",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({singleton:true,access_token:result.access_token,refresh_token:result.refresh_token,expires_at:expiresAt,updated_at:new Date().toISOString()})});
+ await staffDb("extra_zalo_oauth_tokens?on_conflict=singleton",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({singleton:true,access_token:result.access_token,refresh_token:result.refresh_token,expires_at:expiresAt,refresh_lease_until:null,updated_at:new Date().toISOString()})});
  return result.access_token;
 }
 export async function sendZaloTicket(code:string):Promise<"accepted"|"skipped"|"failed">{
