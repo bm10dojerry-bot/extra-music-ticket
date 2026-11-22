@@ -16,13 +16,28 @@ export async function POST(req:NextRequest){
  const id=Number(payload?.id),amount=Number(payload?.transferAmount),content=String(payload?.content||"");
  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(amount)||amount<=0||payload?.transferType!=="in")return NextResponse.json({success:false},{status:400});
  if(process.env.SEPAY_BANK_ACCOUNT&&String(payload?.accountNumber||"")!==process.env.SEPAY_BANK_ACCOUNT)return NextResponse.json({success:false},{status:400});
- const matches=content.toUpperCase().match(/EX[0-9A-F]{16}/g)||[];
+ const matches=[...new Set(content.toUpperCase().match(/EX[0-9A-F]{16}/g)||[])];
  const code=matches.length===1?matches[0]:"";
  try{
- const outcome=await staffDb("rpc/extra_confirm_payment",{method:"POST",body:JSON.stringify({p_tx:id,p_code:code,p_amount:amount,p_payload:payload})});
- const order=code?await paidOrder(code):null;
- if(order?.status==="paid"){let emailFailure:unknown=null;try{await deliverTickets(code)}catch(e){emailFailure=e;console.error("[sepay-webhook] ticket email issue",e instanceof Error?e.message:"unknown")}try{await sendZaloTicket(code)}catch(e){console.error("[sepay-webhook] Zalo issue",e instanceof Error?e.message:"unknown")}try{await sendMetaPurchase(code)}catch(e){console.error("[sepay-webhook] CAPI issue",e instanceof Error?e.message:"unknown")}if(emailFailure)throw emailFailure}
- if(outcome!=="paid"&&outcome!=="already_paid")console.warn("[sepay-webhook] Payment requires review:",outcome,"transaction",id);
+ // The database confirms and issues QR tickets atomically. If the memo contains
+ // no usable code, it only auto-matches one unambiguous reservation of exactly
+ // the same amount, active when the transfer was made.
+ const confirmation=await staffDb("rpc/extra_confirm_payment_smart",{
+  method:"POST",body:JSON.stringify({p_tx:id,p_code:code,p_amount:amount,p_payload:payload})
+ }) as {outcome:string;order_code:string;matched_by:string};
+ if(!confirmation||typeof confirmation.outcome!=="string")throw Error("Invalid payment confirmation response");
+ const matchedCode=confirmation.outcome==="paid"&&/^EX[0-9A-F]{16}$/.test(confirmation.order_code||"")?confirmation.order_code:"";
+ if(matchedCode){
+  const order=await paidOrder(matchedCode);
+  if(order?.status!=="paid")throw Error("Confirmed order could not be reloaded");
+  if(confirmation.matched_by==="unique_amount_time")console.info("[sepay-webhook] Auto-reconciled transfer without matching memo",id);
+  let emailFailure:unknown=null;
+  try{await deliverTickets(matchedCode)}catch(e){emailFailure=e;console.error("[sepay-webhook] ticket email issue",e instanceof Error?e.message:"unknown")}
+  try{await sendZaloTicket(matchedCode)}catch(e){console.error("[sepay-webhook] Zalo issue",e instanceof Error?e.message:"unknown")}
+  try{await sendMetaPurchase(matchedCode)}catch(e){console.error("[sepay-webhook] CAPI issue",e instanceof Error?e.message:"unknown")}
+  if(emailFailure)throw emailFailure;
+ }
+ if(confirmation.outcome!=="paid")console.warn("[sepay-webhook] Payment requires review:",confirmation.outcome,"transaction",id);
  return NextResponse.json({success:true});
  }catch(err){console.error("[sepay-webhook] payment confirmation failed:",err instanceof Error?err.message:"Unknown database error");return NextResponse.json({success:false},{status:503})}
 }
