@@ -45,6 +45,42 @@ function Intro({slug,page}:{slug:string;page:PublicPage|null}){
  </section>;
 }
 
+
+function AboutContent(){
+ return <>
+  <section className="extra-info-section extra-info-origin" id="hanh-trinh">
+   <div className="extra-info-section-heading">
+    <div><span className="extra-info-kicker">CÂU CHUYỆN THƯƠNG HIỆU</span><h2>Từ +1 EXTRA đến +1 EXTRA MUSIC SHOW</h2></div>
+    <p>Hai chặng đường, cùng một tinh thần: tạo ra nơi mọi người có thể gặp gỡ, kết nối và tận hưởng những trải nghiệm đáng nhớ.</p>
+   </div>
+   <div className="extra-info-origin-grid">
+    <article className="extra-info-origin-card">
+     <span className="extra-info-origin-index">01 / KHỞI ĐẦU TẠI LÀO CAI</span>
+     <h3>+1 EXTRA</h3><p className="extra-info-origin-subtitle">Một điểm hẹn sống động, mở ra nhiều trải nghiệm.</p>
+     <p>+1 Extra bắt đầu với mô hình <strong>All-in-One 24H Zone</strong> tại Lào Cai: không gian kết hợp đồ uống, cửa hàng tiện ích và những hoạt động giải trí để bạn bè có thể gặp nhau, thư giãn và tận hưởng thời gian theo cách riêng.</p>
+     <p>Từ trà, cà phê và các thức uống được chăm chút đến khu vui chơi, game, phim và không gian riêng, Extra hướng tới một điểm đến gần gũi, linh hoạt trong nhịp sống của thành phố.</p>
+     <div className="extra-info-origin-tags"><span>Đồ uống & tiện ích</span><span>Không gian 24 giờ</span><span>Giải trí & kết nối</span></div>
+    </article>
+    <article className="extra-info-origin-card extra-info-origin-card-music">
+     <span className="extra-info-origin-index">02 / TIẾP NỐI BẰNG ÂM NHẠC</span>
+     <h3>+1 EXTRA <span>MUSIC SHOW</span></h3><p className="extra-info-origin-subtitle">Đưa những cuộc gặp gỡ đến gần sân khấu hơn.</p>
+     <p>Từ mong muốn mang đến những trải nghiệm phong phú hơn, <strong>+1 Extra Music Show</strong> phát triển thành chuỗi đêm nhạc trực tiếp tại Sa Pa và Lào Cai, nơi khán giả có thể thưởng thức giọng hát của nghệ sĩ yêu thích trong không gian biểu diễn được chuẩn bị chỉn chu.</p>
+     <p>Cùng với các chương trình âm nhạc là định hướng nâng cao trải nghiệm khán giả: khu vực ghế ngồi được tổ chức rõ ràng, quy trình đặt chỗ trực tuyến, xác nhận thanh toán và mã QR check-in.</p>
+     <div className="extra-info-origin-tags"><span>Live music</span><span>Sa Pa & Lào Cai</span><span>Trải nghiệm khán giả</span></div>
+    </article>
+   </div>
+  </section>
+  <section className="extra-info-section extra-info-about-values">
+   <div><span className="extra-info-kicker">TINH THẦN EXTRA</span><h2>Hơn một địa điểm, hơn một đêm nhạc</h2><p>Với Extra, giá trị của một trải nghiệm không chỉ nằm ở sản phẩm, sân khấu hay ánh đèn, mà còn ở cảm giác được đón tiếp, được chia sẻ và được lưu giữ những khoảnh khắc đẹp cùng nhau.</p><p>Chúng tôi tiếp tục phát triển các không gian dịch vụ, giải trí và âm nhạc theo hướng gần gũi, an toàn và chuyên nghiệp hơn, từng bước xây dựng một điểm hẹn văn hóa – trải nghiệm tại Lào Cai.</p></div>
+   <div className="extra-info-about-quote"><span>+1 EXTRA</span><strong>Âm nhạc sẽ hay hơn khi có bạn ở đó.</strong><p>+1 Extra Music Show</p></div>
+  </section>
+  <section className="extra-info-contact-help">
+   <div><span className="extra-info-kicker">KẾT NỐI CÙNG EXTRA</span><h2>Hẹn gặp bạn tại những trải nghiệm tiếp theo</h2><p>Tìm hiểu lịch các đêm nhạc, chọn chỗ theo sơ đồ hoặc liên hệ đội ngũ Extra để được hỗ trợ thông tin chương trình và cơ hội hợp tác.</p></div>
+   <div className="extra-info-about-actions"><a href="/" className="extra-info-primary">Khám phá các show <span aria-hidden="true">↗</span></a><a href="/lien-he" className="extra-info-secondary">Liên hệ với Extra</a></div>
+  </section>
+ </>;
+}
+
 function RecruitmentContent(){
  const tasks=[
   "Hỗ trợ Giám đốc lập kế hoạch, theo dõi tiến độ và điều phối các đêm diễn.",
@@ -183,8 +219,7 @@ export default function InformationPage({slug}:{slug:string}){
    <PageHeader slug={slug}/>
    <Intro slug={slug} page={page}/>
    {error&&<p className="extra-info-notice" role="status">{error}</p>}
-   {slug==="tuyen-dung"?<RecruitmentContent/>:slug==="lien-he"?<ContactContent/>:
-    <section className="extra-info-section"><div className="extra-info-section-heading"><div><span className="extra-info-kicker">VỀ CHÚNG TÔI</span><h2>Âm nhạc, không gian và trải nghiệm</h2></div></div><p className="extra-info-about">{page?.body||defaults["gioi-thieu"]}</p></section>}
+   {slug==="tuyen-dung"?<RecruitmentContent/>:slug==="lien-he"?<ContactContent/>:<AboutContent/>}
    <footer className="extra-info-footer"><div className="extra-info-footer-brand">+1 <span>EXTRA</span> MUSIC SHOW<small>Âm nhạc sẽ hay hơn khi có bạn ở đó.</small></div><div className="extra-info-footer-links"><a href="/">Trang chủ</a><a href="/tuyen-dung">Tuyển dụng</a><a href="/lien-he">Liên hệ</a><a href="https://iextra.net">iextra.net</a></div></footer>
   </div>
  </main>;
