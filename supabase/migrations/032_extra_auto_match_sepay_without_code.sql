@@ -148,7 +148,7 @@ BEGIN
     'matched_by', CASE WHEN v_result = 'paid' THEN v_how ELSE 'none' END
   );
 END;
-$function$
+$function$;
 
 REVOKE ALL ON FUNCTION public.extra_confirm_payment_smart(bigint,text,bigint,jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.extra_confirm_payment_smart(bigint,text,bigint,jsonb) TO service_role;
