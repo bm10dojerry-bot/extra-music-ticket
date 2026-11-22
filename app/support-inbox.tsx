@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState,type FormEvent} from "react";
 import "./support-inbox.css";
 
-type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:"open"|"closed";created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null;assigned_staff_id:string|null;assigned_at:string|null};
+type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:"open"|"closed";created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null;assigned_staff_id:string|null;assigned_at:string|null;channel:"website"|"messenger"};
 type Message={id:number;sender:"staff"|"customer";body:string;staff_name:string|null;created_at:string};
 type Sale={id:string;display_name:string;openCount:number};
 type Filter="mine"|"open"|"unread"|"queue"|"all";
@@ -20,14 +20,14 @@ const quickReplies=[
 ];
 export default function SupportInbox({embedded=false}:{embedded?:boolean}){
  const [chats,setChats]=useState<Chat[]>([]),[selected,setSelected]=useState(""),[current,setCurrent]=useState<Chat|null>(null),[messages,setMessages]=useState<Message[]>([]);
- const [staff,setStaff]=useState<Sale[]>([]),[actorId,setActorId]=useState(""),[isManager,setIsManager]=useState(false),[myOpen,setMyOpen]=useState(0),[waiting,setWaiting]=useState(0);
+ const [staff,setStaff]=useState<Sale[]>([]),[actorId,setActorId]=useState(""),[isManager,setIsManager]=useState(false),[myOpen,setMyOpen]=useState(0),[waiting,setWaiting]=useState(0),[messengerConfigured,setMessengerConfigured]=useState(false);
  const [filter,setFilter]=useState<Filter>("mine"),[search,setSearch]=useState(""),[targetStaff,setTargetStaff]=useState("");
  const [draft,setDraft]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[loading,setLoading]=useState(true),[now,setNow]=useState(Date.now());
  async function refresh(){
   const r=await fetch("/api/staff/support-chats",{cache:"no-store"});
   const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được hộp thư");
   const list=(d.chats||[]) as Chat[];setChats(list);setStaff(d.staff||[]);
-  setActorId(d.actorId||"");setIsManager(Boolean(d.isManager));setMyOpen(d.myOpenCount||0);setWaiting(d.waitingCount||0);
+  setActorId(d.actorId||"");setIsManager(Boolean(d.isManager));setMyOpen(d.myOpenCount||0);setWaiting(d.waitingCount||0);setMessengerConfigured(Boolean(d.messengerConfigured));
   setFilter(v=>v==="mine"&&d.isManager?"open":v);
   setSelected(s=>list.some(c=>c.id===s)?s:list.find(c=>c.assigned_staff_id===d.actorId&&c.status==="open")?.id||list[0]?.id||"");
   setError("");setLoading(false);
@@ -93,13 +93,13 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
     {loading?<p className="extra-inbox-muted">Đang tải...</p>:visible.length===0?<p className="extra-inbox-muted">Chưa có cuộc trò chuyện nào phù hợp.</p>:
     visible.map(c=><button type="button" key={c.id} onClick={()=>setSelected(c.id)} className={"extra-inbox-person "+(selected===c.id?"active":"")+(overdue(c,now)?" extra-inbox-late":"")}>
      <span className="extra-inbox-person-head"><b>{c.customer_name}</b>{overdue(c,now)?<em className="extra-inbox-late-tag">Quá 60s</em>:unread(c)?<i title="Khách chưa được trả lời" aria-label="Cần phản hồi"/>:null}</span>
-     <span className="extra-inbox-person-meta">{c.show_id?slugNames[c.show_id]||c.show_id:"Tư vấn chung"}{c.customer_phone?" · "+c.customer_phone:""}</span>
+     <span className="extra-inbox-person-meta">{c.channel==="messenger"?"Facebook Messenger · ":""}{c.show_id?slugNames[c.show_id]||c.show_id:"Tư vấn chung"}{c.customer_phone?" · "+c.customer_phone:""}</span>
      <small>{c.assigned_staff_id?c.assigned_staff_id===actorId?"Đang giao cho bạn":"Phụ trách: "+assignedName(c):"⏳ Chờ phân công"} · {fmt(c.updated_at)}</small>
     </button>)}
    </div>
    <div className="extra-inbox-thread">
     {current?<><div className="extra-inbox-thread-head">
-     <div><strong>{current.customer_name}</strong><span>{current.show_id?slugNames[current.show_id]||current.show_id:"Tư vấn chung"}</span>{current.customer_phone&&<a href={"tel:"+current.customer_phone}>☎ {current.customer_phone}</a>}
+     <div><strong>{current.customer_name}</strong><span className="extra-inbox-channel">{current.channel==="messenger"?"Facebook Messenger":"Chat trên iextra.net"}</span><span>{current.show_id?slugNames[current.show_id]||current.show_id:"Tư vấn chung"}</span>{current.customer_phone&&<a href={"tel:"+current.customer_phone}>☎ {current.customer_phone}</a>}
       <span>{current.assigned_staff_id?"Sale phụ trách: "+assignedName(current):"Khách đang ở hàng chờ"}</span>
      </div>
      <div className="extra-inbox-head-actions">
@@ -123,11 +123,12 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
      <button type="button" disabled={!targetStaff||busy} onClick={()=>void doAction({action:"transfer",chatId:current.id,targetStaffId:targetStaff})}>Bàn giao</button>
      {current.assigned_staff_id&&<button type="button" disabled={busy} onClick={()=>void doAction({action:"auto",chatId:current.id})}>Chuyển tự động</button>}
     </div>}
+    {canReply&&current.channel==="messenger"&&!messengerConfigured&&<p className="extra-inbox-alert" role="status">Chưa cấp Messenger Page Access Token, App Secret và webhook trong Vercel. Không thể gửi trả lời về Facebook cho tới khi hoàn tất kết nối.</p>}
     {canReply&&<form className="extra-inbox-reply" onSubmit={e=>void send(e)}>
-     <label htmlFor="extra-inbox-reply-text">Trả lời khách</label>
+     <label htmlFor="extra-inbox-reply-text">{current.channel==="messenger"?"Trả lời trực tiếp trên Facebook Messenger":"Trả lời khách trên website"}</label>
      <div className="extra-inbox-quick-replies">{quickReplies.map(q=><button key={q.label} type="button" onClick={()=>setDraft(q.text)}>{q.label}</button>)}</div>
      <textarea id="extra-inbox-reply-text" rows={3} maxLength={1200} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Chào anh/chị, em từ +1 Extra. Em hỗ trợ mình chọn chỗ nhé!"/>
-     <div><span className="extra-inbox-muted">Câu trả lời mẫu chỉ điền nội dung; bấm Gửi để gửi thật.</span><button className="extra-inbox-send" type="submit" disabled={busy||draft.trim().length<2}>{busy?"Đang gửi...":"Gửi phản hồi ↗"}</button></div>
+     <div><span className="extra-inbox-muted">Câu trả lời mẫu chỉ điền nội dung; bấm Gửi để gửi thật.</span><button className="extra-inbox-send" type="submit" disabled={busy||draft.trim().length<2||current.channel==="messenger"&&!messengerConfigured}>{busy?"Đang gửi...":current.channel==="messenger"?"Gửi qua Messenger ↗":"Gửi phản hồi ↗"}</button></div>
     </form>}</>:<div className="extra-inbox-empty">Chọn một cuộc trò chuyện để xem, nhận khách hoặc phản hồi.</div>}
    </div>
   </div>
