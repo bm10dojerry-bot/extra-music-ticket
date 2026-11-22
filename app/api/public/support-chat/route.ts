@@ -18,15 +18,15 @@ const rateIpHash=(req:NextRequest)=>{
  const ip=(req.headers.get("x-forwarded-for")||req.headers.get("x-real-ip")||"").split(",")[0]?.trim()||"";
  return secret.length>=24&&ip?createHmac("sha256",secret).update(ip).digest("hex"):null;
 };
-type Chat={id:string;access_hash:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:string;last_customer_at:string|null;updated_at:string};
+type Chat={id:string;access_hash:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:string;assigned_staff_id:string|null;last_customer_at:string|null;updated_at:string};
 const getChat=async(id:string,token:string):Promise<Chat|null>=>{
  if(!validId(id)||!validToken(token))return null;
- const rows=await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id)+"&select=id,access_hash,show_id,customer_name,customer_phone,status,last_customer_at,updated_at&limit=1") as Chat[];
+ const rows=await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id)+"&select=id,access_hash,show_id,customer_name,customer_phone,status,assigned_staff_id,last_customer_at,updated_at&limit=1") as Chat[];
  const chat=rows?.[0];if(!chat)return null;
  const supplied=Buffer.from(sha(token),"hex"),stored=Buffer.from(chat.access_hash,"hex");
  return stored.length===supplied.length&&timingSafeEqual(stored,supplied)?chat:null;
 };
-const publicChat=(chat:Chat)=>({id:chat.id,showId:chat.show_id,customerName:chat.customer_name,status:chat.status});
+const publicChat=(chat:Chat)=>({id:chat.id,showId:chat.show_id,customerName:chat.customer_name,status:chat.status,assigned:Boolean(chat.assigned_staff_id)});
 const listMessages=async(id:string)=>await staffDb("extra_support_messages?chat_id=eq."+encodeURIComponent(id)+"&select=id,sender,body,staff_name,created_at&order=id.asc&limit=160");
 export async function GET(req:NextRequest){
  const id=req.nextUrl.searchParams.get("chatId")||"",token=req.headers.get("x-extra-chat-token")||"";
@@ -59,7 +59,7 @@ export async function POST(req:NextRequest){
     if(existing.length>=4)return reply({error:"Đã tạo quá nhiều phiên tư vấn. Vui lòng dùng lại cuộc chat cũ hoặc gọi 094 865 02 59."},429);
    }
    token=randomBytes(32).toString("hex");
-   const rows=await staffDb("extra_support_chats?select=id,access_hash,show_id,customer_name,customer_phone,status,last_customer_at,updated_at",
+   const rows=await staffDb("extra_support_chats?select=id,access_hash,show_id,customer_name,customer_phone,status,assigned_staff_id,last_customer_at,updated_at",
      {method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({access_hash:sha(token),show_id:showId||null,customer_name:name,customer_phone:phone||null,origin_ip_hash:originHash})}) as Chat[];
    chat=rows[0]||null;if(!chat)throw Error("No chat created");id=chat.id;
   }
@@ -67,7 +67,16 @@ export async function POST(req:NextRequest){
   const recent=await staffDb("extra_support_messages?chat_id=eq."+encodeURIComponent(id)+"&sender=eq.customer&created_at=gte."+encodeURIComponent(new Date(Date.now()-86400000).toISOString())+"&select=id&limit=80") as {id:number}[];
   if(recent.length>=80)return reply({error:"Phiên trò chuyện đã đạt giới hạn tin nhắn trong ngày. Vui lòng gọi 094 865 02 59."},429);
   await staffDb("extra_support_messages",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({chat_id:id,sender:"customer",body})});
-  await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({updated_at:new Date().toISOString(),last_customer_at:new Date().toISOString(),status:"open"})});
-  return reply({chat:publicChat({...chat,status:"open"}),token,messages:await listMessages(id)});
+  const reopening=chat.status==="closed";
+  await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({updated_at:new Date().toISOString(),last_customer_at:new Date().toISOString(),status:"open",...(reopening?{assigned_staff_id:null,assigned_at:null}:{})})});
+  // Assign automatically on the first message, or if an open chat is in overflow queue.
+  // A routing failure must not discard the customer's successfully stored message.
+  if(reopening||!chat.assigned_staff_id){
+   try{const assigned=await staffDb("rpc/extra_support_assign_chat",{method:"POST",body:JSON.stringify({p_chat_id:id})}) as {outcome:string};
+    if(assigned.outcome==="no_capacity")console.info("[support-chat] Customer queued",id);
+   }catch(e){console.warn("[support-chat] Deferred assignment for",id,e instanceof Error?e.message:"unknown");}
+  }
+  const assignedRows=await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id)+"&select=id,access_hash,show_id,customer_name,customer_phone,status,assigned_staff_id,last_customer_at,updated_at&limit=1") as Chat[];
+  return reply({chat:publicChat(assignedRows[0]||{...chat,status:"open"}),token,messages:await listMessages(id)});
  }catch(e){console.warn("[support-chat] Customer send failed",e instanceof Error?e.message:"unknown");return reply({error:"Chưa gửi được tin nhắn. Vui lòng thử lại hoặc gọi 094 865 02 59."},503)}
 }
