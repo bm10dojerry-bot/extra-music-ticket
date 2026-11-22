@@ -6,8 +6,11 @@ type Props={params:Promise<{id:string}>};
 export async function generateMetadata({params}:Props):Promise<Metadata>{
  const {id}=await params;const show=(await loadShows()).find(s=>s.id===id);
  if(!show)return {title:"Show không tồn tại | +1 EXTRA"};
- const title=show.artist+" – "+show.title+" | Đặt vé +1 EXTRA";
- const description="Đêm nhạc "+show.artist+" ngày "+show.date+". Xem bài hát dự kiến biểu diễn, chọn ghế và thanh toán trực tiếp tại +1 EXTRA MUSIC SHOW.";
+ const showName=show.title.toLowerCase().includes(show.artist.toLowerCase())?show.title:show.artist+" – "+show.title;
+ const title=showName+" | Đặt vé +1 EXTRA";
+ const date=show.date.split("-").reverse().join("/");
+ const venue=show.venue==="moana"?"Moana Sa Pa":show.venue==="ccc"?"Không gian Văn hóa Sa Pa – CCC":"Lào Cai";
+ const description=showName+" ngày "+date+" tại "+venue+". Xem sơ đồ ghế, giá vé, chọn chỗ và nhận vé điện tử QR trực tiếp từ +1 EXTRA MUSIC SHOW.";
  return {title,description,alternates:{canonical:"https://iextra.net/show/"+encodeURIComponent(id)},openGraph:{title,description,url:"https://iextra.net/show/"+encodeURIComponent(id),images:show.posterUrl?[{url:show.posterUrl}]:undefined}};
 }
 export default async function Page({params}:Props){
