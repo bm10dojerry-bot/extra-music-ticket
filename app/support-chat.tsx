@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useRef,useState,type FormEvent} from "react";
 import "./support-chat.css";
+import {createPortal} from "react-dom";
 
 type ChatSession={id:string;token:string};
 type Message={id:number;sender:"customer"|"staff";body:string;staff_name:string|null;created_at:string};
@@ -53,7 +54,7 @@ export default function SupportChat({showId="",showName="",mode="inline",label="
   <button type="button" className={mode==="floating"?"extra-support-fab":"extra-show-support-cta"} onClick={()=>setOpen(true)} aria-label={label}>
    <span aria-hidden="true">☏</span> {label}
   </button>
-  {open&&<div className="extra-support-backdrop" role="presentation">
+  {open&&createPortal(<div className="extra-support-backdrop" role="presentation">
    <section className="extra-support-window" role="dialog" aria-modal="false" aria-label="Chat tư vấn trực tiếp trên website +1 Extra">
     <header className="extra-support-head">
      <div className="extra-support-avatar" aria-hidden="true">+1</div>
@@ -80,6 +81,6 @@ export default function SupportChat({showId="",showName="",mode="inline",label="
     {error&&<p className="extra-support-error" role="alert">{error}</p>}
     <p className="extra-support-footnote">Sale sẽ phản hồi khi có nhân viên trực. Nếu cần gấp, gọi <a href="tel:0948650259">094 865 02 59</a>. Không chia sẻ mã QR cá nhân hoặc thông tin thanh toán nhạy cảm.</p>
    </section>
-  </div>}
+  </div>,document.body)}
  </div>;
 }
