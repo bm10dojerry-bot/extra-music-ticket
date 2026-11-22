@@ -11,7 +11,7 @@ const defaults:Record<string,string>={
  "lien-he":"Bạn cần hỗ trợ đặt chỗ, nhận mã QR, tìm hiểu chương trình hoặc kết nối công việc? +1 Extra Music Show luôn sẵn sàng lắng nghe."
 };
 const contactPhone="0948650259";
-const recruitmentPhone="0965361001";
+const recruitmentPhone="0948650259";
 
 function PageHeader({slug}:{slug:string}){
  return <header className="extra-info-nav">
@@ -146,7 +146,7 @@ function RecruitmentContent(){
      <div><h4>Công việc chính</h4><ul>{tasks.map(task=><li key={task}>{task}</li>)}</ul></div>
      <div><h4>Chúng tôi tìm kiếm</h4><ul>{requirements.map(req=><li key={req}>{req}</li>)}</ul></div>
     </div>
-    <div className="extra-info-job-footer"><div><strong>Bạn quan tâm vị trí này?</strong><p>Liên hệ trực tiếp hoặc nhắn tin cho Fanpage <b>+1 Extra Music Show</b> và giới thiệu ngắn về bản thân. Có thể gửi kèm CV hoặc sản phẩm quay dựng nếu có.</p></div><a className="extra-info-primary" href={"tel:"+recruitmentPhone}>Liên hệ 0965 361 001 <span aria-hidden="true">↗</span></a></div>
+    <div className="extra-info-job-footer"><div><strong>Bạn quan tâm vị trí này?</strong><p>Liên hệ trực tiếp hoặc nhắn tin cho Fanpage <b>+1 Extra Music Show</b> và giới thiệu ngắn về bản thân. Có thể gửi kèm CV hoặc sản phẩm quay dựng nếu có.</p></div><a className="extra-info-primary" href={"tel:"+recruitmentPhone}>Liên hệ 094 865 02 59 <span aria-hidden="true">↗</span></a></div>
    </article>
    <div className="extra-info-recruitment-directory" id="cac-bo-phan">
     <div className="extra-info-section-heading">
@@ -171,7 +171,7 @@ function RecruitmentContent(){
      </section>)}
     </div>
     <div className="extra-info-recruitment-note">
-     <div><strong>Thông tin ứng tuyển</strong><p>Liên hệ <a href={"tel:"+recruitmentPhone}>0965 361 001</a> hoặc nhắn Fanpage <b>+1 Extra Music Show</b>, ghi rõ vị trí mong muốn. Ca làm, số lượng cần tuyển, yêu cầu cụ thể và thu nhập sẽ được trao đổi trực tiếp.</p></div>
+     <div><strong>Thông tin ứng tuyển</strong><p>Liên hệ <a href={"tel:"+recruitmentPhone}>094 865 02 59</a> hoặc nhắn Fanpage <b>+1 Extra Music Show</b>, ghi rõ vị trí mong muốn. Ca làm, số lượng cần tuyển, yêu cầu cụ thể và thu nhập sẽ được trao đổi trực tiếp.</p></div>
      <a className="extra-info-primary" href={"tel:"+recruitmentPhone}>Gọi bộ phận tuyển dụng <span aria-hidden="true">↗</span></a>
     </div>
    </div>
@@ -189,7 +189,7 @@ function ContactContent(){
    <div className="extra-info-section-heading"><div><span className="extra-info-kicker">CHÚNG TÔI Ở ĐÂY</span><h2>Chọn kênh liên hệ phù hợp</h2></div><p>Để được hỗ trợ nhanh, vui lòng chọn đúng bộ phận theo nhu cầu của bạn.</p></div>
    <div className="extra-info-contact-grid">
     <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">☎</span><span className="extra-info-card-label">HỖ TRỢ KHÁCH HÀNG</span><h3>Đặt chỗ & mã QR</h3><p>Hỗ trợ chọn chỗ, xác nhận thanh toán, nhận lại email mã QR và thông tin chương trình.</p><a className="extra-info-contact-value" href={"tel:"+contactPhone}>094 865 02 59</a><a className="extra-info-text-link" href={"tel:"+contactPhone}>Gọi hỗ trợ <span aria-hidden="true">↗</span></a></article>
-    <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">✦</span><span className="extra-info-card-label">NHÂN SỰ & HỢP TÁC</span><h3>Tuyển dụng & công việc</h3><p>Kết nối ứng tuyển, trao đổi cơ hội làm việc và phối hợp tổ chức sự kiện.</p><a className="extra-info-contact-value" href={"tel:"+recruitmentPhone}>0965 361 001</a><a className="extra-info-text-link" href="/tuyen-dung">Xem thông tin tuyển dụng <span aria-hidden="true">↗</span></a></article>
+    <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">✦</span><span className="extra-info-card-label">NHÂN SỰ & HỢP TÁC</span><h3>Tuyển dụng & công việc</h3><p>Kết nối ứng tuyển, trao đổi cơ hội làm việc và phối hợp tổ chức sự kiện.</p><a className="extra-info-contact-value" href={"tel:"+recruitmentPhone}>094 865 02 59</a><a className="extra-info-text-link" href="/tuyen-dung">Xem thông tin tuyển dụng <span aria-hidden="true">↗</span></a></article>
     <article className="extra-info-contact-card"><span className="extra-info-card-icon" aria-hidden="true">♬</span><span className="extra-info-card-label">KÊNH CẬP NHẬT</span><h3>Fanpage +1 Extra</h3><p>Theo dõi thông tin show, thông báo mới và nhắn tin trực tiếp tới Fanpage <b>+1 Extra Music Show</b>.</p><div className="extra-info-contact-value">+1 Extra Music Show</div><a className="extra-info-text-link" href="/">Xem lịch các đêm diễn <span aria-hidden="true">↗</span></a></article>
    </div>
   </section>
