@@ -49,7 +49,8 @@ export async function sendZaloTicket(code:string):Promise<"accepted"|"skipped"|"
  }catch(e){
   const message=e instanceof Error?e.message:"Unknown Zalo error";
   console.warn("[zalo-zbs] delivery not accepted",code,message);
-  await staffDb("extra_zalo_delivery?order_code=eq."+encodeURIComponent(code),{method:"PATCH",body:JSON.stringify({status:"failed",last_error:clean(message),updated_at:new Date().toISOString()})}).catch(()=>{});
+  const ambiguous=/timeout|abort|fetch failed|network|JSON/i.test(message);
+  await staffDb("extra_zalo_delivery?order_code=eq."+encodeURIComponent(code),{method:"PATCH",body:JSON.stringify({status:ambiguous?"sending":"failed",last_error:clean(message),updated_at:new Date().toISOString()})}).catch(()=>{});
   return "failed";
  }
 }
