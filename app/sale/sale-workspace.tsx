@@ -110,7 +110,7 @@ export default function SaleWorkspace({name}:{name:string}){
  return <div className={styles.shell}>
   <div className={styles.workspace}>
    <aside className={styles.sidebar} aria-label="Điều hướng Sale">
-    <a className={styles.brand} href="https://iextra.net/" target="_blank" rel="noopener noreferrer"><span className={styles.brandMark}>+1</span><span><strong>EXTRA</strong><small>MUSIC SHOW</small></span></a>
+    <a className={styles.brand} href="https://iextra.net/" target="_blank" rel="noopener noreferrer"><img className={styles.brandImage} src="/brand/extra-music-show-menu.webp" width={640} height={427} alt="+1 Extra Music Show" decoding="async"/></a>
     <p className={styles.menuLabel}>KHÔNG GIAN SALE</p>
     <nav className={styles.navigation} aria-label="Menu Sale">
      {tabs.map(tab=><button key={tab.id} id={"sale-nav-"+tab.id} type="button" className={activeTab===tab.id?styles.navActive:styles.navButton} aria-current={activeTab===tab.id?"page":undefined} aria-controls={"sale-panel-"+tab.id} onClick={()=>navigate(tab.id)}><MenuIcon tab={tab.id}/><span>{tab.label}</span><span className={styles.navArrow} aria-hidden="true">›</span></button>)}
@@ -124,7 +124,11 @@ export default function SaleWorkspace({name}:{name:string}){
    </aside>
 
    <main className={styles.main} aria-labelledby="sale-workspace-title">
-    <div className={styles.mobileAccount}><div><span>+1 EXTRA · SALE</span><strong>{name}</strong></div><div className={styles.mobileUtilities}><a href="/reset-password?from=sale">Đổi mật khẩu</a><form action="/api/staff/logout" method="post"><button type="submit">Đăng xuất</button></form></div></div>
+    <div className={styles.mobileAccount}>
+     <a className={styles.mobileBrand} href="https://iextra.net/" target="_blank" rel="noopener noreferrer"><img className={styles.mobileBrandImage} src="/brand/extra-music-show-menu.webp" width={640} height={427} alt="+1 Extra Music Show" decoding="async"/></a>
+     <div className={styles.mobileIdentity}><span>SALE</span><strong>{name}</strong></div>
+     <div className={styles.mobileUtilities}><a href="/reset-password?from=sale">Đổi mật khẩu</a><form action="/api/staff/logout" method="post"><button type="submit">Đăng xuất</button></form></div>
+    </div>
     <header className={styles.pageHeader}>
      <div><p className={styles.eyebrow}>SALE / {current.label.toLocaleUpperCase("vi")}</p><h1 id="sale-workspace-title" tabIndex={-1} ref={heading}>{current.title}</h1><p className={styles.description}>{current.description}</p></div>
      <button className={styles.refresh} type="button" disabled={workspaceLoading} onClick={refresh}><span aria-hidden="true">↻</span> {workspaceLoading?"Đang cập nhật…":"Cập nhật"}</button>
