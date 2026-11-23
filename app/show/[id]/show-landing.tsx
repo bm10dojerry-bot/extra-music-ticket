@@ -6,6 +6,7 @@ import {formatShowDate} from "../../../lib/shows";
 import "./show-landing.css";
 import ShowAdsTracking from "./show-ads-tracking";
 import SupportChat from "../../support-chat";
+import {useLiveVisitorPresence} from "../../live-presence";
 const pendingKey=(showId:string)=>"extra_pending_show_"+showId;
 const money=(v:number)=>new Intl.NumberFormat("vi-VN").format(v)+"đ";
 type Inventory={soldSeats:string[];heldSeats:string[];blockedSeats?:string[];remaining:number;soldOut:boolean};
@@ -13,6 +14,7 @@ type Payment={code:string;token:string;amount:number;expiresAt:string;qr:string;
 export default function ShowLanding({show}:{show:ManagedShow}){
  const [metaPixelId,setMetaPixelId]=useState(""),[ga4MeasurementId,setGa4MeasurementId]=useState(""),[googleAdsId,setGoogleAdsId]=useState(""),[googleAdsConversionLabel,setGoogleAdsConversionLabel]=useState("");const [images,setImages]=useState<Record<string,string>>({}),[intro,setIntro]=useState(""),[setlist,setSetlist]=useState(""),[inventory,setInventory]=useState<Inventory|null>(null),[seatRows,setSeatRows]=useState<Record<string,Record<string,number>>>({}),[zone,setZone]=useState<"all"|"A"|"B"|"C"|"D">("all"),[zoom,setZoom]=useState(1);
  const [now,setNow]=useState(Date.now()),[checkoutStarted,setCheckoutStarted]=useState(false);const [chosen,setChosen]=useState<string[]>([]),[name,setName]=useState(""),[phone,setPhone]=useState(""),[email,setEmail]=useState(""),[payment,setPayment]=useState<Payment|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ useLiveVisitorPresence(show.id,payment?.status==="pending"?"payment":chosen.length?"selecting":"viewing");
  const venue=venues.find(v=>v.id===show.venue),seats=useMemo(()=>seatsFor(show.venue as VenueId,seatRows[show.venue]||{}),[show.venue,seatRows]),selected=seats.filter(s=>chosen.includes(s.id));
  const amount=selected.reduce((sum,s)=>sum+(show.prices[s.zone as "A"|"B"|"C"|"D"]||0),0);
  const validName=name.trim().length>=2,validPhone=/^[0-9+(). -]{9,20}$/.test(phone.trim())&&phone.replace(/\D/g,"").length>=9,validEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
