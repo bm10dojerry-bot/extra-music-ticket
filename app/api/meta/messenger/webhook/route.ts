@@ -30,9 +30,9 @@ export async function POST(req:NextRequest){
  const raw=await req.text();
  if(raw.length>150000)return reply("Payload too large",413);
  const provided=req.headers.get("x-hub-signature-256")||"";
- if(!/^sha256=[a-f0-9]{64}$/i.test(provided))return reply("Invalid signature",403);
+ if(!/^sha256=[a-f0-9]{64}$/i.test(provided)){console.warn("[messenger-webhook] Rejected missing or malformed signed webhook");return reply("Invalid signature",403);}
  const expected="sha256="+createHmac("sha256",config.appSecret).update(raw).digest("hex");
- if(!constantTimeEquals(provided.toLowerCase(),expected))return reply("Invalid signature",403);
+ if(!constantTimeEquals(provided.toLowerCase(),expected)){console.warn("[messenger-webhook] Rejected signature mismatch; check App Secret belongs to connected Meta App");return reply("Invalid signature",403);}
  let data:Body;
  try{data=JSON.parse(raw) as Body}catch{return reply("Invalid JSON",400)}
  if(data.object!=="page"||!Array.isArray(data.entry)){
