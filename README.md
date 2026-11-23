@@ -39,9 +39,17 @@ and measurement ID; existing per-show ecommerce/Meta/Google Ads behavior remains
 independent of the optional global configuration lookup.
 
 The map uses bundled Natural Earth country geometry, with small-country symbols
-from geographic centroids. The Vietnam view fits the country on desktop and
-mobile, highlights its outline, and keeps activity markers at a consistent screen
-size. Offscreen markers are excluded from keyboard focus; the world view restores
+from geographic centroids. The Vietnam view uses more detailed 50m coastlines,
+subdued regional place names and transparent, softly fading land colours to blend
+into Admin's background. Its responsive frame includes mainland Vietnam and the
+static Hoàng Sa and Trường Sa island references, with readable two-line captions
+on mobile. These reference symbols use representative positions from the official
+[geographic gazetteer](https://www.mae.gov.vn/noidung/Lists/VBQPPL/Attachments/514/1_DanhMuc_TT_DiaDanh_BanHanh.pdf)
+(VN-2000 DMS converted for approximate schematic placement). They are separate
+from Analytics, are not interactive visitor pins, and remain visible without traffic.
+The world view keeps the small island symbols and omits the close-set captions.
+Activity markers remain a consistent screen size. Offscreen markers are excluded
+from keyboard focus; the world view restores
 international coverage without filtering report totals or making another request.
 Each activity point remains a country aggregate. City coordinates and individual
 visitor locations are not plotted. Reports refresh every minute while visible.

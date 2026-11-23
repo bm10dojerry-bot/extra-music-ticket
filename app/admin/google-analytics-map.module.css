@@ -8,8 +8,15 @@
 .map{display:block;width:100%;height:100%;overflow:hidden}
 .land{fill:rgba(123,152,161,.085);stroke:rgba(125,151,160,.24);stroke-width:.65;pointer-events:none}
 .land path{vector-effect:non-scaling-stroke}
-.vietnamView .land{fill:rgba(123,152,161,.045);stroke:rgba(125,151,160,.13)}
-.vietnamView .vietnamLand{fill:rgba(100,192,178,.13);stroke:rgba(131,220,204,.58);stroke-width:1.1}
+.vietnamView .land{fill:rgba(135,150,174,.12);stroke:rgba(182,198,219,.23);stroke-width:.8}
+.vietnamView .vietnamLand{fill:rgba(137,179,187,.2);stroke:rgba(165,211,212,.6);stroke-width:1.05}
+.geographicLabels,.archipelago{pointer-events:none;user-select:none}
+.geographicLabel{fill:#7c8b9e;font-size:11px;font-weight:500;text-anchor:middle;paint-order:stroke;stroke:#10141d;stroke-width:2;stroke-linejoin:round}
+.primaryLabel{fill:#b2cbd1;font-size:12px;font-weight:650;stroke-width:2.5}
+.islandSymbol{fill:#8aa8b2;stroke:#b1c4cc;stroke-width:.35;opacity:.85}
+.archipelagoLabel{fill:#91abb7;text-anchor:middle;paint-order:stroke;stroke:#0d1018;stroke-width:2.5;stroke-linejoin:round}
+.archipelagoLabel tspan:first-child{font-size:9px;font-weight:400;fill:#78939f}
+.archipelagoLabel tspan:last-child{font-size:11px;font-weight:600}
 .viewToggle{position:absolute;z-index:3;top:3px;left:0;display:flex;gap:10px}
 .viewButton,.viewActive{min-height:36px;padding:6px 9px;background:transparent;border:0;border-bottom:1px solid transparent;color:#6e858d;font-size:11px;font-weight:600;line-height:1.5}
 .viewActive{border-bottom-color:#74bcae;color:#b0e0d7}

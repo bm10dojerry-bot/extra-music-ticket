@@ -9,6 +9,9 @@ import {
 } from "../../lib/google-analytics-types";
 import {COUNTRY_SHAPES} from "./ga4-world-map-data";
 import {COUNTRY_POINTS} from "./ga4-country-points";
+import {REGIONAL_COUNTRY_SHAPES} from "./ga4-region-map-data";
+import {REGIONAL_LABELS} from "./ga4-region-labels";
+import {ARCHIPELAGO_REFERENCES} from "./ga4-vietnam-archipelagos";
 import {analyticsMapViewport,pointInMapViewport,projectMapPoint,type AnalyticsMapView} from "./ga4-map-viewport";
 import styles from "./google-analytics-map.module.css";
 
@@ -16,6 +19,9 @@ const formatNumber=new Intl.NumberFormat("vi-VN");
 const regionNames=typeof Intl.DisplayNames==="function"?new Intl.DisplayNames(["vi"],{type:"region"}):null;
 const GOOGLE_ANALYTICS_URL="https://analytics.google.com/analytics/web/";
 const REFRESH_MS=60000;
+const regionalCountryIds=new Set(REGIONAL_COUNTRY_SHAPES.map(shape=>shape.id));
+// The world's enlarged centroid circles are location aids, not coastlines.
+const regionalShapes=[...COUNTRY_SHAPES.filter(shape=>!regionalCountryIds.has(shape.id)&&!shape.path.includes("a1.5,1.5")),...REGIONAL_COUNTRY_SHAPES];
 
 const countryKey=(countryId:string)=>countryId.trim().toUpperCase()||"__unknown";
 function placeLabel(name:string){return !name||name==="(not set)"?"Chưa xác định":name==="(other)"?"Khu vực khác":name;}
@@ -36,7 +42,7 @@ function updatedTime(value:string){
 }
 
 export default function GoogleAnalyticsMap(){
- const mapTitleId=useId(),mapDescriptionId=useId(),tooltipId=useId(),settingsId=useId(),settingsHeadingId=useId();
+ const mapTitleId=useId(),mapDescriptionId=useId(),tooltipId=useId(),settingsId=useId(),settingsHeadingId=useId(),landFadeId=useId(),landMaskId=useId();
  const [data,setData]=useState<GoogleAnalyticsResponse|null>(null);
  const [loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false);
  const [loadError,setLoadError]=useState(""),[refreshKey,setRefreshKey]=useState(0);
@@ -205,6 +211,12 @@ export default function GoogleAnalyticsMap(){
  const activePoints=COUNTRY_POINTS.filter(point=>countryIndex.has(point.id));
  const viewport=analyticsMapViewport(mapView,mapSize);
  const visiblePoints=activePoints.filter(point=>pointInMapViewport(point,viewport));
+ const labelCanvas=mapSize.width>0&&mapSize.height>0?mapSize:{width:800,height:420};
+ const geographicLabels=mapView==="vietnam"?REGIONAL_LABELS.filter(label=>{
+  const screen=projectMapPoint(label,viewport),half=label.width/2;
+  return screen.x-half>=12&&screen.x+half<=labelCanvas.width-12&&screen.y>=18&&screen.y<=labelCanvas.height-16
+   &&!(screen.y<52&&(screen.x-half<180||screen.x+half>labelCanvas.width-48));
+ }):[];
  const unmappedCountries=countries.some(country=>!pointIndex.has(countryKey(country.countryId)));
  const highlightedId=hoverCountry||focusedCountry||selectedCountry;
  const highlightedPoint=visiblePoints.find(point=>point.id===highlightedId);
@@ -232,7 +244,7 @@ export default function GoogleAnalyticsMap(){
 
  return <section ref={panelRef} className={styles.mapSection} aria-labelledby={mapTitleId} aria-busy={loading}>
   <h2 id={mapTitleId} className={styles.srOnly}>Khách truy cập theo khu vực</h2>
-  <p id={mapDescriptionId} className={styles.srOnly}>Google Analytics 4. {mapView==="vietnam"?"Bản đồ phóng gần, lấy Việt Nam làm trung tâm.":"Bản đồ toàn thế giới."} Người dùng hoạt động trong 30 phút qua. Mỗi chấm biểu thị một quốc gia có truy cập, không phải vị trí chính xác của từng người.</p>
+  <p id={mapDescriptionId} className={styles.srOnly}>Google Analytics 4. {mapView==="vietnam"?"Bản đồ khu vực lấy Việt Nam làm trung tâm, có nhãn quần đảo Hoàng Sa và quần đảo Trường Sa.":"Bản đồ toàn thế giới."} Tên địa danh và ký hiệu đảo là thông tin nền. Mỗi chấm sáng biểu thị một quốc gia có người dùng hoạt động trong 30 phút qua, không phải vị trí chính xác của từng người.</p>
   <p className={styles.srOnly} role="status">{statusText}{report?.limited?" Một số khu vực vượt quá giới hạn báo cáo.":""}{unmappedCountries?" Có lượt truy cập chưa thể đặt lên bản đồ.":""}</p>
   <div className={styles.viewToggle} role="group" aria-label="Phạm vi bản đồ">
    <button type="button" className={mapView==="vietnam"?styles.viewActive:styles.viewButton} aria-pressed={mapView==="vietnam"} onClick={()=>changeMapView("vietnam")}>Việt Nam</button>
@@ -240,7 +252,17 @@ export default function GoogleAnalyticsMap(){
   </div>
   <div ref={canvasRef} className={styles.canvas} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
    <svg viewBox={[viewport.x,viewport.y,viewport.width,viewport.height].join(" ")} preserveAspectRatio="xMidYMid meet" role="group" aria-labelledby={mapTitleId} aria-describedby={mapDescriptionId} className={styles.map+(mapView==="vietnam"?" "+styles.vietnamView:"")} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
-    <g aria-hidden="true" className={styles.land}>{COUNTRY_SHAPES.map((shape,index)=><path key={shape.id+"-"+index} d={shape.path} className={mapView==="vietnam"&&shape.id==="VN"?styles.vietnamLand:undefined}/>)}</g>
+    <defs>
+     <linearGradient id={landFadeId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="white" stopOpacity=".15"/><stop offset=".1" stopColor="white"/><stop offset=".86" stopColor="white"/><stop offset="1" stopColor="white" stopOpacity="0"/></linearGradient>
+     <mask id={landMaskId} maskUnits="userSpaceOnUse" x={viewport.x} y={viewport.y} width={viewport.width} height={viewport.height}><rect x={viewport.x} y={viewport.y} width={viewport.width} height={viewport.height} fill={"url(#"+landFadeId+")"}/></mask>
+    </defs>
+    <g aria-hidden="true" className={styles.land} mask={"url(#"+landMaskId+")"}>{(mapView==="vietnam"?regionalShapes:COUNTRY_SHAPES).map((shape,index)=><path key={shape.id+"-"+index} d={shape.path} className={mapView==="vietnam"&&shape.id==="VN"?styles.vietnamLand:undefined}/>)}</g>
+    <g aria-hidden="true" className={styles.geographicLabels}>{geographicLabels.map(label=><g key={label.name} transform={"translate("+label.x+" "+label.y+")"}><text className={styles.geographicLabel+("primary" in label?" "+styles.primaryLabel:"")} transform={"scale("+(1/viewport.scale)+")"} textLength={label.width} lengthAdjust="spacingAndGlyphs">{label.name}</text></g>)}</g>
+    {ARCHIPELAGO_REFERENCES.map(reference=><g key={reference.id} className={styles.archipelago} role="img" aria-label={"Quần đảo "+reference.name} data-geographic-reference={reference.id}>
+     <title>{"Quần đảo "+reference.name+" · Ký hiệu địa lý"}</title>
+     {reference.islands.map(island=><g key={island.name} aria-hidden="true" transform={"translate("+island.x+" "+island.y+")"}><path className={styles.islandSymbol} transform={"scale("+(1/viewport.scale)+")"} d="M-1.4 .8 -.7 -.8 .7 -1.1 1.5 .25 .2 .95Z"/></g>)}
+     {mapView==="vietnam"?<g aria-hidden="true" transform={"translate("+reference.x+" "+Math.max(...reference.islands.map(island=>island.y))+")"}><text className={styles.archipelagoLabel} transform={"scale("+(1/viewport.scale)+")"}><tspan x="0" y="16" textLength="41" lengthAdjust="spacingAndGlyphs">Quần đảo</tspan><tspan x="0" y="29" textLength={reference.id==="hoang-sa"?48:58} lengthAdjust="spacingAndGlyphs">{reference.name}</tspan></text></g>:null}
+    </g>)}
     {visiblePoints.map(point=>{
      const country=countryIndex.get(point.id)!;
      // Keep adjacent countries from intercepting one another's pointer targets.

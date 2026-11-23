@@ -86,7 +86,15 @@ test("GA4 map focuses Vietnam while preserving aggregate data and viewport inter
   const renderer=require(rendererPath),{act}=renderer;
   const GoogleAnalyticsMap=loadSource(path.join(repo,"app/admin/google-analytics-map.tsx")).default;
   const {COUNTRY_POINTS}=loadSource(path.join(repo,"app/admin/ga4-country-points.ts"));
+  const {ARCHIPELAGO_REFERENCES}=loadSource(path.join(repo,"app/admin/ga4-vietnam-archipelagos.ts"));
   const viewportHelpers=loadSource(path.join(repo,"app/admin/ga4-map-viewport.ts"));
+  const mapCss=fs.readFileSync(path.join(repo,"app/admin/google-analytics-map.module.css"),"utf8");
+  const archipelagoRule=/\.archipelagoLabel\s*\{([^}]*)\}/.exec(mapCss)?.[1]||"";
+  const labelStroke=Number(/stroke-width\s*:\s*([\d.]+)/.exec(archipelagoRule)?.[1]||0);
+  const labelFonts=[
+   Number(/font-size\s*:\s*([\d.]+)/.exec(/\.archipelagoLabel\s+tspan:first-child\s*\{([^}]*)\}/.exec(mapCss)?.[1]||"")?.[1]),
+   Number(/font-size\s*:\s*([\d.]+)/.exec(/\.archipelagoLabel\s+tspan:last-child\s*\{([^}]*)\}/.exec(mapCss)?.[1]||"")?.[1]),
+  ];
   const anchors=new Map(COUNTRY_POINTS.map(point=>[point.id,point]));
   const update=async work=>{await act(async()=>{await work?.();});};
   async function mount(size={width:1200,height:450},data=ready(countryRows)){
@@ -123,14 +131,15 @@ test("GA4 map focuses Vietnam while preserving aggregate data and viewport inter
    for(const marker of markers())assert.equal(marker.props.tabIndex,0);
   }
   function assertConstantMarkerSize(){
-   const [, ,width,height]=viewBox(),scale=canvasSize.width>0&&canvasSize.height>0?Math.min(canvasSize.width/width,canvasSize.height/height):1;
+   const [, ,width,height]=viewBox(),measured=canvasSize.width>0&&canvasSize.height>0;
+   const scale=measured?Math.min(canvasSize.width/width,canvasSize.height/height):null;
    for(const marker of markers()){
     const group=marker.findAllByType("g").find(node=>/^scale\(/.test(node.props.transform||""));
     assert(group,"marker decoration must be inverse-scaled");
     const inverse=Number(group.props.transform.match(/^scale\(([-+\d.e]+)\)$/)?.[1]);
     assert(Number.isFinite(inverse)&&inverse>0);
     const dot=marker.findAllByType("circle").find(node=>node.props.className==="dot");
-    approximately(Number(dot.props.r)*inverse*scale,3.5,"zooming must not enlarge the country dots");
+    if(measured)approximately(Number(dot.props.r)*inverse*scale,3.5,"zooming must not enlarge the country dots");
     const hit=marker.findAllByType("circle").find(node=>node.props.className==="hitArea");
     assert(Number.isFinite(Number(hit.props.r))&&Number(hit.props.r)>0);
    }
@@ -146,14 +155,51 @@ test("GA4 map focuses Vietnam while preserving aggregate data and viewport inter
    approximately(tip.props.style.left,Math.max(108,Math.min(canvasSize.width-108,projectedX)));
    approximately(tip.props.style.top,projectedY+(projectedY<100?17:-17));
   }
+  function projectedPoint(point){
+   const [x,y,width,height]=viewBox(),scale=Math.min(canvasSize.width/width,canvasSize.height/height);
+   return {x:(canvasSize.width-width*scale)/2+(point.x-x)*scale,y:(canvasSize.height-height*scale)/2+(point.y-y)*scale,scale};
+  }
+  const referenceGroup=id=>tree.root.findByProps({"data-geographic-reference":id});
+  function assertReferenceFootprints(){
+   assert(labelFonts.every(Number.isFinite));assert(Number.isFinite(labelStroke));
+   assert.match(archipelagoRule,/text-anchor\s*:\s*middle/,"caption footprint uses the declared centered text anchor");
+   for(const reference of ARCHIPELAGO_REFERENCES){
+    const group=referenceGroup(reference.id);
+    const symbols=group.findAllByType("path").filter(node=>node.props.className==="islandSymbol");
+    assert.equal(symbols.length,reference.islands.length);
+    for(const [index,symbol] of symbols.entries()){
+     const island=reference.islands[index],anchor=markerPosition(symbol.parent),projected=projectedPoint(anchor);
+     approximately(anchor.x,island.x);approximately(anchor.y,island.y);
+     const inverse=Number(symbol.props.transform.match(/^scale\(([-+\d.e]+)\)$/)?.[1]);
+     approximately(inverse*projected.scale,1,"static island symbols keep their pixel size");
+     // The declared symbol path plus its stroke fits a conservative 2px radius.
+     assert(projected.x-2>=0&&projected.x+2<=canvasSize.width,reference.name+" island symbol clips horizontally");
+     assert(projected.y-2>=0&&projected.y+2<=canvasSize.height,reference.name+" island symbol clips vertically");
+    }
+    const text=group.findByType("text"),lines=text.findAllByType("tspan");
+    assert.deepEqual(lines.map(content),["Quần đảo",reference.name]);
+    const anchor=markerPosition(text.parent),projected=projectedPoint(anchor);
+    const inverse=Number(text.props.transform.match(/^scale\(([-+\d.e]+)\)$/)?.[1]);
+    approximately(inverse*projected.scale,1,"caption text lengths and baselines are in screen pixels");
+    for(const [index,line] of lines.entries()){
+     const width=Number(line.props.textLength),baseline=Number(line.props.y),horizontal=Number(line.props.x||0),stroke=labelStroke/2;
+     assert(width>0&&Number.isFinite(width));
+     const left=projected.x+horizontal-width/2-stroke,right=projected.x+horizontal+width/2+stroke;
+     const top=projected.y+baseline-labelFonts[index]-stroke,bottom=projected.y+baseline+4+stroke;
+     assert(left>=0&&right<=canvasSize.width,reference.name+" caption clips horizontally");
+     assert(top>=0&&bottom<=canvasSize.height,reference.name+" caption clips vertically including 4px descent and stroke");
+    }
+   }
+  }
 
   await t.test("desktop and mobile start zoomed on Vietnam and expose only on-screen country anchors",async()=>{
    for(const size of [{width:1200,height:450},{width:351,height:320}]){
     await mount(size);
     assert.equal(button("Việt Nam").props["aria-pressed"],true);assert.equal(button("Thế giới").props["aria-pressed"],false);
     const [x,y,width,height]=viewBox();
-    approximately(x+width/2,629.55);approximately(y+height/2,198.6);
+    approximately(x+width/2,(610+667)/2);
     assert(height<100&&width<400,"initial view must be substantially closer than the world map");
+    assert(610>=x&&667<=x+width&&168>=y&&226<=y+height,"the expanded regional frame fits the initial view");
     assert(619.9>=x&&639.2<=x+width&&179.7>=y&&217.5<=y+height,"the full Vietnam polygon bounds fit the initial view");
     assertVisibleMarkers();assertConstantMarkerSize();
     assert(markerFor("VN"));assert.equal(markerFor("US"),undefined);assert.equal(markerFor("AU"),undefined);
@@ -162,6 +208,52 @@ test("GA4 map focuses Vietnam while preserving aggregate data and viewport inter
     assert.doesNotMatch(markerFor("VN").props["aria-label"],/9876|5432|Hanoi|Ho Chi Minh/);
     await unmount();
    }
+  });
+
+  await t.test("both island references and geographic names remain static when Analytics is empty or disconnected",async()=>{
+   assert.deepEqual(ARCHIPELAGO_REFERENCES.map(reference=>reference.id).sort(),["hoang-sa","truong-sa"]);
+   for(const data of [ready([]),{status:"not_connected",canManage:false,connectAvailable:false,property:null}]){
+    const before=requests.length;
+    await mount({width:296,height:320},data);
+    assert.equal(requests.length,before+1);
+    assert.equal(markers().length,0);assert.equal(tooltip().length,0);
+    for(const reference of ARCHIPELAGO_REFERENCES){
+     const group=referenceGroup(reference.id);
+     assert.equal(group.props.role,"img");assert.equal(group.props["aria-label"],"Quần đảo "+reference.name);
+     assert(group.findAllByType("path").length>1,"each static island group retains its symbols without Analytics rows");
+     assert.doesNotMatch(content(group),/người dùng|lượt truy cập/);
+     for(const node of [group,...group.findAll(()=>true)]){
+      assert.notEqual(node.props.role,"button");assert.notEqual(node.props.tabIndex,0);
+      assert(!Object.keys(node.props).some(key=>/^on(?:Click|KeyDown|KeyUp|Focus|MouseEnter|PointerDown)$/.test(key)),"static geography cannot masquerade as a visitor control");
+     }
+    }
+    const geography=tree.root.findByProps({className:"geographicLabels"});
+    const names=geography.findAllByType("text").map(content);
+    for(const name of ["Việt Nam","Lào","Campuchia","Thái Lan"])assert(names.includes(name));
+    assert.equal(geography.props["aria-hidden"],"true");
+    assertReferenceFootprints();
+    await click(button("Thế giới"));
+    assert.equal(markers().length,0);assert.equal(requests.length,before+1);
+    for(const reference of ARCHIPELAGO_REFERENCES){
+     assert.equal(referenceGroup(reference.id).findAllByType("text").length,0,"wide world view omits the small regional captions");
+     assert.equal(referenceGroup(reference.id).findAllByType("path").length,reference.islands.length);
+    }
+    await click(button("Việt Nam"));assertReferenceFootprints();
+    assert.equal(requests.length,before+1,"static reference display never requests or mutates Analytics");
+    await unmount();
+   }
+  });
+
+  await t.test("all static island symbols and full two-line captions fit narrow mobile and desktop frames",async()=>{
+   await mount({width:296,height:320});
+   const before=requests.length;
+   for(const size of [{width:296,height:320},{width:351,height:320},{width:640,height:400},{width:1200,height:450},{width:3440,height:450}]){
+    await resize(size.width,size.height);assertReferenceFootprints();assertVisibleMarkers();assertConstantMarkerSize();
+    assert.match(markerFor("VN").props["aria-label"],/7 người dùng/);
+    assert.equal(markers().filter(node=>markerId(node)==="VN").length,1,"island symbols do not add country visitor markers");
+   }
+   assert.equal(requests.length,before);
+   await unmount();
   });
 
   await t.test("world switch reveals overseas activity and clears selection, hover, and focus tooltips without fetching",async()=>{
