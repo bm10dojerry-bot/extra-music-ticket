@@ -20,7 +20,7 @@ mocked storage: `node --test tests/media-upload-routes.test.cjs`.
 
 ## Show poster frames and uploads
 
-Both homepage show grids and the Admin poster preview use a centered 2:3 frame.
+The homepage show grid and the Admin poster preview use a centered 2:3 frame.
 Existing posters cover that frame at display time, with excess edges clipped and
 proportions preserved. The selected-file preview uses the same crop as publication.
 
@@ -168,23 +168,39 @@ They use the optional matching React renderer described in
 
 ## Homepage stage opening
 
-`app/stage-hero.tsx` owns the full-width homepage introduction. Two folded dark
-curtains meet at an illuminated diagonal edge, the transparent EXTRA logo appears,
-and the artist/venue choices enter from opposite sides. Scrolling separates the
-curtains and fades the logo and copy while the next section enters in normal page
-flow. The introduction never captures the wheel/touch gesture or locks scrolling.
-The optional homepage banner and the content below keep their existing width.
+`app/stage-hero.tsx` owns the homepage introduction. The header and stage fill the
+first viewport together, including mobile and short landscape screens. The header
+wordmark includes **Những đêm nhạc đáng nhớ**; the stage itself contains the two
+artist/venue choices, folded dark curtains and warm diagonal lighting. It has no
+logo or scrolling instruction. The optional banner follows the opening screen.
 
-The component updates four CSS variables in one animation frame per scroll/resize
+A normal click or Enter activation opens the curtains and fades the choices over
+720 ms, then selects the requested browsing mode. Booking moves keyboard focus
+and scrolls to the destination after that mode has rendered. Repeated activation
+during the opening does not queue another navigation; modified link clicks retain
+native behavior. The open frame remains in place until the stage leaves view, so
+there is no closing flash during the handoff. Returning to the stage restores its
+scroll-linked motion. Manual scrolling is also supported, without capturing
+wheel/touch gestures or locking the page.
+
+The component updates three CSS variables in one animation frame per scroll/resize
 burst, without React state updates or a permanent JavaScript animation loop.
 Intersection and document-visibility checks pause decorative animation offscreen;
 unmount removes all listeners, observers and pending work. Reduced-motion users
-receive a static logo and readable navigation, with immediate artist scrolling.
-Both choices remain real links, and keyboard focus restores their text during a
-scroll fade. No booking, payment, inventory or attribution rules are changed.
+receive readable static choices and immediate navigation. Both choices remain
+real links, and keyboard focus restores their text during a scroll fade. The
+booking and payment rules are unchanged.
 
-The logo uses the optimized transparent WebP in `public/brand/`, with a PNG
-fallback. Asset provenance and the background-removal prompt are recorded in
-`public/brand/README.md`. The navigation, motion bounds, reduced-motion handling
-and cleanup checks run with `node --test tests/stage-hero-ui.test.cjs`; they use
-synthetic data and never submit a booking or payment.
+The former popularity block has been removed. The main schedule uses
+`lib/show-order.ts`: upcoming shows appear by ascending date and time, followed by
+recent past/ended shows; exact ties preserve source order and unknown dates go
+last. Sorting never mutates the API data or depends on sales counts. The Vietnam
+date is applied after hydration to keep the initial markup deterministic. The
+selected show remains in the artist list. The grid has four columns from 1024 px,
+two on intermediate screens, and one at 600 px or less.
+
+The transparent logo files remain available in `public/brand/` with provenance in
+its README, but the introduction no longer loads them. Navigation, motion bounds,
+reduced-motion handling and cleanup checks run with
+`node --test tests/stage-hero-ui.test.cjs`; they use synthetic data and never submit
+a booking or payment.

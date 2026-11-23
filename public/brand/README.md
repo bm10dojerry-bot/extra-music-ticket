@@ -1,8 +1,10 @@
 # EXTRA stage logo
 
-The homepage uses `extra-stage-logo.webp` (1024 × 683, 227,052 bytes). The source
-cutout is `extra-stage-logo.png` (1536 × 1024, 1,388,954 bytes). Both contain a real
-transparent alpha channel; the black background is not simulated with blend modes.
+The retained optimized logo is `extra-stage-logo.webp` (1024 × 683, 227,052 bytes).
+The source cutout is `extra-stage-logo.png` (1536 × 1024, 1,388,954 bytes). Both
+contain a real transparent alpha channel; the black background is not simulated
+with blend modes. The current homepage stage does not render or load these files;
+its tagline appears beneath the text wordmark in the header instead.
 
 Source: the project owner's uploaded `Logo _+1 EXTRA Music SHOW_ Monochrome.png`.
 The cutout was produced with the built-in Imagegen tool in edit mode, using the
