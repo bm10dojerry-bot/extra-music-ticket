@@ -105,6 +105,53 @@
   grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
 }
 
+.content :global(.admin-artist-bio-label) {
+  min-height: 24px;
+  margin: 0 0 12px;
+  line-height: 24px;
+}
+
+.content :global(.admin-artist-editor-grid) :global(.admin-media-preview),
+.content :global(.admin-artist-editor-grid) textarea {
+  width: 100%;
+  height: 330px;
+  min-height: 330px;
+  box-sizing: border-box;
+  aspect-ratio: auto;
+  margin: 0;
+}
+
+.content :global(.admin-artist-editor-grid) textarea {
+  display: block;
+}
+
+.content :global(.admin-artist-editor-grid) :global(.admin-upload),
+.content :global(.admin-artist-bio-actions) {
+  margin-top: 14px;
+}
+
+.content :global(.admin-artist-editor-grid) :global(.admin-upload),
+.content :global(.admin-artist-bio-actions) :global(.admin-save) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px 20px;
+}
+
+.content :global(.admin-artist-bio-actions) :global(.admin-save) {
+  margin: 0;
+}
+
+.content :global(.admin-artist-character-count) {
+  display: block;
+  margin: 10px 0 0;
+  color: #96a4ba;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
 .content :global(.admin-media-heading),
 .content :global(.admin-stage-toolbar),
 .content :global(.admin-overview-heading),
