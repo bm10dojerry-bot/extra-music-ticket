@@ -76,3 +76,20 @@ tier is a finite cap; Admin must extend the show's policy to cover later tickets
 Admin, Sale and Staff views consume the same server-calculated results. Detailed
 rows and CSV exports may be capped, but displayed financial totals use complete
 history. The feature computes reportable commission and does not issue payouts.
+
+## Sale workspace and customer ticket links
+
+The Sale portal has a right-hand desktop menu with **Home**, **Bán vé**,
+**Hoa hồng**, and **Chăm sóc khách hàng**, with compact navigation on mobile.
+Visited views preserve their booking and conversation drafts while switching
+sections. Inactive seat-inventory and inbox polling pauses; a pending payment
+continues checking its status so confirmed payment can refresh the Sale's totals.
+
+Paid bookings and the Sale's customer list provide **Sao chép đường dẫn vé**.
+The authenticated, read-only `/api/staff/ticket-link?code=…` endpoint checks exact
+Sale ownership, paid status and the complete issued seat set before returning a
+signed customer link. Unassigned orders and legacy name matches do not bypass
+ownership. Responses are not cached and never include the raw payment access
+token or check-in secrets. Clipboard failures reveal a selectable link for manual
+copying. Requesting or copying a link does not issue tickets or send another email;
+the existing payment email workflow remains responsible for email delivery.

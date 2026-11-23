@@ -1,0 +1,16 @@
+.actions{display:grid;gap:8px;min-width:190px;max-width:100%;font-family:inherit}
+.buttons{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.copyButton{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #9c4b5c;background:#68283b;color:#fff2f5;border-radius:9px;padding:10px 12px;min-height:40px;font:inherit;font-size:12px;font-weight:600;line-height:1.4;cursor:pointer;transition:background .15s,border-color .15s}
+.copyButton svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.5;flex-shrink:0}
+.copyButton:hover{background:#82354b;border-color:#d97387}
+.copyButton:disabled{opacity:.65;cursor:wait}
+.copyButton:focus-visible,.openLink:focus-visible,.manual input:focus-visible{outline:2px solid #ffc1cc;outline-offset:3px}
+.openLink{color:#f4aebb;text-decoration:none;font-size:12px;white-space:nowrap}
+.openLink:hover{text-decoration:underline}
+.success,.email,.error{margin:0;font-size:11px;line-height:1.65;max-width:340px}
+.success{color:#a3e5c7}
+.email{color:#bab3bf}
+.error{color:#ffacbb}
+.manual{display:grid;gap:7px;color:#e5c8ae;font-size:11px;line-height:1.6;max-width:420px}
+.manual input{width:100%;min-width:0;padding:10px;border:1px solid #655460;border-radius:7px;background:#11131d;color:#f8edf1;font:12px/1.5 monospace;box-sizing:border-box}
+@media(prefers-reduced-motion:reduce){.copyButton{transition:none}}

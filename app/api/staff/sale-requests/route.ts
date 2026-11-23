@@ -1,18 +1,32 @@
 import {NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb} from "../../../../lib/staff-auth";
+import {readAllSaleReportRows} from "../../../../lib/sale-performance";
+import {canReadSaleOrder,ticketEmailStatus} from "../../../../lib/sale-order-access";
 export const dynamic="force-dynamic";
 const fail=(error:string,status:number)=>NextResponse.json({error},{status});
-export async function GET(){const actor=await requireRole(["sale","admin"]);if(!actor)return fail("Không có quyền",403);
-try{const filter=actor.role==="sale"?"created_by=eq."+encodeURIComponent(actor.id)+"&":"";const rows=await staffDb("sale_requests?"+filter+"select=id,show_id,customer_name,customer_phone,requested_seats,note,status,status_confirmed,created_at,created_by&order=created_at.desc&limit=500");
- // Match paid customers to the same verified orders used by the Sale revenue report.
- // Legacy ticket_sales orders may not have sale_staff_id on extra_payment_orders.
- const [paidOrders,sales]=await Promise.all([
-  staffDb("extra_payment_orders?status=eq.paid&select=code,show_id,seats,buyer_name,buyer_phone,buyer_email,amount_vnd,paid_at,sale_staff_id&order=paid_at.desc&limit=10000") as Promise<{code:string;show_id:string;seats:string[];buyer_name:string;buyer_phone:string;buyer_email:string;amount_vnd:number;paid_at:string;sale_staff_id:string|null}[]>,
-  staffDb("ticket_sales?payment_verified=eq.true&select=order_code,seller_name&limit=10000") as Promise<{order_code:string;seller_name:string|null}[]>
- ]);
- const attributed=new Set(sales.filter(x=>x.seller_name===actor.display_name||x.seller_name===actor.username).map(x=>x.order_code.toUpperCase()));
- const paid=paidOrders.filter(o=>actor.role==="admin"?Boolean(o.sale_staff_id):o.sale_staff_id===actor.id||attributed.has(o.code.toUpperCase()));
- return NextResponse.json({requests:rows,paidCustomers:paid},{headers:{"Cache-Control":"no-store"}})}catch{return fail("Không tải được danh sách khách. Kiểm tra dữ liệu thanh toán và quyền Sale.",503)}}
+export async function GET(){
+ const response=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store, max-age=0","Referrer-Policy":"no-referrer"}});
+ const actor=await requireRole(["sale","admin"]);if(!actor)return response({error:"Không có quyền"},403);
+ try{
+  const filter=actor.role==="sale"?"created_by=eq."+encodeURIComponent(actor.id)+"&":"";
+  const orderFilter=actor.role==="sale"?"&sale_staff_id=eq."+encodeURIComponent(actor.id):"&sale_staff_id=not.is.null";
+  const [rows,paidOrders]=await Promise.all([
+   staffDb("sale_requests?"+filter+"select=id,show_id,customer_name,customer_phone,requested_seats,note,status,status_confirmed,created_at,created_by&order=created_at.desc&limit=500") as Promise<Array<Record<string,unknown>>>,
+   readAllSaleReportRows<{
+    code:string;show_id:string;seats:string[];buyer_name:string;buyer_phone:string;buyer_email:string;
+    amount_vnd:number;paid_at:string;sale_staff_id:string|null;status:string;email_status:unknown;
+   }>(staffDb,"extra_payment_orders?status=eq.paid"+orderFilter+
+    "&select=code,show_id,seats,buyer_name,buyer_phone,buyer_email,amount_vnd,paid_at,sale_staff_id,status,email_status&order=paid_at.desc,code.asc"),
+  ]);
+  if(!Array.isArray(rows))throw Error("Invalid customer request data");
+  // Exact online assignment matches the financial report. Legacy name matches
+  // cannot override another Sale's ID or grant access to an unassigned order.
+  const paid=paidOrders.filter(order=>order.status==="paid"&&Boolean(order.sale_staff_id)&&canReadSaleOrder(actor,order))
+   .map(order=>({...order,email_status:ticketEmailStatus(order.email_status)||null}));
+  const requests=actor.role==="sale"?rows.filter(row=>row.created_by===actor.id):rows;
+  return response({requests,paidCustomers:paid});
+ }catch{return response({error:"Không tải được danh sách khách. Kiểm tra dữ liệu thanh toán và quyền Sale."},503);}
+}
 export async function POST(req:NextRequest){const actor=await requireRole(["sale","admin"]);if(!actor||actor.id==="owner")return fail("Chỉ nhân viên có tài khoản mới tạo yêu cầu bán vé.",403);let body:Record<string,unknown>;try{body=await req.json()}catch{return fail("Dữ liệu không hợp lệ",400)}
 const show_id=String(body.show_id||""),customer_name=String(body.customer_name||"").trim(),customer_phone=String(body.customer_phone||"").trim(),note=String(body.note||"").trim();
 if(!/^[a-z0-9-]{3,100}$/.test(show_id)||customer_name.length<2||customer_name.length>120||!/^[+0-9 .()-]{8,20}$/.test(customer_phone)||note.length>500)return fail("Vui lòng kiểm tra show, tên khách, số điện thoại.",400);

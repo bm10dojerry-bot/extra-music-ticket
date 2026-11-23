@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useMemo,useState,type FormEvent} from "react";
+import {useEffect,useMemo,useRef,useState,type FormEvent} from "react";
 import "./support-inbox.css";
 
 type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:"open"|"closed";created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null;assigned_staff_id:string|null;assigned_at:string|null;channel:"website"|"messenger"};
@@ -18,14 +18,18 @@ const quickReplies=[
  {label:"Kiểm tra email",text:"Anh/chị vui lòng kiểm tra Hộp thư đến và thư Spam. Nếu vẫn chưa nhận mã QR xác nhận chỗ, cho em biết email hoặc số điện thoại đã dùng khi đặt chỗ để được hỗ trợ."},
  {label:"Địa điểm & giờ",text:"Anh/chị vui lòng đối chiếu ngày giờ và địa điểm ghi trên trang show trước khi di chuyển. Nếu cần xác nhận thêm, em sẽ hướng dẫn ạ."}
 ];
-export default function SupportInbox({embedded=false}:{embedded?:boolean}){
+export default function SupportInbox({embedded=false,active=true}:{embedded?:boolean;active?:boolean}){
  const [chats,setChats]=useState<Chat[]>([]),[selected,setSelected]=useState(""),[current,setCurrent]=useState<Chat|null>(null),[messages,setMessages]=useState<Message[]>([]);
  const [staff,setStaff]=useState<Sale[]>([]),[actorId,setActorId]=useState(""),[isManager,setIsManager]=useState(false),[myOpen,setMyOpen]=useState(0),[waiting,setWaiting]=useState(0),[messengerConfigured,setMessengerConfigured]=useState(false);
  const [filter,setFilter]=useState<Filter>("mine"),[search,setSearch]=useState(""),[targetStaff,setTargetStaff]=useState("");
- const [draft,setDraft]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[loading,setLoading]=useState(true),[now,setNow]=useState(Date.now());
- async function refresh(){
-  const r=await fetch("/api/staff/support-chats",{cache:"no-store"});
+ const [drafts,setDrafts]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[loading,setLoading]=useState(true),[now,setNow]=useState(Date.now());
+ const selectedRef=useRef(selected);selectedRef.current=selected;
+ const draft=drafts[selected]||"";
+ function setDraft(value:string){if(!selected||current?.id!==selected)return;setDrafts(old=>({...old,[selected]:value}));}
+ async function refresh(signal?:AbortSignal){
+  const r=await fetch("/api/staff/support-chats",{cache:"no-store",signal});
   const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được hộp thư");
+  if(signal?.aborted)return;
   const list=(d.chats||[]) as Chat[];setChats(list);setStaff(d.staff||[]);
   setActorId(d.actorId||"");setIsManager(Boolean(d.isManager));setMyOpen(d.myOpenCount||0);setWaiting(d.waitingCount||0);setMessengerConfigured(Boolean(d.messengerConfigured));
   setFilter(v=>v==="mine"&&d.isManager?"open":v);
@@ -33,23 +37,27 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
   setError("");setLoading(false);
  }
  useEffect(()=>{
-  let live=true;async function poll(){try{if(live)await refresh()}catch(e){if(live){setError(e instanceof Error?e.message:"Không kết nối được hộp thư");setLoading(false)}}}
+  if(!active)return;
+  const controller=new AbortController();let live=true,polling=false;
+  async function poll(){if(!live||polling)return;polling=true;try{await refresh(controller.signal)}catch(e){if(live){setError(e instanceof Error?e.message:"Không kết nối được hộp thư");setLoading(false)}}finally{polling=false}}
   void poll();const timer=setInterval(()=>void poll(),9000),clock=setInterval(()=>setNow(Date.now()),8000);
-  return()=>{live=false;clearInterval(timer);clearInterval(clock)};
- },[]);
+  return()=>{live=false;controller.abort();clearInterval(timer);clearInterval(clock)};
+ },[active]);
  const listed=chats.find(c=>c.id===selected)||null;
  useEffect(()=>{
+  if(!active)return;
   if(!selected||!listed){setCurrent(null);setMessages([]);return}
   if(!isManager&&listed.assigned_staff_id!==actorId){setCurrent(listed);setMessages([]);return}
-  let live=true;
+  const controller=new AbortController();let live=true,loadingMessages=false;
   async function loadMessages(){
-   try{const r=await fetch("/api/staff/support-chats?chatId="+encodeURIComponent(selected),{cache:"no-store"});
+   if(!live||loadingMessages)return;loadingMessages=true;
+   try{const r=await fetch("/api/staff/support-chats?chatId="+encodeURIComponent(selected),{cache:"no-store",signal:controller.signal});
     const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được nội dung");
     if(live){setCurrent(d.chat||null);setMessages(d.messages||[])}
-   }catch(e){if(live)setError(e instanceof Error?e.message:"Không tải được tin nhắn")}
+   }catch(e){if(live)setError(e instanceof Error?e.message:"Không tải được tin nhắn")}finally{loadingMessages=false}
   }
-  void loadMessages();const timer=setInterval(()=>void loadMessages(),6000);return()=>{live=false;clearInterval(timer)};
- },[selected,listed?.assigned_staff_id,actorId,isManager]);
+  void loadMessages();const timer=setInterval(()=>void loadMessages(),6000);return()=>{live=false;controller.abort();clearInterval(timer)};
+ },[active,selected,listed?.assigned_staff_id,actorId,isManager]);
  const visible=useMemo(()=>chats.filter(c=>{
   const match=filter==="all"||filter==="mine"&&c.status==="open"&&c.assigned_staff_id===actorId
    ||filter==="open"&&c.status==="open"||filter==="unread"&&unread(c)||filter==="queue"&&c.status==="open"&&!c.assigned_staff_id;
@@ -58,7 +66,7 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
  const lateCount=chats.filter(c=>overdue(c,now)&&Boolean(c.assigned_staff_id)).length;
  const needs=chats.filter(unread).length;
  const assignedName=(c:Chat)=>staff.find(s=>s.id===c.assigned_staff_id)?.display_name||"Sale EXTRA";
- const canReply=Boolean(current&&current.status==="open"&&(isManager||current.assigned_staff_id===actorId));
+ const canReply=Boolean(active&&current&&current.id===selected&&current.status==="open"&&(isManager||current.assigned_staff_id===actorId));
  const showQueue=Boolean(current&&current.status==="open"&&!current.assigned_staff_id);
  const otherStaff=staff.filter(s=>s.id!==current?.assigned_staff_id&&s.openCount<8);
  async function doAction(payload:Record<string,unknown>){
@@ -70,10 +78,12 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
  }
  async function send(e:FormEvent){
   e.preventDefault();if(!canReply||!selected||draft.trim().length<2||busy)return;
+  const submittedChat=selected,submittedDraft=draft;
   setBusy(true);setError("");
-  try{const r=await fetch("/api/staff/support-chats",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chatId:selected,message:draft.trim()})});
+  try{const r=await fetch("/api/staff/support-chats",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chatId:submittedChat,message:submittedDraft.trim()})});
    const d=await r.json();if(!r.ok)throw Error(d.error||"Không gửi được");
-   setMessages(d.messages||[]);setDraft("");await refresh();
+   if(selectedRef.current===submittedChat)setMessages(d.messages||[]);
+   setDrafts(old=>{if(old[submittedChat]!==submittedDraft)return old;const next={...old};delete next[submittedChat];return next;});await refresh();
   }catch(e){setError(e instanceof Error?e.message:"Chưa gửi được tin nhắn")}finally{setBusy(false)}
  }
  return <section className={"extra-inbox "+(embedded?"extra-inbox-embedded":"")} aria-label="Hộp thư tư vấn đặt chỗ">
@@ -98,7 +108,7 @@ export default function SupportInbox({embedded=false}:{embedded?:boolean}){
     </button>)}
    </div>
    <div className="extra-inbox-thread">
-    {current?<><div className="extra-inbox-thread-head">
+    {current&&current.id===selected?<><div className="extra-inbox-thread-head">
      <div><strong>{current.customer_name}</strong><span className="extra-inbox-channel">{current.channel==="messenger"?"Facebook Messenger":"Chat trên iextra.net"}</span><span>{current.show_id?slugNames[current.show_id]||current.show_id:"Tư vấn chung"}</span>{current.customer_phone&&<a href={"tel:"+current.customer_phone}>☎ {current.customer_phone}</a>}
       <span>{current.assigned_staff_id?"Sale phụ trách: "+assignedName(current):"Khách đang ở hàng chờ"}</span>
      </div>
