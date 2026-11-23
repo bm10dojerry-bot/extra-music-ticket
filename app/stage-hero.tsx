@@ -112,7 +112,7 @@ export default function StageHero({onChooseArtist,onChooseVenue}:{onChooseArtist
      <strong className={styles.choiceHeading}><span className={styles.titleLead}>CHỌN SHOW</span><span className={styles.titleMain}><span>THEO</span>{" "}<span>CA SĨ</span></span></strong>
      <span className={styles.choiceRule}/>
      <span className={styles.description}>Khám phá nghệ sĩ yêu thích<br/>và những đêm nhạc dành cho bạn.</span>
-     <span className={styles.choiceAction}>Khám phá show <span aria-hidden="true">↗</span></span>
+     <span className={styles.choiceAction}>Khám phá show <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M7 7h10v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
     </span></span>
    </a>
    <a className={styles.venueChoice} href="#dia-diem" aria-label="Khám phá show theo địa điểm" onClick={onChooseVenue}>
@@ -121,7 +121,7 @@ export default function StageHero({onChooseArtist,onChooseVenue}:{onChooseArtist
      <strong className={styles.choiceHeading}><span className={styles.titleLead}>CHỌN SHOW</span><span className={styles.titleMain}><span>THEO</span>{" "}<span>ĐỊA ĐIỂM</span></span></strong>
      <span className={styles.choiceRule}/>
      <span className={styles.description}>Tìm một không gian yêu thích<br/>và tận hưởng đêm nhạc của bạn.</span>
-     <span className={styles.choiceAction}>Xem địa điểm <span aria-hidden="true">↗</span></span>
+     <span className={styles.choiceAction}>Xem địa điểm <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M7 7h10v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
     </span></span>
    </a>
   </div>
