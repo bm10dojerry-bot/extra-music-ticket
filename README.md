@@ -165,3 +165,26 @@ query parameters. Backend permissions, reports and payment actions are unchanged
 Synthetic navigation checks: `node --test tests/admin-workspace-ui.test.cjs`.
 They use the optional matching React renderer described in
 `tests/sale-workspace-ui.test.cjs`; no production data or write actions are used.
+
+## Homepage stage opening
+
+`app/stage-hero.tsx` owns the full-width homepage introduction. Two folded dark
+curtains meet at an illuminated diagonal edge, the transparent EXTRA logo appears,
+and the artist/venue choices enter from opposite sides. Scrolling separates the
+curtains and fades the logo and copy while the next section enters in normal page
+flow. The introduction never captures the wheel/touch gesture or locks scrolling.
+The optional homepage banner and the content below keep their existing width.
+
+The component updates four CSS variables in one animation frame per scroll/resize
+burst, without React state updates or a permanent JavaScript animation loop.
+Intersection and document-visibility checks pause decorative animation offscreen;
+unmount removes all listeners, observers and pending work. Reduced-motion users
+receive a static logo and readable navigation, with immediate artist scrolling.
+Both choices remain real links, and keyboard focus restores their text during a
+scroll fade. No booking, payment, inventory or attribution rules are changed.
+
+The logo uses the optimized transparent WebP in `public/brand/`, with a PNG
+fallback. Asset provenance and the background-removal prompt are recorded in
+`public/brand/README.md`. The navigation, motion bounds, reduced-motion handling
+and cleanup checks run with `node --test tests/stage-hero-ui.test.cjs`; they use
+synthetic data and never submit a booking or payment.
