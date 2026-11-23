@@ -4,6 +4,7 @@ import {seatsFor,venues,zoneColors,type VenueId} from "../lib/venues";
 import {shows as initialShows,formatShowDate} from "../lib/shows";
 import type {ManagedShow} from "../lib/show-data";
 import {defaultShows} from "../lib/show-data";
+import {useLiveVisitorPresence} from "./live-presence";
 const money=(n:number)=>new Intl.NumberFormat("vi-VN").format(n)+"đ";
 export default function Booking(){
  const splitHeroRef=useRef<HTMLElement|null>(null);
@@ -13,6 +14,7 @@ export default function Booking(){
  const openSeatForShow=(s:ManagedShow)=>{setShowId(s.id);setVenue(s.venue);setChosen([]);setPayment(null);setSeatOpen(true);setArtistMode(false);setVenueDetailOpen(true);setArtistDetailId(null);window.setTimeout(()=>document.getElementById("so-do")?.scrollIntoView({behavior:"smooth",block:"start"}),100)};
  const upcomingShows=[...shows].filter(s=>!["ended","sold_out","live","pending","hidden"].includes(s.status)&&s.date>=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"})).sort((a,b)=>(inventory?.[b.id]?.sold||0)-(inventory?.[a.id]?.sold||0)||a.date.localeCompare(b.date)).slice(0,4);
  const selectedTotal=currentShow?selectedSeats.reduce((n,s)=>n+(currentShow.prices[s.zone as "A"|"B"|"C"|"D"]||0),0):0;
+ useLiveVisitorPresence(seatOpen?showId:"site",payment?.status==="pending"?"payment":seatOpen&&chosen.length?"selecting":"viewing");
  const featuredArtist=()=>{const ranked=shows.filter(show=>inventory?.[show.id]&&venues.some(v=>v.id===show.venue));ranked.sort((a,b)=>{const capA=inventory?.[a.id]?.capacity||1;const capB=inventory?.[b.id]?.capacity||1;return (inventory?.[b.id]?.sold||0)/capB-(inventory?.[a.id]?.sold||0)/capA});return ranked[0]||shows[0]};
  const normalized=(v:string)=>v.normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]","g"),"").replace(/đ/g,"d").toLowerCase().trim();
  const searchResults=search.trim()?shows.filter(show=>{const date=formatShowDate(show.date);return normalized([show.artist,show.date,date,date.split("/").join("-"),show.venue].join(" ")).includes(normalized(search))}).slice(0,8):[];
