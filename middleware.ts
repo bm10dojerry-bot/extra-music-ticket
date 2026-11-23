@@ -21,7 +21,7 @@ export function middleware(request:NextRequest){
   const url=request.nextUrl.clone();url.pathname="/checkin";url.search="";return NextResponse.rewrite(url);
  }
  if(host==="sale.iextra.net"){
-  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname==="/api/staff/login"||pathname==="/api/staff/logout"||pathname==="/api/staff/sale-requests"||pathname.startsWith("/api/staff/support-chats")||pathname==="/api/staff/sale-shows"||pathname==="/api/staff/reports"||pathname==="/api/public/show-inventory"||pathname==="/api/payments/sepay/status"||pathname==="/api/staff/sale-reserve"||pathname==="/api/staff/live-presence"||pathname==="/reset-password"||pathname==="/api/auth/forgot-password"||pathname==="/api/auth/reset-password")return NextResponse.next();
+  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname==="/api/staff/login"||pathname==="/api/staff/logout"||pathname==="/api/staff/sale-requests"||pathname==="/api/staff/ticket-link"||pathname.startsWith("/api/staff/support-chats")||pathname==="/api/staff/sale-shows"||pathname==="/api/staff/reports"||pathname==="/api/public/show-inventory"||pathname==="/api/payments/sepay/status"||pathname==="/api/staff/sale-reserve"||pathname==="/api/staff/live-presence"||pathname==="/reset-password"||pathname==="/api/auth/forgot-password"||pathname==="/api/auth/reset-password")return NextResponse.next();
   if(pathname==="/sale"||pathname.startsWith("/sale/"))return NextResponse.next();
   if(pathname.startsWith("/api/"))return NextResponse.json({error:"Cổng Sale không có quyền truy cập API này"},{status:403});
   const url=request.nextUrl.clone();url.pathname="/sale";url.search="";return NextResponse.rewrite(url);
