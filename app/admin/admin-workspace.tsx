@@ -33,10 +33,6 @@ function MenuIcon({name}:{name:IconName}) {
  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{iconPaths[name]}</svg>;
 }
 
-function BrandLogo({className}:{className:string}) {
- return <img src="/brand/extra-music-show-menu.webp" alt="+1 Extra Music Show" width="640" height="427" decoding="async" className={className}/>;
-}
-
 function NavigationList({items,section,onSelect,prefix}:{items:readonly AdminNavItem[];section:AdminSection;onSelect:(id:AdminSection)=>void;prefix:string}) {
  return <>{adminGroups.map(group=>{
   const entries=items.filter(item=>item.group===group);
@@ -115,7 +111,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
   <a className={styles.skipLink} href="#admin-main">Đến nội dung quản trị</a>
   <div className={styles.workspace}>
    <aside className={styles.sidebar} aria-label="Điều hướng quản trị">
-    <a href="https://iextra.net/" className={styles.brand} aria-label="Trang chủ +1 Extra Music Show"><BrandLogo className={styles.brandLogo}/></a>
+    <a href="https://iextra.net/" className={styles.brand}><span className={styles.brandMark}>+1</span><span><strong>EXTRA</strong><small>ADMIN WORKSPACE</small></span></a>
     <label className={styles.search}><MenuIcon name="search"/><span className={styles.srOnly}>Tìm mục quản trị</span><input type="search" placeholder="Tìm mục quản trị…" value={search} onChange={event=>setSearch(event.target.value)}/></label>
     <nav className={styles.navigation} aria-label="Menu Admin">
      <NavigationList items={visibleItems} section={section} onSelect={select} prefix="admin-nav-"/>
@@ -129,7 +125,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
    </aside>
    <main id="admin-main" className={styles.main} tabIndex={-1}>
     <div className={styles.mobileAccount}>
-     <a href="https://iextra.net/" className={styles.mobileBrand} aria-label="Trang chủ +1 Extra Music Show"><BrandLogo className={styles.mobileLogo}/></a><div className={styles.mobileProfile}><span>ADMIN</span><strong>{displayName}</strong></div>
+     <div><span>+1 EXTRA · ADMIN</span><strong>{displayName}</strong></div>
      <div className={styles.mobileUtilities}><a href="/reset-password?from=admin">Đổi mật khẩu</a><form action={logoutAction} method="post"><button type="submit">Đăng xuất</button></form></div>
     </div>
     <header className={section==="overview"?styles.overviewHeader:styles.pageHeader}>
@@ -144,7 +140,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
   </nav>
   <dialog ref={dialog} id="admin-menu-dialog" className={styles.menuDialog} aria-labelledby="admin-menu-title" onCancel={event=>{event.preventDefault();closeMenu();}} onClose={()=>{if(!dialog.current?.open)setMenuOpen(false);}} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}}>
    <div className={styles.menuSheet}>
-    <header className={styles.menuHeading}><div className={styles.menuIdentity}><BrandLogo className={styles.menuLogo}/><div><p>ADMIN</p><h2 id="admin-menu-title">Tất cả chức năng</h2></div></div><button type="button" ref={closeButton} className={styles.closeButton} aria-label="Đóng menu quản trị" onClick={closeMenu}><MenuIcon name="close"/></button></header>
+    <header className={styles.menuHeading}><div><p>+1 EXTRA · ADMIN</p><h2 id="admin-menu-title">Tất cả chức năng</h2></div><button type="button" ref={closeButton} className={styles.closeButton} aria-label="Đóng menu quản trị" onClick={closeMenu}><MenuIcon name="close"/></button></header>
     <label className={styles.search}><MenuIcon name="search"/><span className={styles.srOnly}>Tìm chức năng quản trị</span><input type="search" placeholder="Tìm show, khách hàng, hoa hồng…" value={menuSearch} onChange={event=>setMenuSearch(event.target.value)}/></label>
     <nav className={styles.menuList} aria-label="Tất cả mục Admin">
      <NavigationList items={menuItems} section={section} onSelect={select} prefix="admin-menu-"/>

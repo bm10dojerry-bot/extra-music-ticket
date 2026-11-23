@@ -2,8 +2,6 @@ import {NextRequest,NextResponse} from "next/server";
 export function middleware(request:NextRequest){
  const host=(request.headers.get("host")||"").split(":")[0].toLowerCase();
  const pathname=request.nextUrl.pathname;
- // Shared public menu artwork must not be rewritten to a portal's HTML page.
- if((host==="admin.iextra.net"||host==="sale.iextra.net")&&pathname==="/brand/extra-music-show-menu.webp")return NextResponse.next();
  if(host==="admin.iextra.net"){
   // The admin portal is isolated from the public storefront and staff subdomains.
   if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname.startsWith("/api/admin/")||pathname.startsWith("/api/staff/")||pathname.startsWith("/api/public/")||pathname.startsWith("/api/auth/google/")||pathname.startsWith("/api/artist-profiles")||pathname.startsWith("/api/venue-profiles")||(pathname==="/reset-password"||pathname==="/api/auth/forgot-password"||pathname==="/api/auth/reset-password")||pathname.startsWith("/api/password/")||pathname.startsWith("/api/media/")||pathname.startsWith("/api/venues/"))return NextResponse.next();
