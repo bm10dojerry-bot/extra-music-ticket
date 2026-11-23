@@ -34,7 +34,7 @@
 .extra-support-error{margin:0 14px 5px;color:#ffacb8;font-size:12px;line-height:1.5}
 .extra-support-footnote{margin:0;padding:8px 13px 12px;color:#b8acb5;font-size:10px;line-height:1.55;background:#1c1b24}
 .extra-support-footnote a{color:#f8c3c9}
-@media(max-width:650px){.extra-support-backdrop{inset:0;padding:0;align-items:stretch;justify-content:stretch}.extra-support-window{height:100dvh;max-height:100dvh;width:100vw;border-radius:0;border:0}.extra-support-trigger-floating{right:14px;bottom:18px}.extra-support-fab{font-size:12px;padding:12px 13px}.extra-support-contact-fields{grid-template-columns:1fr}.extra-support-messages{padding:14px}.extra-support-head{padding:13px 14px}}
+@media(max-width:650px){.extra-support-backdrop{inset:0;padding:0;align-items:stretch;justify-content:stretch}.extra-support-window{height:100dvh;max-height:100dvh;width:100vw;border-radius:0;border:0}.extra-support-contact-fields{grid-template-columns:1fr}.extra-support-messages{padding:14px}.extra-support-head{padding:13px 14px}}
 
 .extra-support-routing{font-size:11px;line-height:1.55;padding:9px 14px;border-bottom:1px solid #ffffff18}
 .extra-support-assigned{color:#c9f4dc;background:#21433388}.extra-support-queued{color:#ffe0b6;background:#57411e99}
@@ -44,4 +44,10 @@
 .extra-support-button-icon svg{display:block;width:17px;height:17px}
 .extra-support-fab{display:inline-flex;align-items:center;gap:9px}
 .extra-support-fab .extra-support-button-icon{background:rgba(255,255,255,.15);color:#fff}
-@media(max-width:650px){.extra-support-fab .extra-support-button-icon{width:25px;height:25px}}
+@media(max-width:650px){
+ .extra-support-trigger-floating{right:max(14px,calc(env(safe-area-inset-right) + 10px));bottom:max(18px,calc(env(safe-area-inset-bottom) + 10px))}
+ .extra-support-fab{width:48px;height:48px;min-width:48px;padding:0;gap:0;justify-content:center;border-radius:50%;box-shadow:0 6px 20px #0006}
+ .extra-support-fab .extra-support-button-label{display:none}
+ .extra-support-fab .extra-support-button-icon{width:24px;height:24px;background:transparent}
+ .extra-support-fab .extra-support-button-icon svg{width:24px;height:24px}
+}

@@ -55,7 +55,7 @@ export default function SupportChat({showId="",showName="",mode="inline",label="
    <span className="extra-support-button-icon" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" focusable="false"><path d="M20 11.5a7.7 7.7 0 0 1-7.8 7.7 8.6 8.6 0 0 1-3.5-.7L4 20l1.5-4.5A7.7 7.7 0 1 1 20 11.5Z"/><path d="M9 11.7h6"/></svg>
    </span>
-   <span>{mode==="floating"?label:"Tư vấn chọn chỗ"}</span>
+   <span className="extra-support-button-label">{mode==="floating"?label:"Tư vấn chọn chỗ"}</span>
   </button>
   {open&&createPortal(<div className="extra-support-backdrop" role="presentation">
    <section className="extra-support-window" role="dialog" aria-modal="false" aria-label="Chat tư vấn trực tiếp trên website +1 Extra">
