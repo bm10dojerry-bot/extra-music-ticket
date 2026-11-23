@@ -6,17 +6,15 @@ import {
  type GoogleAnalyticsResponse,
  type GoogleAnalyticsPropertyOption,
  type GoogleAnalyticsStreamOption,
- type GoogleAnalyticsReport,
 } from "../../lib/google-analytics-types";
 import {COUNTRY_SHAPES} from "./ga4-world-map-data";
+import {COUNTRY_POINTS} from "./ga4-country-points";
 import styles from "./google-analytics-map.module.css";
 
 const formatNumber=new Intl.NumberFormat("vi-VN");
 const regionNames=typeof Intl.DisplayNames==="function"?new Intl.DisplayNames(["vi"],{type:"region"}):null;
 const GOOGLE_ANALYTICS_URL="https://analytics.google.com/analytics/web/";
 const REFRESH_MS=60000;
-type PlaceMode="countries"|"cities";
-type PlaceRow=GoogleAnalyticsReport["countries"][number]&{city?:string};
 
 const countryKey=(countryId:string)=>countryId.trim().toUpperCase()||"__unknown";
 function placeLabel(name:string){return !name||name==="(not set)"?"Chưa xác định":name==="(other)"?"Khu vực khác":name;}
@@ -35,13 +33,9 @@ function updatedTime(value:string){
  const date=new Date(value);
  return Number.isFinite(date.getTime())?date.toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"—";
 }
-function heatColor(users:number,maximum:number){
- const strength=Math.sqrt(users/Math.max(1,maximum));
- return `hsl(${194-strength*20} ${40+strength*17}% ${27+strength*35}%)`;
-}
 
 export default function GoogleAnalyticsMap(){
- const mapTitleId=useId();
+ const mapTitleId=useId(),mapDescriptionId=useId(),tooltipId=useId(),settingsId=useId(),settingsHeadingId=useId();
  const [data,setData]=useState<GoogleAnalyticsResponse|null>(null);
  const [loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false);
  const [loadError,setLoadError]=useState(""),[refreshKey,setRefreshKey]=useState(0);
@@ -56,12 +50,13 @@ export default function GoogleAnalyticsMap(){
  const [action,setAction]=useState<"save"|"disconnect"|null>(null);
  const [actionError,setActionError]=useState(""),[actionNotice,setActionNotice]=useState("");
  const [confirmDisconnect,setConfirmDisconnect]=useState(false);
- const [mode,setMode]=useState<PlaceMode>("countries");
  const [selectedCountry,setSelectedCountry]=useState("");
  const [hoverCountry,setHoverCountry]=useState("");
- const [visibleRows,setVisibleRows]=useState(20);
+ const [focusedCountry,setFocusedCountry]=useState("");
+ const [mapSize,setMapSize]=useState({width:0,height:0});
  const panelRef=useRef<HTMLElement>(null);
- const rankingHeading=useRef<HTMLHeadingElement>(null);
+ const canvasRef=useRef<HTMLDivElement>(null);
+ const dialogRef=useRef<HTMLDialogElement>(null);
  const reportController=useRef<AbortController|null>(null);
  const actionController=useRef<AbortController|null>(null);
  const mutating=useRef(false),mounted=useRef(false);
@@ -70,6 +65,23 @@ export default function GoogleAnalyticsMap(){
   mounted.current=true;
   setCallbackCode(new URLSearchParams(window.location.search).get("ga4")||"");
   return()=>{mounted.current=false;actionController.current?.abort();};
+ },[]);
+
+ useEffect(()=>{
+  const dialog=dialogRef.current;
+  if(manageOpen&&!dialog?.open)dialog?.showModal();
+  else if(!manageOpen&&dialog?.open)dialog.close();
+ },[manageOpen]);
+
+ useEffect(()=>{
+  const canvas=canvasRef.current;
+  if(!canvas)return;
+  const measure=()=>setMapSize({width:canvas.clientWidth,height:canvas.clientHeight});
+  measure();
+  const observer=typeof ResizeObserver==="undefined"?null:new ResizeObserver(measure);
+  observer?.observe(canvas);
+  if(!observer)window.addEventListener("resize",measure);
+  return()=>{observer?.disconnect();window.removeEventListener("resize",measure);};
  },[]);
 
  useEffect(()=>{
@@ -88,7 +100,9 @@ export default function GoogleAnalyticsMap(){
     if(active&&!controller.signal.aborted){
      const next=result as GoogleAnalyticsResponse;
      setData(next);setLoadError("");setHoverCountry("");
-     setSelectedCountry(current=>next.report?.countries.some(country=>countryKey(country.countryId)===current)?current:"");
+     const hasCountry=(id:string)=>next.report?.countries.some(country=>countryKey(country.countryId)===id&&country.activeUsers>0);
+     setSelectedCountry(current=>hasCountry(current)?current:"");
+     setFocusedCountry(current=>hasCountry(current)?current:"");
     }
    }catch(error){
     if(active&&!controller.signal.aborted)setLoadError(error instanceof Error?error.message:"Không kết nối được Google Analytics. Vui lòng thử lại.");
@@ -112,7 +126,7 @@ export default function GoogleAnalyticsMap(){
   return()=>{active=false;clearInterval(timer);observer?.disconnect();reportController.current?.abort();document.removeEventListener("visibilitychange",visibilityChanged);};
  },[refreshKey]);
 
- const showManagement=Boolean(data?.canManage&&(manageOpen||data.status==="select_property")&&data.status!=="not_connected");
+ const showManagement=Boolean(data?.canManage&&manageOpen&&data.status!=="not_connected");
  const savedPropertyId=data?.property?.id||"",savedStreamId=data?.property?.streamId||"";
  useEffect(()=>{
   if(!showManagement)return;
@@ -171,7 +185,7 @@ export default function GoogleAnalyticsMap(){
    const result=await response.json().catch(()=>null);
    if(!response.ok)throw Error(errorMessage(result,operation==="save"?"Chưa lưu được nguồn dữ liệu. Vui lòng thử lại.":"Chưa ngắt được kết nối. Vui lòng thử lại."));
    if(mounted.current&&!controller.signal.aborted){
-    setManageOpen(false);setConfirmDisconnect(false);setCallbackCode("");setSelectedCountry("");setHoverCountry("");
+    setManageOpen(false);setConfirmDisconnect(false);setCallbackCode("");setSelectedCountry("");setHoverCountry("");setFocusedCountry("");
     setData(null);setLoading(true);setLoadError("");setActionNotice(operation==="save"?"Đã lưu nguồn dữ liệu Google Analytics.":"Đã ngắt kết nối Google Analytics khỏi Admin.");
     if(operation==="disconnect"){setPropertyDraft("");setStreamDraft("");setProperties([]);setStreams([]);}
     setRefreshKey(value=>value+1);
@@ -180,92 +194,96 @@ export default function GoogleAnalyticsMap(){
   finally{mutating.current=false;if(mounted.current)setAction(null);}
  }
  function save(event:FormEvent<HTMLFormElement>){event.preventDefault();void updateConnection("save");}
- function selectCountry(id:string){setSelectedCountry(current=>current===id?"":id);setMode("cities");setVisibleRows(20);rankingHeading.current?.focus();}
- function changeMode(next:PlaceMode){setMode(next);setVisibleRows(20);}
  function closeManagement(){setManageOpen(false);setConfirmDisconnect(false);setActionError("");}
 
  const report=data?.status==="ready"?data.report:undefined;
- const countries=[...(report?.countries||[])].sort((a,b)=>b.activeUsers-a.activeUsers||countryLabel(a).localeCompare(countryLabel(b),"vi"));
+ const countries=(report?.countries||[]).filter(country=>country.activeUsers>0);
  const countryIndex=new Map(countries.map(country=>[countryKey(country.countryId),country]));
- const maxUsers=Math.max(1,...countries.map(country=>country.activeUsers));
- const selected=countryIndex.get(selectedCountry);
- const highlighted=countryIndex.get(hoverCountry)||selected;
- const cities=[...(report?.cities||[])].filter(city=>!selectedCountry||countryKey(city.countryId)===selectedCountry).sort((a,b)=>b.activeUsers-a.activeUsers||a.city.localeCompare(b.city,"vi"));
- const placeRows:PlaceRow[]=mode==="countries"?countries:cities;
+ const pointIndex=new Map(COUNTRY_POINTS.map(point=>[point.id,point]));
+ const activePoints=COUNTRY_POINTS.filter(point=>countryIndex.has(point.id));
+ const unmappedCountries=countries.some(country=>!pointIndex.has(countryKey(country.countryId)));
+ const highlightedId=hoverCountry||focusedCountry||selectedCountry;
+ const highlighted=countryIndex.get(highlightedId),highlightedPoint=pointIndex.get(highlightedId);
+ const mapScale=Math.min(mapSize.width/800,mapSize.height/420);
+ const pointX=highlightedPoint?(mapSize.width-800*mapScale)/2+highlightedPoint.x*mapScale:0;
+ const pointY=highlightedPoint?(mapSize.height-420*mapScale)/2+highlightedPoint.y*mapScale:0;
+ const tooltipBelow=pointY<100;
  const selectedStream=streams.find(stream=>stream.id===streamDraft&&stream.compatible);
  const canSave=Boolean(properties.some(property=>property.id===propertyDraft)&&selectedStream&&!propertiesError&&!streamsError&&!propertiesLoading&&!streamsLoading&&!action);
  const callbackNotice=callbackCode==="connected"?(data?.status==="select_property"?"Đã kết nối tài khoản Google. Chọn dữ liệu của iextra.net để hoàn tất.":data?.status==="ready"?"Kết nối Google Analytics đã sẵn sàng.":""):GOOGLE_ANALYTICS_CALLBACK_MESSAGES[callbackCode]||"";
+ const callbackError=Boolean(callbackNotice&&callbackCode!=="connected");
  const reportError=loadError||data?.error||"";
- const unavailable=!report&&!loading;
- const emptyTitle=data?.status==="not_connected"?"Kết nối để xem khách truy cập":data?.status==="select_property"?"Chọn nguồn dữ liệu của website":reportError?"Chưa tải được bản đồ truy cập":"Chưa có dữ liệu Google Analytics";
- const emptyDescription=data?.status==="not_connected"?(data.canManage?"Xem khu vực có người dùng hoạt động trên iextra.net bằng dữ liệu Google Analytics 4.":"Chủ quản trị cần kết nối Google Analytics để hiển thị dữ liệu truy cập."):data?.status==="select_property"?(data.canManage?"Chọn tài sản và luồng dữ liệu iextra.net bên dưới để bắt đầu xem báo cáo.":"Chủ quản trị cần chọn nguồn dữ liệu của iextra.net để hoàn tất kết nối."):"Vui lòng cập nhật lại để kiểm tra kết nối và dữ liệu mới nhất.";
+ const needsAttention=Boolean(reportError||callbackError||data?.status==="not_connected"||data?.status==="select_property");
+ const statusText=reportError?(report?"Chưa cập nhật được dữ liệu; đang hiển thị lần cập nhật "+updatedTime(report.updatedAt):"Chưa tải được dữ liệu Google Analytics")
+  :callbackError?"Kết nối Google Analytics cần được kiểm tra"
+  :loading&&!data?"Đang tải dữ liệu Google Analytics"
+  :data?.status==="not_connected"?"Chưa kết nối Google Analytics"
+  :data?.status==="select_property"?"Chờ chọn nguồn dữ liệu Google Analytics"
+  :report?.totalActiveUsers===0?"Chưa ghi nhận người dùng hoạt động trong 30 phút qua"
+  :report&&!activePoints.length?"Có truy cập nhưng chưa xác định được quốc gia trên bản đồ"
+  :report?"Google Analytics: người dùng hoạt động trong 30 phút qua; cập nhật "+updatedTime(report.updatedAt)
+  :"Chưa có dữ liệu Google Analytics";
+ const controlLabel=(data?.canManage?"Cài đặt bản đồ. ":"Thông tin bản đồ. ")+statusText;
+ function openManagement(){setHoverCountry("");setFocusedCountry("");setSelectedCountry("");setManageOpen(true);}
 
- return <section ref={panelRef} className={styles.panel} aria-labelledby="ga4-map-heading" aria-busy={loading}>
-  <header className={styles.header}>
-   <div><div className={styles.headingRow}><h2 id="ga4-map-heading">Khách truy cập theo khu vực</h2><span className={styles.source}><span aria-hidden="true" className={styles.sourceIcon}>▥</span> Google Analytics 4</span></div><p>Người dùng hoạt động trong 30 phút qua</p></div>
-   <div className={styles.headerActions}>
-    <button type="button" className={styles.secondary} onClick={()=>setRefreshKey(value=>value+1)} disabled={refreshing||Boolean(action)} aria-label="Cập nhật dữ liệu Google Analytics">{refreshing?"Đang cập nhật…":"↻ Cập nhật"}</button>
-    {data?.canManage&&data.status!=="not_connected"&&data.status!=="select_property"?<button type="button" className={styles.settingsButton} aria-expanded={showManagement} aria-controls="ga4-connection-settings" disabled={Boolean(action)} onClick={()=>showManagement?closeManagement():setManageOpen(true)}>{showManagement?"Đóng cài đặt":"Cài đặt kết nối"}</button>:null}
-   </div>
-  </header>
-
-  {callbackNotice?<div className={callbackCode==="connected"?styles.notice:styles.warning} role="status"><span>{callbackNotice}</span><button type="button" className={styles.dismiss} aria-label="Ẩn thông báo kết nối" onClick={()=>setCallbackCode("")}>×</button></div>:null}
-  {actionNotice?<p className={styles.notice} role="status">{actionNotice}</p>:null}
-  {reportError?<div className={styles.error} role="alert"><span>{reportError}{report?" Dữ liệu bên dưới được giữ ở lần cập nhật gần nhất.":""}</span><button type="button" className={styles.secondary} disabled={refreshing||Boolean(action)} onClick={()=>setRefreshKey(value=>value+1)}>Thử lại</button></div>:null}
-
-  <div className={styles.content}>
-   <div className={styles.mapColumn}>
-    <div className={styles.mapSummary}>
-     <div className={styles.activeMetric}><span>Người dùng hoạt động</span><strong>{report?formatNumber.format(report.totalActiveUsers):"—"}</strong><small>Trong 30 phút qua</small></div>
-     <div className={styles.mapStatus}><span className={report&&!reportError?styles.connected:styles.waiting}><i aria-hidden="true"/>{report?reportError?"Dữ liệu trước đó":"Đã kết nối":loading?"Đang tải":data?.status==="not_connected"?"Chưa kết nối":"Chờ dữ liệu"}</span><small>{report?"Cập nhật "+updatedTime(report.updatedAt):"Nguồn dữ liệu Google Analytics"}</small></div>
-    </div>
-    <div className={styles.mapCanvas}>
-     <svg viewBox="0 0 800 420" role="group" aria-labelledby={mapTitleId} className={styles.map}>
-      <title id={mapTitleId}>Bản đồ quốc gia có người dùng hoạt động trong 30 phút qua</title>
-      <g className={styles.grid} aria-hidden="true"><path d="M0 105H800M0 210H800M0 315H800M200 0V420M400 0V420M600 0V420"/></g>
-      <g>{COUNTRY_SHAPES.map((shape,index)=>{
-       const row=countryIndex.get(shape.id),interactive=Boolean(report&&row&&row.activeUsers>0);
-       return <path key={shape.id+"-"+index} d={shape.path} style={interactive&&row?{fill:heatColor(row.activeUsers,maxUsers)}:undefined} className={`${styles.country} ${interactive?styles.activeCountry:""} ${selectedCountry===shape.id?styles.selectedCountry:""}`} role={interactive?"button":undefined} tabIndex={interactive?0:undefined} aria-hidden={!interactive} aria-label={interactive&&row?`${countryLabel(row)}: ${formatNumber.format(row.activeUsers)} người dùng. Xem thành phố.`:undefined} aria-pressed={interactive?selectedCountry===shape.id:undefined} onMouseEnter={()=>interactive&&setHoverCountry(shape.id)} onMouseLeave={()=>setHoverCountry("")} onFocus={()=>interactive&&setHoverCountry(shape.id)} onBlur={()=>setHoverCountry("")} onClick={()=>interactive&&selectCountry(shape.id)} onKeyDown={event=>{if(interactive&&(event.key==="Enter"||event.key===" ")){event.preventDefault();selectCountry(shape.id);}}}>{row?<title>{countryLabel(row)} · {formatNumber.format(row.activeUsers)} người dùng</title>:null}</path>;
-      })}</g>
-     </svg>
-     {loading&&!data?<div className={styles.mapOverlay} role="status"><span className={styles.loadingMark} aria-hidden="true"/><strong>Đang tải dữ liệu truy cập…</strong></div>:unavailable?<div className={styles.mapOverlay}><div className={styles.emptyIcon} aria-hidden="true">⌖</div><h3>{emptyTitle}</h3><p>{emptyDescription}</p>{data?.status==="not_connected"&&data.canManage?(data.connectAvailable?<form method="post" action="/api/admin/google-analytics/connect"><button type="submit" className={styles.primary}>Kết nối Google Analytics</button></form>:<p className={styles.setupHint}>Chưa sẵn sàng kết nối. Quản trị viên cần hoàn tất cấu hình kết nối Google trên hệ thống.</p>):null}</div>:report?.totalActiveUsers===0?<div className={styles.zeroState}><strong>Chưa ghi nhận người dùng trong 30 phút qua</strong><span>Bản đồ sẽ cập nhật khi Google Analytics ghi nhận truy cập mới.</span></div>:null}
-     {report&&report.totalActiveUsers>0?<div className={styles.mapSelection} aria-live="polite">{highlighted?<><strong>{countryLabel(highlighted)}</strong><span>{formatNumber.format(highlighted.activeUsers)} người dùng</span></>:<span>Chọn một quốc gia để xem các thành phố.</span>}</div>:null}
-    </div>
-    <div className={styles.mapLegend}><span>{report?"Mức độ truy cập":"Bản đồ sẽ hiển thị sau khi có dữ liệu"}</span>{report?<><span>Ít</span><i aria-hidden="true"/><span>Nhiều</span></>:null}</div>
-   </div>
-
-   <div className={styles.ranking}>
-    <div className={styles.rankingHeader}><h3 ref={rankingHeading} tabIndex={-1}>Khu vực truy cập</h3><div className={styles.modeButtons} aria-label="Chọn cấp khu vực"><button type="button" aria-pressed={mode==="countries"} onClick={()=>changeMode("countries")}>Quốc gia</button><button type="button" aria-pressed={mode==="cities"} onClick={()=>changeMode("cities")}>Thành phố</button></div></div>
-    {selectedCountry&&mode==="cities"?<div className={styles.countryFilter}><span>{selected?countryLabel(selected):"Khu vực đã chọn"}</span><button type="button" aria-label="Bỏ lọc quốc gia" onClick={()=>{setSelectedCountry("");setVisibleRows(20);}}>×</button></div>:null}
-    <div className={styles.rankingScroll} tabIndex={0} role="region" aria-label={mode==="countries"?"Số người dùng theo quốc gia":"Số người dùng theo thành phố"}>
-     <table><thead><tr><th scope="col">{mode==="countries"?"Quốc gia":"Thành phố"}</th><th scope="col">Người dùng</th></tr></thead><tbody>{report&&placeRows.length?placeRows.slice(0,visibleRows).map((row,index)=>{
-      const isCity=typeof row.city==="string",name=isCity?placeLabel(row.city||""):countryLabel(row);
-      return <tr key={`${countryKey(row.countryId)}-${isCity?row.city:"country"}-${index}`} className={!isCity&&countryKey(row.countryId)===selectedCountry?styles.selectedRow:undefined}><th scope="row"><div className={styles.placeName}><span className={styles.rank}>{index+1}</span><div>{isCity?<strong>{name}</strong>:<button type="button" onClick={()=>selectCountry(countryKey(row.countryId))}>{name}<span className={styles.srOnly}> — xem các thành phố</span></button>}{isCity?<small>{countryLabel(row)}</small>:null}</div></div></th><td>{formatNumber.format(row.activeUsers)}</td></tr>;
-     }):<tr><td colSpan={2} className={styles.tableEmpty}>{loading&&!data?"Đang tải…":!report?"Chưa có dữ liệu để hiển thị.":report.totalActiveUsers===0?"Chưa ghi nhận truy cập trong khoảng thời gian này.":selectedCountry&&mode==="cities"?"Chưa có dữ liệu thành phố của khu vực này.":"Chưa có thông tin vị trí từ Google Analytics."}</td></tr>}</tbody></table>
-    </div>
-    {report&&placeRows.length>visibleRows?<button type="button" className={styles.moreButton} onClick={()=>setVisibleRows(value=>value+20)}>Xem thêm · {visibleRows}/{placeRows.length} khu vực</button>:null}
-    <p className={styles.rankingNote}>Vị trí gần đúng theo khu vực, không phải địa chỉ chính xác của từng người.</p>
-   </div>
+ return <section ref={panelRef} className={styles.mapSection} aria-labelledby={mapTitleId} aria-busy={loading}>
+  <h2 id={mapTitleId} className={styles.srOnly}>Khách truy cập theo khu vực</h2>
+  <p id={mapDescriptionId} className={styles.srOnly}>Google Analytics 4. Người dùng hoạt động trong 30 phút qua. Mỗi chấm biểu thị một quốc gia có truy cập, không phải vị trí chính xác của từng người.</p>
+  <p className={styles.srOnly} role="status">{statusText}{report?.limited?" Một số khu vực vượt quá giới hạn báo cáo.":""}{unmappedCountries?" Có lượt truy cập chưa thể đặt lên bản đồ.":""}</p>
+  <div ref={canvasRef} className={styles.canvas} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
+   <svg viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet" role="group" aria-labelledby={mapTitleId} aria-describedby={mapDescriptionId} className={styles.map} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
+    <g aria-hidden="true" className={styles.land}>{COUNTRY_SHAPES.map((shape,index)=><path key={shape.id+"-"+index} d={shape.path}/>)}</g>
+    {activePoints.map(point=>{
+     const country=countryIndex.get(point.id)!;
+     // Keep adjacent countries from intercepting one another's pointer targets.
+     const hitRadius=Math.min(20,...activePoints.filter(other=>other.id!==point.id).map(other=>Math.hypot(other.x-point.x,other.y-point.y)/2));
+     const label=countryLabel(country)+": "+formatNumber.format(country.activeUsers)+" người dùng hoạt động trong 30 phút qua. Tổng hợp theo quốc gia.";
+     return <g key={point.id} transform={`translate(${point.x} ${point.y})`} role="button" tabIndex={0} aria-label={label} aria-pressed={selectedCountry===point.id} aria-describedby={highlightedId===point.id?tooltipId:undefined} className={`${styles.marker} ${highlightedId===point.id?styles.markerActive:""}`} onMouseEnter={()=>setHoverCountry(point.id)} onMouseLeave={()=>setHoverCountry("")} onFocus={()=>setFocusedCountry(point.id)} onBlur={()=>setFocusedCountry("")} onClick={()=>setSelectedCountry(current=>current===point.id?"":point.id)} onKeyDown={event=>{
+      if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedCountry(current=>current===point.id?"":point.id);}
+      if(event.key==="Escape"){setSelectedCountry("");setHoverCountry("");setFocusedCountry("");}
+     }}>
+      <circle className={styles.hitArea} r={hitRadius}/>
+      <circle className={styles.glow} r="12"/>
+      <circle className={styles.pulse} r="8"/>
+      <circle className={styles.focusRing} r="9"/>
+      <circle className={styles.dot} r="3.5"/>
+     </g>;
+    })}
+   </svg>
+   {highlighted&&highlightedPoint&&mapSize.width>0?<div id={tooltipId} role="tooltip" className={`${styles.tooltip} ${tooltipBelow?styles.tooltipBelow:""}`} style={{left:Math.max(108,Math.min(mapSize.width-108,pointX)),top:pointY+(tooltipBelow?17:-17)}}><strong>{countryLabel(highlighted)}</strong><span>{formatNumber.format(highlighted.activeUsers)} người dùng · 30 phút qua</span><small>Tổng hợp theo quốc gia{reportError&&report?" · Dữ liệu lúc "+updatedTime(report.updatedAt):""}</small></div>:null}
   </div>
+  <button type="button" className={`${styles.mapControl} ${needsAttention?styles.controlAttention:""}`} title={controlLabel} aria-label={controlLabel} aria-haspopup="dialog" aria-expanded={manageOpen} aria-controls={settingsId} onClick={openManagement}>
+   {data?.canManage?<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9.5 3-.7 2.1-1.4.8-2.2-.4-2.5 4.3 1.5 1.7v1.6l-1.5 1.7 2.5 4.3 2.2-.4 1.4.8.7 2.1h5l.7-2.1 1.4-.8 2.2.4 2.5-4.3-1.5-1.7v-1.6l1.5-1.7-2.5-4.3-2.2.4-1.4-.8-.7-2.1h-5Z"/><circle cx="12" cy="12" r="3"/></svg>:<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 10.5v6M12 7v.5"/></svg>}
+  </button>
 
-  {report?.limited?<p className={styles.warning} role="status">Google Analytics trả về nhiều khu vực hơn giới hạn hiển thị. Tổng người dùng được lấy riêng từ báo cáo tổng.</p>:null}
-  {data?.property?<div className={styles.propertySummary}><span><strong>{data.property.name}</strong> · {data.property.streamName}</span><span>{data.property.siteUrl}</span></div>:null}
+  <dialog ref={dialogRef} id={settingsId} className={styles.settings} aria-labelledby={settingsHeadingId} onCancel={event=>{event.preventDefault();closeManagement();}} onClose={()=>{setManageOpen(false);setConfirmDisconnect(false);}} onClick={event=>{if(event.target===event.currentTarget){const bounds=event.currentTarget.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)closeManagement();}}}>
+   <div className={styles.settingsHeading}><div><h3 id={settingsHeadingId}>Google Analytics 4</h3><p>Người dùng hoạt động trong 30 phút qua</p></div><button type="button" className={styles.closeButton} aria-label="Đóng cài đặt bản đồ" onClick={closeManagement} autoFocus>×</button></div>
+   <p className={styles.statusDetail}>{statusText}</p>
+   {callbackNotice?<div className={callbackError?styles.warning:styles.notice} role="status"><span>{callbackNotice}</span><button type="button" className={styles.dismiss} aria-label="Ẩn thông báo kết nối" onClick={()=>setCallbackCode("")}>×</button></div>:null}
+   {actionNotice?<p className={styles.notice} role="status">{actionNotice}</p>:null}
+   {reportError?<p className={styles.error} role="alert">{reportError}{report?" Các chấm đang hiển thị dữ liệu của lần cập nhật trước.":""}</p>:null}
+   {report?<p className={styles.explanation}>Mỗi chấm đại diện cho một quốc gia có truy cập. Đây là vị trí tổng hợp gần đúng, không phải địa chỉ chính xác của từng người. Số liệu có thể cập nhật chậm và tự làm mới mỗi phút khi xem bản đồ.</p>:null}
+   {report?.limited?<p className={styles.warning}>Google Analytics trả về nhiều khu vực hơn giới hạn của báo cáo; bản đồ có thể chưa hiển thị đầy đủ.</p>:null}
+   {unmappedCountries?<p className={styles.explanation}>Một số lượt truy cập chưa xác định được quốc gia hoặc chưa có điểm tương ứng trên bản đồ. Các lượt này không được đặt chấm.</p>:null}
+   <button type="button" className={styles.textButton} onClick={()=>setRefreshKey(value=>value+1)} disabled={refreshing||Boolean(action)}>{refreshing?"Đang cập nhật…":"↻ Cập nhật dữ liệu"}</button>
 
-  {showManagement?<section id="ga4-connection-settings" className={styles.settings} aria-labelledby="ga4-settings-heading">
-   <div className={styles.settingsHeading}><div><h3 id="ga4-settings-heading">Kết nối Google Analytics</h3><p>Chọn tài sản và luồng dữ liệu thuộc iextra.net.</p></div>{data?.status!=="select_property"?<button type="button" className={styles.settingsButton} onClick={closeManagement} disabled={Boolean(action)}>Đóng</button>:null}</div>
-   {propertiesError||streamsError?<div className={styles.error} role="alert"><span>{propertiesError||streamsError}</span><button type="button" className={styles.secondary} onClick={()=>setOptionsRefresh(value=>value+1)} disabled={propertiesLoading||streamsLoading}>Tải lại danh sách</button></div>:null}
-   <form onSubmit={save} className={styles.configurationForm}>
-    <label>Tài sản Google Analytics<select value={propertyDraft} disabled={propertiesLoading||Boolean(action)} onChange={event=>{setPropertyDraft(event.target.value);setStreamDraft("");setActionError("");}}><option value="">{propertiesLoading?"Đang tải tài sản…":"Chọn tài sản"}</option>{properties.map(property=><option key={property.id} value={property.id}>{property.name}{property.accountName?" · "+property.accountName:""}</option>)}</select></label>
-    <label>Luồng dữ liệu website<select value={streamDraft} disabled={!propertyDraft||streamsLoading||Boolean(action)} onChange={event=>{setStreamDraft(event.target.value);setActionError("");}}><option value="">{streamsLoading?"Đang tải luồng dữ liệu…":"Chọn luồng iextra.net"}</option>{streams.map(stream=><option key={stream.id} value={stream.id} disabled={!stream.compatible}>{stream.name} · {stream.siteUrl||"Không có địa chỉ web"}{!stream.compatible?" (không thuộc iextra.net)":""}</option>)}</select></label>
-    <button type="submit" className={styles.primary} disabled={!canSave}>{action==="save"?"Đang lưu…":"Lưu nguồn dữ liệu"}</button>
-   </form>
-   {!propertiesLoading&&!propertiesError&&properties.length===0?<p className={styles.setupHint}>Tài khoản Google này chưa có tài sản Analytics mà bạn được phép xem. <a href={GOOGLE_ANALYTICS_URL} target="_blank" rel="noreferrer noopener">Mở Google Analytics</a> để tạo hoặc kiểm tra quyền truy cập, rồi tải lại danh sách.</p>:null}
-   {propertyDraft&&!streamsLoading&&!streamsError&&streams.length>0&&!streams.some(stream=>stream.compatible)?<p className={styles.setupHint}>Tài sản này chưa có luồng dữ liệu cho iextra.net. Chọn tài sản khác hoặc <a href={GOOGLE_ANALYTICS_URL} target="_blank" rel="noreferrer noopener">kiểm tra trong Google Analytics</a>.</p>:null}
-   {propertyDraft&&!streamsLoading&&!streamsError&&streams.length===0?<p className={styles.setupHint}>Chưa có luồng dữ liệu website trong tài sản này. <a href={GOOGLE_ANALYTICS_URL} target="_blank" rel="noreferrer noopener">Mở Google Analytics</a> để kiểm tra hoặc tạo luồng cho iextra.net.</p>:null}
-   {actionError?<p className={styles.error} role="alert">{actionError}</p>:null}
-   <div className={styles.connectionActions}>{data?.connectAvailable?<form method="post" action="/api/admin/google-analytics/connect"><button type="submit" className={styles.secondary} disabled={Boolean(action)}>Đổi / kết nối lại tài khoản Google</button></form>:null}<button type="button" className={styles.disconnectButton} disabled={Boolean(action)} onClick={()=>setConfirmDisconnect(true)}>Ngắt kết nối</button></div>
-   {confirmDisconnect?<div className={styles.confirmation} role="group" aria-label="Xác nhận ngắt kết nối Google Analytics"><div><strong>Ngắt kết nối Google Analytics khỏi Admin?</strong><p>Dữ liệu trong tài khoản Google Analytics vẫn được giữ nguyên.</p></div><div><button type="button" className={styles.secondary} disabled={Boolean(action)} onClick={()=>setConfirmDisconnect(false)}>Giữ kết nối</button><button type="button" className={styles.danger} disabled={Boolean(action)} onClick={()=>void updateConnection("disconnect")}>{action==="disconnect"?"Đang ngắt…":"Xác nhận ngắt kết nối"}</button></div></div>:null}
-  </section>:null}
-  <footer className={styles.footer}><span>Số liệu do Google Analytics ghi nhận; có thể cập nhật chậm so với truy cập thực tế.</span><span>Tự cập nhật mỗi phút khi xem báo cáo</span></footer>
+   {data?.status==="not_connected"?<div className={styles.connectionStart}>{data.canManage?(data.connectAvailable?<><p>Kết nối tài khoản Google có quyền xem dữ liệu của iextra.net.</p><form method="post" action="/api/admin/google-analytics/connect"><button type="submit" className={styles.primary}>Kết nối Google Analytics</button></form></>:<p>Chưa sẵn sàng kết nối. Quản trị viên cần hoàn tất cấu hình Google OAuth trên hệ thống.</p>):<p>Chủ quản trị cần kết nối Google Analytics để hiển thị dữ liệu truy cập.</p>}</div>:null}
+   {data?.status==="select_property"&&!data.canManage?<p className={styles.explanation}>Chủ quản trị cần chọn nguồn dữ liệu của iextra.net để hoàn tất kết nối.</p>:null}
+   {showManagement?<div className={styles.management}>
+    <p className={styles.explanation}>Chọn tài sản và luồng dữ liệu thuộc iextra.net.</p>
+    {propertiesError||streamsError?<div className={styles.error} role="alert"><span>{propertiesError||streamsError}</span><button type="button" className={styles.textButton} onClick={()=>setOptionsRefresh(value=>value+1)} disabled={propertiesLoading||streamsLoading}>Tải lại danh sách</button></div>:null}
+    <form onSubmit={save} className={styles.configurationForm}>
+     <label>Tài sản Google Analytics<select value={propertyDraft} disabled={propertiesLoading||Boolean(action)} onChange={event=>{setPropertyDraft(event.target.value);setStreamDraft("");setActionError("");}}><option value="">{propertiesLoading?"Đang tải tài sản…":"Chọn tài sản"}</option>{properties.map(property=><option key={property.id} value={property.id}>{property.name}{property.accountName?" · "+property.accountName:""}</option>)}</select></label>
+     <label>Luồng dữ liệu website<select value={streamDraft} disabled={!propertyDraft||streamsLoading||Boolean(action)} onChange={event=>{setStreamDraft(event.target.value);setActionError("");}}><option value="">{streamsLoading?"Đang tải luồng dữ liệu…":"Chọn luồng iextra.net"}</option>{streams.map(stream=><option key={stream.id} value={stream.id} disabled={!stream.compatible}>{stream.name} · {stream.siteUrl||"Không có địa chỉ web"}{!stream.compatible?" (không thuộc iextra.net)":""}</option>)}</select></label>
+     <button type="submit" className={styles.primary} disabled={!canSave}>{action==="save"?"Đang lưu…":"Lưu nguồn dữ liệu"}</button>
+    </form>
+    {!propertiesLoading&&!propertiesError&&properties.length===0?<p className={styles.setupHint}>Tài khoản này chưa có tài sản Analytics mà bạn được phép xem. <a href={GOOGLE_ANALYTICS_URL} target="_blank" rel="noreferrer noopener">Mở Google Analytics</a> để tạo hoặc kiểm tra quyền truy cập, rồi tải lại danh sách.</p>:null}
+    {propertyDraft&&!streamsLoading&&!streamsError&&streams.length>0&&!streams.some(stream=>stream.compatible)?<p className={styles.setupHint}>Tài sản này chưa có luồng dữ liệu cho iextra.net. Chọn tài sản khác hoặc <a href={GOOGLE_ANALYTICS_URL} target="_blank" rel="noreferrer noopener">kiểm tra trong Google Analytics</a>.</p>:null}
+    {propertyDraft&&!streamsLoading&&!streamsError&&streams.length===0?<p className={styles.setupHint}>Chưa có luồng dữ liệu website trong tài sản này. <a href={GOOGLE_ANALYTICS_URL} target="_blank" rel="noreferrer noopener">Mở Google Analytics</a> để kiểm tra hoặc tạo luồng cho iextra.net.</p>:null}
+    {actionError?<p className={styles.error} role="alert">{actionError}</p>:null}
+    <div className={styles.connectionActions}>{data?.connectAvailable?<form method="post" action="/api/admin/google-analytics/connect"><button type="submit" className={styles.secondary} disabled={Boolean(action)}>Kết nối lại tài khoản Google</button></form>:null}<button type="button" className={styles.disconnectButton} disabled={Boolean(action)} onClick={()=>setConfirmDisconnect(true)}>Ngắt kết nối</button></div>
+    {confirmDisconnect?<div className={styles.confirmation} role="group" aria-label="Xác nhận ngắt kết nối Google Analytics"><strong>Ngắt kết nối khỏi Admin?</strong><p>Dữ liệu trong tài khoản Google Analytics vẫn được giữ nguyên.</p><div><button type="button" className={styles.secondary} disabled={Boolean(action)} onClick={()=>setConfirmDisconnect(false)}>Giữ kết nối</button><button type="button" className={styles.danger} disabled={Boolean(action)} onClick={()=>void updateConnection("disconnect")}>{action==="disconnect"?"Đang ngắt…":"Xác nhận ngắt"}</button></div></div>:null}
+   </div>:null}
+  </dialog>
  </section>;
 }
