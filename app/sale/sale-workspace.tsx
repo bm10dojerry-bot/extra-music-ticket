@@ -2,12 +2,14 @@
 import {useEffect,useState} from "react";
 import SeatBooking from "./seat-booking";
 import SupportInbox from "../support-inbox";
+import {useLiveSalePresence} from "../live-presence";
 import {saleCommissionRate,saleCommissionAmount,type SaleCommissionSettings} from "../../lib/sale-commission";
 type ShowOption={id:string;artist:string;date:string;time:string;venue:string;status:string;prices?:Record<string,number|null>};
 type Lead={id:string;show_id:string;customer_name:string;customer_phone:string;note:string;status:string;status_confirmed:boolean;created_at:string};
 type PaidCustomer={code:string;show_id:string;seats:string[];buyer_name:string;buyer_phone:string;buyer_email:string;amount_vnd:number;paid_at:string};
 type Report={commissionSettings:SaleCommissionSettings;totals:{orders:number;tickets:number;commissionTickets:number;revenue:number};rows:{order_code:string;event_name:string;seats:string[];amount_vnd:number;paid_at:string}[]};
 export default function SaleWorkspace({name}:{name:string}){
+ useLiveSalePresence();
  const [paidCustomersList,setPaidCustomersList]=useState<PaidCustomer[]>([]),[draftStatuses,setDraftStatuses]=useState<Record<string,string>>({}),[savingId,setSavingId]=useState(""),[shows,setShows]=useState<ShowOption[]>([]),[leads,setLeads]=useState<Lead[]>([]),[report,setReport]=useState<Report|null>(null),[error,setError]=useState("");
  async function load(){try{const [a,b,c]=await Promise.all([fetch("/api/staff/sale-requests",{cache:"no-store"}),fetch("/api/staff/reports",{cache:"no-store"}),fetch("/api/staff/sale-shows",{cache:"no-store"})]);const d=await a.json(),r=await b.json(),showData=await c.json();if(!a.ok)throw Error(d.error);if(!b.ok)throw Error(r.error);if(!c.ok)throw Error(showData.error);setShows(showData.shows||[]);setLeads(d.requests||[]);setPaidCustomersList(d.paidCustomers||[]);setReport(r)}catch(e){setError(e instanceof Error?e.message:"Không tải được dữ liệu")}}
  useEffect(()=>{void load()},[]);
