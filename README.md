@@ -79,7 +79,8 @@ history. The feature computes reportable commission and does not issue payouts.
 
 ## Sale workspace and customer ticket links
 
-The Sale portal has a left-hand desktop menu with **Home**, **Bán vé**,
+The Sale portal fills the viewport width and has a left-hand desktop menu with
+**Home**, **Bán vé**,
 **Hoa hồng**, and **Chăm sóc khách hàng**, with compact navigation on mobile.
 Visited views preserve their booking and conversation drafts while switching
 sections. Inactive seat-inventory and inbox polling pauses; a pending payment
