@@ -94,3 +94,23 @@ ownership. Responses are not cached and never include the raw payment access
 token or check-in secrets. Clipboard failures reveal a selectable link for manual
 copying. Requesting or copying a link does not issue tickets or send another email;
 the existing payment email workflow remains responsible for email delivery.
+
+## Admin workspace
+
+Admin uses the Sale portal's full-width layout, dark styling and left desktop
+navigation. The sidebar groups all 22 sections and supports Vietnamese searches
+with or without accents. On mobile, **Home**, **Vé**, **Sale**, **Chat** and **Thêm**
+remain at the bottom of the screen. Show managers see **Show** in place of the
+admin-only Sale report. **Thêm** opens a searchable native dialog containing the
+complete menu; dismissing it restores scrolling and keyboard focus.
+
+Overview keeps the transparent GA4 map first. Responsive content styles stack
+editors and filters, constrain long select values, and keep wide data tables
+scrolling inside their panels. Navigation preserves dashboard-owned form state
+and mounts only the active feature, so existing polling cleanup remains in place.
+The current section is recorded at `/admin?section=…` without discarding unrelated
+query parameters. Backend permissions, reports and payment actions are unchanged.
+
+Synthetic navigation checks: `node --test tests/admin-workspace-ui.test.cjs`.
+They use the optional matching React renderer described in
+`tests/sale-workspace-ui.test.cjs`; no production data or write actions are used.

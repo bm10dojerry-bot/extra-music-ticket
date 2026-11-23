@@ -1,0 +1,337 @@
+.content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  color: #d5ddeb;
+}
+
+.content > *,
+.content :is(section, article, form, label) {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.content :is(h2, h3, h4, p, label, strong, small) {
+  overflow-wrap: anywhere;
+}
+
+.content :is(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.content :is(input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  color-scheme: dark;
+}
+
+.content :is(input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), select) {
+  min-height: 44px;
+}
+
+.content :is(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #ffc996;
+  outline-offset: 3px;
+}
+
+.content :global(.admin-help) {
+  color: #96a4ba;
+  line-height: 1.7;
+}
+
+.content :global(.notice) {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.content :global(.admin-report-panel),
+.content :global(.admin-show-list),
+.content :global(.admin-show-editor),
+.content :global(.admin-artist-editor),
+.content :global(.admin-stage-card),
+.content :global(.admin-banner-card),
+.content :global(.admin-landing-ads-selector),
+.content :global(.ticket-admin-panel),
+.content :global(.staff-panel),
+.content :global(.staff-cards) article {
+  min-width: 0;
+  background: #151c29;
+  border-color: #333c4e;
+}
+
+.content :global(.admin-kpi-grid) article,
+.content :global(.admin-financial-kpis) article {
+  min-width: 0;
+  background: #171e2c;
+  border-color: #333c4e;
+}
+
+.content :global(.admin-kpi-grid) article:nth-child(3) {
+  background: linear-gradient(115deg, #301c28, #191b29);
+  border-color: #613447;
+}
+
+.content :global(.admin-report-panel) h3,
+.content :global(.admin-show-editor) h2,
+.content :global(.staff-panel) h2 {
+  color: #e9edf5;
+  line-height: 1.45;
+}
+
+.content :global(.admin-show-layout) {
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+}
+
+.content :global(.admin-show-layout) > *,
+.content :global(.admin-artist-layout) > *,
+.content :global(.admin-artist-editor-grid) > *,
+.content :global(.admin-fields) > *,
+.content :global(.admin-price-grid) > *,
+.content :global(.staff-filters) > *,
+.content :global(.extra-admin-detail-head) > *,
+.content :global(.extra-admin-detail-kpis) > * {
+  min-width: 0;
+}
+
+.content :global(.admin-stage-grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(275px, 100%), 1fr));
+}
+
+.content :global(.admin-media-artist-cards) {
+  grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));
+}
+
+.content :global(.admin-media-venue-cards) {
+  grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
+}
+
+.content :global(.admin-media-heading),
+.content :global(.admin-stage-toolbar),
+.content :global(.admin-overview-heading),
+.content :global(.admin-media-venue-title),
+.content :global(.admin-list-top) {
+  flex-wrap: wrap;
+}
+
+.content :global(.admin-media-heading) h2,
+.content :global(.admin-stage-toolbar) h2,
+.content :global(.admin-overview-heading) h2 {
+  font-size: clamp(20px, 1.8vw, 26px);
+  line-height: 1.4;
+}
+
+.content :global(.staff-body) {
+  max-width: none;
+  min-width: 0;
+}
+
+.content :global(.staff-filters) label {
+  flex: 1 1 180px;
+}
+
+.content :global(.staff-filters) :is(input, select),
+.content :global(.extra-admin-detail-head) select {
+  width: 100%;
+  min-width: 0;
+}
+
+.content :global(.extra-admin-detail-head) label {
+  flex: 0 1 340px;
+}
+
+.content :global(.admin-report-table-wrap),
+.content :global(.staff-table-wrap),
+.content :global(.ticket-admin-panel) > div {
+  min-width: 0;
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: #45506a #141b27;
+}
+
+.content :global(.ticket-admin-panel) table {
+  min-width: 560px;
+}
+
+.content :global(.ticket-admin-panel):last-child table {
+  min-width: 830px;
+}
+
+.content :global(.admin-report-table-wrap) th,
+.content :global(.staff-table-wrap) th,
+.content :global(.ticket-admin-panel) th {
+  background: #1b2535;
+  color: #a8b6cb;
+}
+
+.content :global(.ticket-admin-kpi) strong,
+.content :global(.extra-admin-detail-kpis) strong,
+.content :global(.staff-cards) strong,
+.content :global(.admin-financial-kpis) strong {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.content :global(.admin-report-bar) > div:first-child {
+  flex-wrap: wrap;
+}
+
+.content :global(.admin-report-bar) strong {
+  white-space: normal;
+}
+
+.content :global(.admin-save),
+.content :global(.admin-refresh),
+.content :global(.admin-list-top) button,
+.content :global(.admin-stage-actions) button,
+.content :global(.admin-overview-heading) button,
+.content :global(.admin-media-switch) button,
+.content :global(.ticket-admin-filters) button,
+.content :global(.staff-filters) button,
+.content :global(.staff-create) button,
+.content :global(.admin-upload),
+.content :global(.admin-media-view),
+.content :global(.admin-media-replace) {
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1180px) {
+  .content :global(.admin-show-layout),
+  .content :global(.admin-artist-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content :global(.admin-show-list),
+  .content :global(.admin-artist-sidebar) {
+    max-height: 330px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .content :global(.admin-report-panels) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content :global(.extra-admin-detail-head) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .content :global(.extra-admin-detail-head) label {
+    flex: initial;
+    max-width: 100%;
+  }
+
+  .content :global(.admin-price-grid),
+  .content :global(.admin-financial-fields),
+  .content :global(.staff-cards) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .content :global(.admin-kpi-grid),
+  .content :global(.extra-admin-detail-kpis) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .content :global(.extra-admin-detail-kpis) > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .content :global(.admin-kpi-grid) article {
+    padding: 17px 13px;
+    border-radius: 12px;
+  }
+
+  .content :global(.admin-kpi-grid) article span {
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .content :global(.admin-kpi-grid) article strong {
+    font-size: clamp(20px, 5vw, 27px);
+    margin: 12px 0 9px;
+  }
+
+  .content :global(.admin-kpi-grid) article small {
+    font-size: 10px;
+    line-height: 1.6;
+  }
+
+  .content :global(.admin-report-panel),
+  .content :global(.admin-show-list),
+  .content :global(.admin-show-editor),
+  .content :global(.admin-artist-editor),
+  .content :global(.admin-stage-form),
+  .content :global(.admin-banner-card),
+  .content :global(.admin-landing-ads-selector),
+  .content :global(.staff-panel) {
+    padding: 17px;
+    border-radius: 12px;
+  }
+
+  .content :global(.admin-show-list),
+  .content :global(.admin-artist-sidebar) {
+    max-height: 280px;
+  }
+
+  .content :global(.admin-show-list) :global(.admin-refresh) {
+    margin-bottom: 8px;
+  }
+
+  .content :global(.admin-report-panel) > div:has(> :global(.admin-save)) {
+    flex-wrap: wrap;
+  }
+
+  .content :global(.admin-artist-editor-grid),
+  .content :global(.admin-fields),
+  .content :global(.admin-stage-fields),
+  .content :global(.admin-financial-fields),
+  .content :global(.admin-financial-kpis),
+  .content :global(.staff-create) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content :global(.admin-artist-manager),
+  .content :global(.admin-media-manager) {
+    margin-top: 0;
+  }
+
+  .content :global(.admin-media-heading) p {
+    font-size: 12px;
+  }
+
+  .content :global(.staff-filters) label {
+    flex-basis: 100%;
+  }
+
+  .content :global(.staff-filters) button,
+  .content :global(.admin-stage-actions) button {
+    flex: 1 1 140px;
+  }
+
+  .content :global(.ticket-admin-kpi) {
+    padding: 16px 12px !important;
+  }
+
+  .content :global(.ticket-admin-kpi):nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .content :global(.ticket-admin-filters) {
+    padding: 14px;
+  }
+
+  .content :is(input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .content :global(.admin-media-artist-cards),
+  .content :global(.staff-cards) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
