@@ -3,6 +3,7 @@ import {randomBytes} from "node:crypto";
 import {loadShows} from "../../../../../lib/show-data";
 import {seatsFor,venues,type VenueId} from "../../../../../lib/venues";
 import {requireRole,staffDb} from "../../../../../lib/staff-auth";
+import {allocateSaleCommissionLines} from "../../../../../lib/sale-commission";
 export const runtime="nodejs";
 export async function POST(req:NextRequest){
  if(process.env.SEPAY_CHECKOUT_ENABLED!=="true")return NextResponse.json({error:"Thanh toán đang được cấu hình, chưa mở nhận tiền."},{status:503});
@@ -33,7 +34,8 @@ export async function POST(req:NextRequest){
  const allSeats=[...seats,...giftSeats];
  const code="EX"+randomBytes(8).toString("hex").toUpperCase(),token=randomBytes(24).toString("hex");
  try{
- const rows=await staffDb("rpc/extra_reserve_order",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:allSeats,p_amount:amount,p_name:name,p_phone:phone,p_email:email})}) as {order_code:string;expires_at:string}[];
+ const commissionLines=allocateSaleCommissionLines((seats as string[]).map(seat=>({seat,price:show.prices[valid.get(seat)! as "A"|"B"|"C"|"D"]!})),giftSeats as string[],amount);
+ const rows=await staffDb("rpc/extra_reserve_order_with_commission",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:allSeats,p_amount:amount,p_name:name,p_phone:phone,p_email:email,p_commission_lines:commissionLines})}) as {order_code:string;expires_at:string}[];
  if(!rows?.length)throw Error("Reservation failed");
  // Attribution is optional and must never prevent a successful seat reservation.
  if(body?.adsConsent===true&&body?.landingShowId===show.id){

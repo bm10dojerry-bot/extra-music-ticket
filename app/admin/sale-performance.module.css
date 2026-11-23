@@ -2,7 +2,7 @@
 .intro,.period,.panelHeader,.tableFooter,.pagination{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
 .eyebrow{margin:0 0 8px;color:#f3a7ad;font-size:11px;font-weight:800;letter-spacing:1.6px}
 .description{margin:0;color:#c2c4cb;font-size:14px;line-height:1.6}
-.page button,.page input,.page select{font:inherit}
+.page :where(button,input,select){font:inherit}
 .page button{cursor:pointer;transition:background .15s ease,border-color .15s ease}
 .page button:disabled{opacity:.55;cursor:default}
 .page button:focus-visible,.page input:focus-visible,.page select:focus-visible,.tableWrap:focus-visible{outline:2px solid #ffa5ae;outline-offset:3px}
@@ -40,7 +40,7 @@
 .tableControls .searchLabel{flex:2 1 220px}
 .tableControls input,.tableControls select{min-height:39px;padding:9px 11px;font-size:12px}
 .tableWrap{overflow:auto;max-height:610px;scrollbar-color:#4b4e5b #171922}
-.table{border-collapse:separate;border-spacing:0;width:100%;min-width:1020px;font-size:12px;text-align:left}
+.table{border-collapse:separate;border-spacing:0;width:100%;min-width:950px;font-size:12px;text-align:left}
 .table thead th{position:sticky;top:0;z-index:1;background:#1b1d27;border-top:1px solid #30333e;border-bottom:1px solid #393d4a;color:#bbc0cd;font-size:11px;font-weight:700;white-space:nowrap;padding:13px 15px}
 .table tbody td,.table tbody th{padding:16px 15px;border-bottom:1px solid #2b2e38;color:#dbdfe9;font-weight:400;vertical-align:middle}
 .table tbody tr:last-child td,.table tbody tr:last-child th{border-bottom:0}
@@ -80,3 +80,44 @@
 @media(max-width:1200px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric>strong{font-size:26px}.tableControls{width:100%}}
 @media(max-width:650px){.page{gap:14px}.filters{padding:14px}.filterFields{gap:10px}.filterFields label{flex-basis:calc(50% - 10px)}.filterFields .showFilter{flex-basis:100%}.filterFields>.primary{width:100%}.timezone{width:100%;margin:3px 0 0}.metrics{gap:9px}.metric{padding:16px 12px}.metric>strong{font-size:21px}.metric>small{font-size:10px}.panelHeader{padding:16px}.tableControls{gap:8px}.tableControls .searchLabel,.tableControls>label{flex-basis:100%}.tableFooter{padding:12px 15px}.intro{align-items:flex-start}.description{font-size:13px}.period{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.page button{transition:none}}
+.pendingCommission{display:block;font-size:10px;font-weight:500;color:#e1c290;line-height:1.6;margin-top:5px}
+.showBreakdown{padding:0 20px 22px}
+.showBreakdown>h3,.ordersHeading h3{font-size:15px;color:#dce4f0;margin:0 0 8px;line-height:1.5}
+.showBreakdown>p,.ordersHeading p{font-size:11px;color:#97a6b9;line-height:1.8;margin:0 0 16px}
+.showDetail{background:#151b24;border:1px solid #35404e;border-radius:9px;margin:10px 0;overflow:hidden}
+.showDetail>summary{display:grid;grid-template-columns:minmax(185px,1.5fr) repeat(3,minmax(90px,1fr)) 16px;align-items:center;gap:16px;list-style:none;cursor:pointer;padding:17px 16px}
+.showDetail>summary::-webkit-details-marker{display:none}
+.showDetail>summary:focus-visible,.issueDisclosure>summary:focus-visible{outline:2px solid #ffa5ae;outline-offset:-3px;border-radius:7px}
+.showDetail>summary:hover{background:#1b2430}
+.showDetail>summary>span:not(:first-child){text-align:right}
+.showDetail>summary strong{display:block;font-size:13px;color:#dce8f4;font-variant-numeric:tabular-nums;line-height:1.6}
+.showDetail>summary small{display:block;font-size:10px;font-weight:400;color:#95a6bb;line-height:1.6;margin-bottom:3px}
+.showDetail .showIdentity strong{font-size:13px;color:#ecf3fb}
+.showDetail .showIdentity small{margin:4px 0 0;overflow-wrap:anywhere}
+.showDetail .showCommission strong{color:#a5e1c8}
+.expandMark{color:#9eb2c9;font-size:19px;line-height:1;transition:transform .15s ease}
+.showDetail[open] .expandMark{transform:rotate(180deg)}
+.showDetailBody{border-top:1px solid #334252;padding:15px}
+.lifetimeNote,.policyNote,.pendingNote{font-size:11px;line-height:1.8;margin:0 0 13px;color:#9fb0c5}
+.lifetimeNote strong{color:#ccdeed;font-weight:600}
+.policyNote{color:#a4b9cd}
+.policyNote strong{font-weight:600;color:#bfd4e5}
+.pendingNote{color:#e0bf8b}
+.showDetailBody>.tableWrap{border:1px solid #334150;border-radius:7px;max-height:430px}
+.table.bandTable{min-width:660px}
+.bandTable thead th{font-size:10px;padding:11px 13px}
+.bandTable tbody td,.bandTable tbody th{font-size:11px;padding:12px 13px}
+.bandTable tbody th{white-space:nowrap}
+.detailEmpty{font-size:12px;line-height:1.8;padding:17px 0;color:#a2aec2}
+.ordersHeading{padding:18px 20px 3px;border-top:1px solid #303a48}
+.table.ordersTable{min-width:1100px}
+.issueDisclosure{margin-top:15px;background:#2a251d;border:1px solid #67543b;border-radius:8px;padding:12px 14px;font-size:11px;line-height:1.8;color:#decaab}
+.issueDisclosure>summary{cursor:pointer;font-weight:650;color:#e1cfb4}
+.issueDisclosure ul{list-style:none;padding:0;margin:14px 0 0}
+.issueDisclosure li{display:grid;grid-template-columns:minmax(130px,auto) 1fr;gap:12px;padding:9px 0;border-top:1px solid #514635}
+.issueDisclosure li code{font-size:10px;color:#f0d2b0;overflow-wrap:anywhere}
+.issueDisclosure li span{color:#d2c5b4;font-size:11px;line-height:1.8}
+.issueDisclosure>button{margin-top:12px;font-size:11px;padding:7px 11px}
+@media(max-width:1000px){.showDetail>summary{grid-template-columns:minmax(175px,1.6fr) repeat(3,minmax(85px,1fr)) 12px;gap:10px;padding:15px 12px}.showDetail>summary strong{font-size:12px}}
+@media(max-width:700px){.showBreakdown{padding:0 15px 17px}.showDetail>summary{grid-template-columns:repeat(3,minmax(0,1fr)) 14px;gap:12px}.showDetail>summary .showIdentity{grid-column:1/4}.showDetail>summary>.expandMark{grid-column:4;grid-row:1}.showDetail>summary>span:not(:first-child){text-align:left}.showDetail>summary>.showCommission{grid-column:3/5}.showDetail>summary small{font-size:9px}.showDetailBody{padding:12px}.ordersHeading{padding:16px 15px 3px}.issueDisclosure{padding:11px 12px}.issueDisclosure li{grid-template-columns:1fr;gap:3px}}
+@media(prefers-reduced-motion:reduce){.expandMark{transition:none}}

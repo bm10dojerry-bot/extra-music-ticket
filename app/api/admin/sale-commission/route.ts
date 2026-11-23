@@ -1,43 +1,30 @@
 import {NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb} from "../../../../lib/staff-auth";
-import {getSaleCommissionSettings} from "../../../../lib/sale-commission-db";
-import type {SaleCommissionSettings} from "../../../../lib/sale-commission";
+import {getSaleCommissionPolicy,saveSaleCommissionPolicy} from "../../../../lib/sale-commission-db";
+import {validateSaleCommissionTiers,type SaleCommissionTier} from "../../../../lib/sale-commission";
 export const dynamic="force-dynamic";
-const keys=["rate_1_10","rate_11_30","rate_31_50","rate_51_plus"] as const;
-const deny=()=>NextResponse.json({error:"Chỉ quản trị viên được điều chỉnh tỷ lệ thưởng Sale."},{status:403});
-
-export async function GET(){
- if(!await requireRole(["admin"]))return deny();
- try{return NextResponse.json({settings:await getSaleCommissionSettings()},{headers:{"Cache-Control":"no-store"}})}
- catch(e){console.error("[sale-commission:get]",e);return NextResponse.json({error:"Không tải được cấu hình thưởng Sale."},{status:503})}
+const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
+const showIdValid=(value:unknown):value is string=>typeof value==="string"&&/^[a-z0-9-]{3,100}$/.test(value);
+async function hasShow(showId:string){const rows=await staffDb("managed_shows?id=eq."+encodeURIComponent(showId)+"&select=id&limit=1");return Array.isArray(rows)&&rows.length===1;}
+export async function GET(req:NextRequest){
+ if(!await requireRole(["admin"]))return json({error:"Chỉ quản trị viên được xem cấu hình hoa hồng."},403);
+ const showId=req.nextUrl.searchParams.get("showId");if(!showIdValid(showId))return json({error:"Hãy chọn show cần xem hoa hồng."},400);
+ try{if(!await hasShow(showId))return json({error:"Show không tồn tại hoặc chưa được lưu."},404);return json({policy:await getSaleCommissionPolicy(showId)});}
+ catch{console.error("[sale-commission:get] Policy unavailable");return json({error:"Không tải được cấu hình hoa hồng của show."},503);}
 }
 export async function PATCH(req:NextRequest){
- const actor=await requireRole(["admin"]);if(!actor)return deny();
- if(!req.headers.get("content-type")?.includes("application/json"))return NextResponse.json({error:"Yêu cầu JSON hợp lệ."},{status:415});
+ const actor=await requireRole(["admin"]);if(!actor)return json({error:"Chỉ quản trị viên được điều chỉnh hoa hồng."},403);
+ if(req.headers.get("origin")!==req.nextUrl.origin)return json({error:"Yêu cầu cập nhật phải xuất phát từ trang Admin."},403);
+ if(!req.headers.get("content-type")?.includes("application/json"))return json({error:"Yêu cầu JSON hợp lệ."},415);
  let data:Record<string,unknown>;
- try{const body:unknown=await req.json();if(!body||typeof body!=="object"||Array.isArray(body))throw Error();data=body as Record<string,unknown>}
- catch{return NextResponse.json({error:"Dữ liệu không hợp lệ."},{status:400})}
- const change={} as SaleCommissionSettings;
- for(const key of keys){
-  const v=data[key];
-  if(typeof v!=="number"||!Number.isFinite(v)||v<0||v>100||Math.abs(v*100-Math.round(v*100))>0.000001)
-   return NextResponse.json({error:"Mỗi tỷ lệ phải là số từ 0 đến 100%, tối đa 2 chữ số thập phân."},{status:400});
-  change[key]=v;
- }
- if(typeof data.updated_at!=="string"||!data.updated_at||data.updated_at.length>64)
-  return NextResponse.json({error:"Thiếu phiên bản cấu hình. Hãy tải lại trang."},{status:400});
+ try{const body:unknown=await req.json();if(!body||typeof body!=="object"||Array.isArray(body))throw Error();data=body as Record<string,unknown>;}catch{return json({error:"Dữ liệu không hợp lệ."},400);}
+ if(!showIdValid(data.showId))return json({error:"Hãy chọn show cần thay đổi hoa hồng."},400);
+ const error=validateSaleCommissionTiers(data.tiers);if(error)return json({error},400);
+ if(data.version!==null&&(typeof data.version!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.version)))return json({error:"Thiếu phiên bản cấu hình hợp lệ. Hãy tải lại."},400);
  try{
-  const current=await getSaleCommissionSettings();
-  if(current.updated_at!==data.updated_at)return NextResponse.json({error:"Cấu hình đã được người khác cập nhật. Vui lòng tải lại trước khi lưu."},{status:409});
-  const updated=await staffDb("sale_commission_settings?id=eq.default&updated_at=eq."+encodeURIComponent(current.updated_at),{
-   method:"PATCH",headers:{"Prefer":"return=representation"},
-   body:JSON.stringify({...change,updated_at:new Date().toISOString(),updated_by:actor.display_name})
-  }) as Array<{id:string}>;
-  if(updated?.length!==1)return NextResponse.json({error:"Cấu hình thay đổi trong lúc lưu. Hãy tải lại."},{status:409});
-  const settings=await getSaleCommissionSettings();
-  return NextResponse.json({ok:true,settings},{headers:{"Cache-Control":"no-store"}});
- }catch(e){
-  console.error("[sale-commission:patch]",e);
-  return NextResponse.json({error:"Không lưu được bảng thưởng Sale. Vui lòng thử lại."},{status:503})
- }
+  if(!await hasShow(data.showId))return json({error:"Show không tồn tại hoặc chưa được lưu."},404);
+  const policy=await saveSaleCommissionPolicy(data.showId,(data.tiers as SaleCommissionTier[]).map(t=>({maxTickets:t.maxTickets,rate:t.rate})),data.version as string|null,actor.display_name.slice(0,200));
+  if(!policy)return json({error:"Cấu hình đã được cập nhật ở nơi khác. Hãy tải lại trước khi lưu."},409);
+  return json({ok:true,policy});
+ }catch{console.error("[sale-commission:patch] Policy update failed");return json({error:"Không lưu được cấu hình hoa hồng của show. Vui lòng thử lại."},503);}
 }

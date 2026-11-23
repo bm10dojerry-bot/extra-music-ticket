@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect,useRef,useState,type FormEvent} from "react";
-import type {SalePerformanceFilters,SalePerformanceResponse,SalePerformanceShow} from "../../lib/sale-performance";
+import type {SalePerformanceFilters,SalePerformanceResponse,SalePerformanceShow,SalePerformanceCommissionIssue} from "../../lib/sale-performance";
 import styles from "./sale-performance.module.css";
 
 const numberFormat=new Intl.NumberFormat("vi-VN");
@@ -23,6 +23,12 @@ function dateRange(preset:Preset):Pick<SalePerformanceFilters,"from"|"to">{
   return {from:date.toISOString().slice(0,10),to:today};
  }
  return {from:today,to:today};
+}
+
+function CommissionIssues({issues}:{issues:SalePerformanceCommissionIssue[]}){
+ const [visible,setVisible]=useState(20);
+ if(!issues.length)return null;
+ return <details className={styles.issueDisclosure}><summary>Các trường hợp cần đối soát ({numberFormat.format(issues.length)})</summary><ul>{issues.slice(0,visible).map((issue,index)=><li key={issue.orderCode+"-"+index}><code>{issue.orderCode}</code><span>{issue.message}</span></li>)}</ul>{issues.length>visible?<button type="button" className={styles.secondary} onClick={()=>setVisible(value=>value+20)}>Xem thêm · {numberFormat.format(visible)}/{numberFormat.format(issues.length)}</button>:null}</details>;
 }
 
 export default function SalePerformance(){
@@ -82,12 +88,12 @@ export default function SalePerformance(){
   {label:"Sale có doanh số",value:totals?`${totals.salesWithRevenue} / ${totals.sales}`:"—",note:totals?`${totals.activeSales} tài khoản đang hoạt động`:"Tất cả tài khoản Sale",accent:"neutral"},
   {label:"Vé đã bán",value:totals?numberFormat.format(totals.paidTickets):"—",note:totals?`${totals.paidOrders} đơn đã thanh toán`:"Chỉ tính vé có thanh toán",accent:"neutral"},
   {label:"Doanh số Sale",value:totals?money(totals.revenue):"—",note:"Số tiền thực thu từ đơn gắn Sale",accent:"revenue"},
-  {label:"Hoa hồng tạm tính",value:totals?money(totals.commission):"—",note:"Theo bậc thưởng của từng Sale",accent:"commission"}
+  {label:data&&!data.commissionComplete?"Hoa hồng đã tính được":"Hoa hồng tạm tính",value:totals?money(totals.commission):"—",note:data&&!data.commissionComplete?`${totals?.commissionPendingOrders||0} đơn cần đối soát hoa hồng`:"Lũy tiến riêng cho từng Sale và show",accent:"commission"}
  ];
 
  return <section className={styles.page} aria-label="Thống kê hiệu suất Sale" aria-busy={loading}>
   <div className={styles.intro}>
-   <div><p className={styles.eyebrow}>KINH DOANH & NHÂN SỰ</p><p className={styles.description}>Theo dõi kết quả bán vé và hoa hồng của từng nhân viên.</p></div>
+   <div><p className={styles.eyebrow}>KINH DOANH & NHÂN SỰ</p><p className={styles.description}>Theo dõi kết quả bán vé và hoa hồng lũy tiến của từng Sale trong từng show.</p></div>
    <button type="button" className={styles.secondary} disabled={loading} onClick={()=>{setSelectedId("");setOrderPage(0);setRefresh(value=>value+1);}}>{loading?"Đang cập nhật…":"↻ Cập nhật"}</button>
   </div>
 
@@ -111,6 +117,7 @@ export default function SalePerformance(){
   <div className={styles.period}><span>{period}<span aria-hidden="true"> · </span>{showName}</span><span>{data?"Cập nhật "+displayTime(data.updatedAt):loading?"Đang tải dữ liệu…":"Chưa có dữ liệu"}</span></div>
   {error?<div role="alert" className={styles.error}><strong>Chưa tải được thống kê.</strong> {error}<button type="button" className={styles.secondary} onClick={()=>setRefresh(value=>value+1)}>Thử lại</button></div>:null}
   {data?.limited?<p role="alert" className={styles.warning}>Khoảng thời gian có quá nhiều dữ liệu. Vui lòng thu hẹp bộ lọc để xem đầy đủ thống kê.</p>:null}
+  {data&&!data.commissionComplete?<p role="alert" className={styles.warning}><strong>Hoa hồng chưa đầy đủ.</strong> {numberFormat.format(data.totals.commissionPendingOrders)} đơn cần đối soát. Số tiền hiển thị chỉ gồm phần đã tính được; xem chi tiết theo show và các trường hợp cần đối soát bên dưới.</p>:null}
 
   <div className={styles.metrics}>{cards.map(card=><article key={card.label} className={`${styles.metric} ${card.accent==="commission"?styles.commissionCard:card.accent==="revenue"?styles.revenueCard:""}`}><span>{card.label}</span><strong>{loading?"…":card.value}</strong><small>{card.note}</small></article>)}</div>
 
@@ -124,9 +131,9 @@ export default function SalePerformance(){
    </div>
    <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Bảng kết quả bán vé của nhân viên">
     <table className={styles.table}>
-     <thead><tr><th scope="col">Sale</th><th scope="col" className={styles.numeric}>Đơn đã trả</th><th scope="col" className={styles.numeric}>Vé bán</th><th scope="col" className={styles.numeric}>Doanh số</th><th scope="col">Tỷ trọng doanh số</th><th scope="col" className={styles.numeric}>Mức thưởng</th><th scope="col" className={styles.numeric}>Hoa hồng tạm tính</th><th scope="col"><span className={styles.srOnly}>Chi tiết</span></th></tr></thead>
+     <thead><tr><th scope="col">Sale</th><th scope="col" className={styles.numeric}>Đơn đã trả</th><th scope="col" className={styles.numeric}>Vé bán</th><th scope="col" className={styles.numeric}>Doanh số</th><th scope="col">Tỷ trọng doanh số</th><th scope="col" className={styles.numeric}>Hoa hồng tạm tính</th><th scope="col"><span className={styles.srOnly}>Chi tiết</span></th></tr></thead>
      <tbody>
-      {loading?<tr><td colSpan={8} className={styles.empty}>Đang tải kết quả bán vé…</td></tr>:error?<tr><td colSpan={8} className={styles.empty}>Thử tải lại để xem kết quả.</td></tr>:visibleSales.length===0?<tr><td colSpan={8} className={styles.empty}>{search?"Không tìm thấy Sale phù hợp.":"Chưa có tài khoản Sale trong hệ thống."}</td></tr>:visibleSales.map((sale,index)=>{
+      {loading?<tr><td colSpan={7} className={styles.empty}>Đang tải kết quả bán vé…</td></tr>:error?<tr><td colSpan={7} className={styles.empty}>Thử tải lại để xem kết quả.</td></tr>:visibleSales.length===0?<tr><td colSpan={7} className={styles.empty}>{search?"Không tìm thấy Sale phù hợp.":"Chưa có tài khoản Sale trong hệ thống."}</td></tr>:visibleSales.map((sale,index)=>{
        const share=totals&&totals.revenue>0?sale.revenue/totals.revenue:0;
        return <tr key={sale.id} className={selectedId===sale.id?styles.selectedRow:undefined}>
         <th scope="row"><div className={styles.saleIdentity}><span className={styles.rank}>{index+1}</span><div><strong>{sale.name}</strong><small>@{sale.username}</small>{!sale.active?<span className={styles.inactive}>Đã ngừng hoạt động</span>:null}</div></div></th>
@@ -134,9 +141,8 @@ export default function SalePerformance(){
         <td className={styles.numeric}><strong>{numberFormat.format(sale.paidTickets)}</strong>{sale.complimentaryTickets>0?<small className={styles.freeSeats}>+{sale.complimentaryTickets} vé mời</small>:null}</td>
         <td className={styles.numeric}><strong>{money(sale.revenue)}</strong></td>
         <td><div className={styles.share}><div className={styles.shareTrack} aria-hidden="true"><span style={{width:Math.min(100,share*100)+"%"}}/></div><span>{percent(share)}</span></div></td>
-        <td className={styles.numeric}>{percent(sale.commissionRate)}</td>
-        <td className={`${styles.numeric} ${styles.commissionValue}`}>{money(sale.commission)}</td>
-        <td><button type="button" className={styles.detailButton} aria-expanded={selectedId===sale.id} aria-controls="sale-order-details" onClick={()=>{setSelectedId(value=>value===sale.id?"":sale.id);setOrderPage(0);}}>{selectedId===sale.id?"Đóng":"Xem đơn"}<span className={styles.srOnly}> của {sale.name} ({sale.username})</span></button></td>
+        <td className={`${styles.numeric} ${styles.commissionValue}`}>{money(sale.commission)}{!sale.commissionComplete?<small className={styles.pendingCommission}>Chưa đầy đủ</small>:null}</td>
+        <td><button type="button" className={styles.detailButton} aria-expanded={selectedId===sale.id} aria-controls="sale-order-details" onClick={()=>{setSelectedId(value=>value===sale.id?"":sale.id);setOrderPage(0);}}>{selectedId===sale.id?"Đóng":"Xem chi tiết"}<span className={styles.srOnly}> của {sale.name} ({sale.username})</span></button></td>
        </tr>;
       })}
      </tbody>
@@ -146,15 +152,32 @@ export default function SalePerformance(){
   </section>
 
   {selected?<section id="sale-order-details" className={styles.panel} aria-labelledby="sale-detail-heading">
-   <div className={styles.panelHeader}><div><h2 id="sale-detail-heading" tabIndex={-1} ref={detailHeading}>Đơn của {selected.name}</h2><p>@{selected.username} · {selected.paidTickets} vé bán · {money(selected.revenue)} doanh số · {money(selected.commission)} hoa hồng</p></div><button type="button" className={styles.secondary} onClick={()=>setSelectedId("")}>Đóng chi tiết</button></div>
+   <div className={styles.panelHeader}><div><h2 id="sale-detail-heading" tabIndex={-1} ref={detailHeading}>Chi tiết của {selected.name}</h2><p>@{selected.username} · {numberFormat.format(selected.paidTickets)} vé bán · {money(selected.revenue)} doanh số · {money(selected.commission)} hoa hồng{selected.commissionComplete?" tạm tính":" đã tính được"}</p></div><button type="button" className={styles.secondary} onClick={()=>setSelectedId("")}>Đóng chi tiết</button></div>
+   <div className={styles.showBreakdown}>
+    <h3>Hoa hồng theo từng show</h3><p>Bậc vé được xác định theo toàn bộ lịch sử của Sale trong show. Bộ lọc ngày chỉ chọn giao dịch để xem, không bắt đầu lại bậc vé.</p>
+    {selected.shows.length?selected.shows.map(show=><details className={styles.showDetail} key={show.showId}>
+     <summary><span className={styles.showIdentity}><strong>{show.showName}</strong><small>{show.showDate?displayDate(show.showDate)+" · ":""}{show.showId||"Chưa xác định show"}</small></span><span><small>Vé trong kỳ</small><strong>{numberFormat.format(show.paidTickets)}</strong></span><span><small>Doanh số trong kỳ</small><strong>{money(show.revenue)}</strong></span><span className={styles.showCommission}><small>{show.commissionComplete?"Hoa hồng tạm tính":"Hoa hồng đã tính được"}</small><strong>{money(show.commission)}</strong></span><span className={styles.expandMark} aria-hidden="true">⌄</span></summary>
+     <div className={styles.showDetailBody}>
+      <p className={styles.lifetimeNote}>{show.lifetimeComplete?"Tích lũy toàn bộ thời gian":"Tích lũy theo dữ liệu hiện có"}: <strong>{numberFormat.format(show.lifetimePaidTickets)} vé trả tiền</strong> của Sale trong show này.{show.complimentaryTickets>0?` Trong kỳ có ${numberFormat.format(show.complimentaryTickets)} vé mời được thống kê riêng.`:""}</p>
+      {!show.lifetimeComplete?<p className={styles.pendingNote}>Lịch sử toàn show còn giao dịch cần đối soát. Số vé tích lũy này chỉ gồm những vé đã xác định được.</p>:null}
+      {!show.commissionComplete?<p className={styles.pendingNote}>Số tiền trên chưa bao gồm toàn bộ hoa hồng của show trong kỳ này.</p>:null}
+      {show.policy?<p className={styles.policyNote}><strong>{show.policy.source==="show"?"Bảng bậc riêng của show":"Mẫu khởi tạo cho show"}:</strong> {show.policy.tiers.map((tier,index)=>`${index===0?1:show.policy!.tiers[index-1].maxTickets+1}–${tier.maxTickets} vé: ${numberFormat.format(tier.rate)}%`).join(" · ")}</p>:<p className={styles.pendingNote}>Chưa xác định được bảng bậc áp dụng cho show.</p>}
+      <div className={styles.tableWrap} tabIndex={0} role="region" aria-label={"Hoa hồng từng bậc của "+show.showName}><table className={`${styles.table} ${styles.bandTable}`}><thead><tr><th scope="col">Bậc vé trong show</th><th scope="col" className={styles.numeric}>Tỷ lệ bậc</th><th scope="col" className={styles.numeric}>Vé trong kỳ</th><th scope="col" className={styles.numeric}>Doanh thu trong bậc</th><th scope="col" className={styles.numeric}>Hoa hồng bậc</th></tr></thead><tbody>{show.bands.length?show.bands.map((band,index)=><tr key={band.fromTicket+"-"+band.toTicket+"-"+index}><th scope="row">Vé {band.fromTicket}–{band.toTicket}</th><td className={styles.numeric}>{numberFormat.format(band.rate)}%</td><td className={styles.numeric}>{numberFormat.format(band.tickets)}</td><td className={styles.numeric}>{money(band.revenue)}</td><td className={`${styles.numeric} ${styles.commissionValue}`}>{money(band.commission)}</td></tr>):<tr><td colSpan={5} className={styles.empty}>{show.commissionComplete?"Chưa có vé trả tiền phát sinh hoa hồng trong kỳ.":"Chưa đủ dữ liệu để phân bổ hoa hồng vào các bậc."}</td></tr>}</tbody></table></div>
+      <CommissionIssues issues={show.commissionIssues}/>
+     </div>
+    </details>):<p className={styles.detailEmpty}>Sale chưa có giao dịch theo bộ lọc đang chọn.</p>}
+   </div>
+   <div className={styles.ordersHeading}><h3>Đơn đã thanh toán</h3><p>Thứ tự vé được tính riêng cho Sale trong từng show.</p></div>
    <div className={styles.tableWrap} tabIndex={0} role="region" aria-label={"Đơn hàng của "+selected.name}>
-    <table className={`${styles.table} ${styles.ordersTable}`}><thead><tr><th scope="col">Mã đơn</th><th scope="col">Show</th><th scope="col">Ghế</th><th scope="col">Thanh toán lúc</th><th scope="col" className={styles.numeric}>Số tiền</th></tr></thead><tbody>{selectedOrders.length?selectedOrders.map(order=><tr key={order.code}><th scope="row"><code>{order.code}</code>{order.isComplimentary?<small className={styles.freeSeats}>Vé mời / miễn phí</small>:null}</th><td>{order.showName}</td><td className={styles.seats}>{order.seats.join(", ")||"—"}</td><td>{displayTime(order.paidAt)}</td><td className={styles.numeric}>{money(order.amount)}</td></tr>):<tr><td colSpan={5} className={styles.empty}>Sale chưa có đơn đã thanh toán trong khoảng thời gian này.</td></tr>}</tbody></table>
+    <table className={`${styles.table} ${styles.ordersTable}`}><thead><tr><th scope="col">Mã đơn</th><th scope="col">Show</th><th scope="col">Ghế</th><th scope="col">Thứ tự vé</th><th scope="col">Thanh toán lúc</th><th scope="col" className={styles.numeric}>Số tiền</th><th scope="col" className={styles.numeric}>Hoa hồng đơn</th></tr></thead><tbody>{selectedOrders.length?selectedOrders.map(order=><tr key={order.code}><th scope="row"><code>{order.code}</code>{order.isComplimentary?<small className={styles.freeSeats}>Vé mời / miễn phí</small>:order.complimentaryTickets>0?<small className={styles.freeSeats}>Có {numberFormat.format(order.complimentaryTickets)} vé mời</small>:null}</th><td>{order.showName}</td><td className={styles.seats}>{order.seats.join(", ")||"—"}</td><td>{order.isComplimentary?"—":order.firstTicket!==null&&order.lastTicket!==null?order.firstTicket===order.lastTicket?numberFormat.format(order.firstTicket):`${numberFormat.format(order.firstTicket)}–${numberFormat.format(order.lastTicket)}`:<span className={styles.pendingCommission}>Chờ xác định</span>}</td><td>{displayTime(order.paidAt)}</td><td className={styles.numeric}>{money(order.amount)}</td><td className={`${styles.numeric} ${styles.commissionValue}`}>{money(order.commission)}{order.commissionIssue?<small className={styles.pendingCommission} title={order.commissionIssue}>Cần đối soát</small>:null}</td></tr>):<tr><td colSpan={7} className={styles.empty}>Sale chưa có đơn đã thanh toán trong khoảng thời gian này.</td></tr>}</tbody></table>
    </div>
    {selected.orders.length>20?<div className={styles.pagination}><button type="button" className={styles.secondary} disabled={orderPage===0} onClick={()=>setOrderPage(value=>value-1)}>← Trước</button><span>Trang {orderPage+1} / {Math.ceil(selected.orders.length/20)}</span><button type="button" className={styles.secondary} disabled={(orderPage+1)*20>=selected.orders.length} onClick={()=>setOrderPage(value=>value+1)}>Sau →</button></div>:null}
   </section>:null}
 
   {data?<div className={styles.notes}>
-   <p><strong>Cách tính:</strong> Hoa hồng áp dụng trên doanh số đã thanh toán trong khoảng thời gian và show đang chọn. Bậc hiện tại: 1–10 vé {data.settings.rate_1_10}%, 11–30 vé {data.settings.rate_11_30}%, 31–50 vé {data.settings.rate_31_50}%, từ 51 vé {data.settings.rate_51_plus}%. Đây là số tiền tạm tính để đối soát.</p>
+   <p><strong>Cách tính:</strong> Hoa hồng được cộng lũy tiến theo từng vé trả tiền, riêng cho mỗi Sale trong mỗi show. Các bậc dùng cấu hình của show đó. Khi lọc ngày, thứ tự vé vẫn giữ theo lịch sử thanh toán; tiền hoa hồng chỉ cộng từ những giao dịch trong khoảng đang xem.</p>
+   <p>Vé mời không tăng bậc. Vé vượt ngưỡng cuối hoặc thiếu dữ liệu được đánh dấu cần đối soát. Tổng hoa hồng mỗi đơn được làm tròn đến đồng rồi phân bổ vào các bậc. Thay đổi cấu hình show sẽ tính lại báo cáo của cả các đơn trước đây; đây là số liệu tạm tính, chưa phải khoản đã chi.</p>
+   <CommissionIssues key={data.updatedAt} issues={data.commissionIssues}/>
    {data.unassigned.orders>0?<p className={styles.unassigned}>{data.unassigned.orders} đơn đã thanh toán chưa xác định được Sale ({data.unassigned.tickets} vé, {money(data.unassigned.revenue)}), chưa cộng vào doanh số nhân viên ở trên.</p>:null}
   </div>:null}
  </section>;

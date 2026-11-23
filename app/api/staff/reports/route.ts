@@ -1,35 +1,44 @@
 import {NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb} from "../../../../lib/staff-auth";
-import {loadShows} from "../../../../lib/show-data";
-import {saleCommissionRate,saleCommissionAmount} from "../../../../lib/sale-commission";
-import {getSaleCommissionSettings} from "../../../../lib/sale-commission-db";
+import {getSaleCommissionPolicies} from "../../../../lib/sale-commission-db";
+import {
+  buildStaffSaleReport,readAllSaleReportRows,SalePerformanceLimitError,SalePerformanceDataError,validateSalePerformanceFilters,
+  type SalePerformanceAccount,type SalePerformanceOnlineOrder,type SalePerformanceLegacyOrder,type SalePerformanceManagedShow,
+} from "../../../../lib/sale-performance";
+
 export const dynamic="force-dynamic";
-export async function GET(req:NextRequest){const actor=await requireRole(["admin","accountant","sale"]);if(!actor)return NextResponse.json({error:"Không có quyền xem báo cáo"},{status:403});
- const from=req.nextUrl.searchParams.get("from")||"",to=req.nextUrl.searchParams.get("to")||"",showId=req.nextUrl.searchParams.get("show")||"";
- if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(showId&&!/^[a-z0-9-]{3,100}$/.test(showId)))return NextResponse.json({error:"Bộ lọc không hợp lệ"},{status:400});
- try{const [shows,commissionSettings]=await Promise.all([loadShows(),getSaleCommissionSettings()]);const filters=["payment_verified=eq.true","select=order_code,show_id,event_name,venue_name,seats,amount_vnd,payment_method,seller_name,paid_at","order=paid_at.desc","limit=10000"];
- if(from)filters.push("paid_at=gte."+encodeURIComponent(from+"T00:00:00+07:00"));if(to){const end=new Date(new Date(to+"T00:00:00+07:00").getTime()+86400000).toISOString();filters.push("paid_at=lt."+encodeURIComponent(end))}if(showId)filters.push("show_id=eq."+encodeURIComponent(showId));
- const rows=await staffDb("ticket_sales?"+filters.join("&")) as {order_code:string;show_id:string|null;event_name:string;venue_name:string;seats:string[];amount_vnd:number;payment_method:string;seller_name:string|null;paid_at:string}[];
- // Lấy Sale gắn với đơn chuyển khoản để Admin và nhân viên thấy cùng một khoản thưởng.
- const staffNameById=new Map<string,string>([[actor.id,actor.display_name]]);
- if(actor.role!=="sale"){
-  const saleStaff=await staffDb("staff_accounts?select=id,username,display_name&role=eq.sale&limit=300") as {id:string;username:string;display_name:string}[];
-  for(const staff of saleStaff)staffNameById.set(staff.id,staff.display_name||staff.username);
- }
- const onlineFilters=["select=code,show_id,seats,amount_vnd,paid_at,sale_staff_id,is_vip_invitation","status=eq.paid","order=paid_at.desc","limit=10000"];
- if(from)onlineFilters.push("paid_at=gte."+encodeURIComponent(from+"T00:00:00+07:00"));
- if(to){const end=new Date(new Date(to+"T00:00:00+07:00").getTime()+86400000).toISOString();onlineFilters.push("paid_at=lt."+encodeURIComponent(end))}
- if(showId)onlineFilters.push("show_id=eq."+encodeURIComponent(showId));
- const online=await staffDb("extra_payment_orders?"+onlineFilters.join("&")) as {code:string;show_id:string;seats:string[];amount_vnd:number;paid_at:string|null;sale_staff_id:string|null;is_vip_invitation:boolean|null}[];
- const paidByCode=new Map(online.map(o=>[o.code.toUpperCase(),o]));
- const known=new Set(rows.map(r=>r.order_code.toUpperCase()));
- const onlineRows=online.filter(o=>!known.has(o.code.toUpperCase())&&o.paid_at).map(o=>({order_code:o.code,show_id:o.show_id,event_name:shows.find(s=>s.id===o.show_id)?.artist||o.show_id,venue_name:"",seats:o.seats,amount_vnd:o.amount_vnd,payment_method:"SePay / ACB",seller_name:o.sale_staff_id?(staffNameById.get(o.sale_staff_id)||"Online / SePay"):"Online / SePay",paid_at:o.paid_at!}));
- const combined=[...rows,...onlineRows];
- const visible=actor.role==="sale"?[...rows.filter(r=>r.seller_name===actor.display_name||r.seller_name===actor.username||paidByCode.get(r.order_code.toUpperCase())?.sale_staff_id===actor.id),...onlineRows.filter(r=>paidByCode.get(r.order_code.toUpperCase())?.sale_staff_id===actor.id)]:combined;
- const groups=new Map<string,{showId:string;showName:string;orders:number;tickets:number;revenue:number;byMethod:Record<string,number>}>();
- for(const r of visible){const id=r.show_id||"unassigned:"+r.event_name;const a=groups.get(id)||{showId:r.show_id||"",showName:shows.find(s=>s.id===r.show_id)?.artist||r.event_name,orders:0,tickets:0,revenue:0,byMethod:{}};a.orders++;a.tickets+=(r.seats||[]).length;a.revenue+=Number(r.amount_vnd)||0;a.byMethod[r.payment_method]=(a.byMethod[r.payment_method]||0)+(Number(r.amount_vnd)||0);groups.set(id,a)}
- const summary=[...groups.values()].sort((a,b)=>b.revenue-a.revenue);
- const bySeller=new Map<string,{seller:string;orders:number;tickets:number;commissionTickets:number;revenue:number}>();const byDay=new Map<string,{day:string;orders:number;tickets:number;revenue:number}>();for(const r of visible){const seller=r.seller_name||"Online / Không xác định",day=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Ho_Chi_Minh",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(r.paid_at));const amount=Number(r.amount_vnd)||0,tickets=(r.seats||[]).length;const a=bySeller.get(seller)||{seller,orders:0,tickets:0,commissionTickets:0,revenue:0};a.orders++;a.tickets+=tickets;if(amount>0)a.commissionTickets+=tickets;a.revenue+=amount;bySeller.set(seller,a);const b=byDay.get(day)||{day,orders:0,tickets:0,revenue:0};b.orders++;b.tickets+=tickets;b.revenue+=amount;byDay.set(day,b)}
- const commissionBySeller=[...bySeller.values()].filter(x=>x.seller!=="Online / SePay"&&x.seller!=="Online / Không xác định"&&x.seller!=="Online / SePay"&&!x.seller.startsWith("Online /")).map(x=>({...x,rate:saleCommissionRate(x.commissionTickets,commissionSettings),commission:saleCommissionAmount(x.commissionTickets,x.revenue,commissionSettings)})).sort((a,b)=>b.commission-a.commission);
- return NextResponse.json({commissionSettings,commissionBySeller,commissionTotal:commissionBySeller.reduce((n,x)=>n+x.commission,0),bySeller:[...bySeller.values()].sort((a,b)=>b.revenue-a.revenue),byDay:[...byDay.values()].sort((a,b)=>b.day.localeCompare(a.day)),summary,totals:{orders:visible.length,tickets:summary.reduce((n,r)=>n+r.tickets,0),commissionTickets:visible.reduce((n,r)=>n+((Number(r.amount_vnd)||0)>0?(r.seats||[]).length:0),0),revenue:summary.reduce((n,r)=>n+r.revenue,0)},rows:visible.slice(0,500),limited:rows.length>=10000||online.length>=10000,verifiedOnly:true,onlineOrders:actor.role==="sale"?0:onlineRows.length});
- }catch(e){console.error("[staff-reports]",e);return NextResponse.json({error:"Không thể tải báo cáo hoặc cấu hình thưởng Sale."},{status:503})}}
+export const runtime="nodejs";
+
+export async function GET(req:NextRequest){
+  const actor=await requireRole(["admin","accountant","sale"]);
+  if(!actor)return NextResponse.json({error:"Không có quyền xem báo cáo"},{status:403});
+  const filters={from:req.nextUrl.searchParams.get("from")||"",
+    to:req.nextUrl.searchParams.get("to")||"",show:req.nextUrl.searchParams.get("show")||""};
+  const validation=validateSalePerformanceFilters(filters);
+  if(validation)return NextResponse.json({error:validation},{status:400});
+  const showFilter=filters.show?"&show_id=eq."+encodeURIComponent(filters.show):"";
+  try{
+    // Read every status and the complete relevant history. Date filtering happens
+    // only after each Sale + show ticket has received its lifetime ordinal.
+    const [shows,accounts,onlineOrders,legacyOrders]=await Promise.all([
+      readAllSaleReportRows<SalePerformanceManagedShow>(staffDb,"managed_shows?select=id,artist,show_date,status&order=id.asc"),
+      readAllSaleReportRows<SalePerformanceAccount>(staffDb,"staff_accounts?select=id,username,display_name,active,role&role=eq.sale&order=id.asc"),
+      readAllSaleReportRows<SalePerformanceOnlineOrder>(staffDb,"extra_payment_orders?select=code,show_id,seats,amount_vnd,paid_at,sale_staff_id,is_vip_invitation,status,commission_lines&order=code.asc"),
+      readAllSaleReportRows<SalePerformanceLegacyOrder>(staffDb,"ticket_sales?select=order_code,show_id,event_name,venue_name,seats,amount_vnd,payment_method,seller_name,paid_at,payment_verified,commission_lines&payment_verified=eq.true&order=id.asc"+showFilter),
+    ]);
+    const policies=await getSaleCommissionPolicies(shows.map(show=>show.id));
+    const report=buildStaffSaleReport({
+      accounts,onlineOrders,legacyOrders,policies,filters,
+      shows:shows.map(show=>({id:show.id,artist:show.artist,date:show.show_date,hidden:show.status==="hidden"})),
+      updatedAt:new Date().toISOString(),
+    },actor.role==="sale"?actor.id:undefined);
+    return NextResponse.json(report,{headers:{"Cache-Control":"no-store"}});
+  }catch(error){
+    if(error instanceof SalePerformanceDataError)
+      return NextResponse.json({error:error.message},{status:503});
+    if(error instanceof SalePerformanceLimitError)
+      return NextResponse.json({error:"Dữ liệu vượt giới hạn xử lý; chưa thể xuất báo cáo đầy đủ."},{status:503});
+    console.error("[staff-reports] Report unavailable");
+    return NextResponse.json({error:"Không thể tải báo cáo hoặc cấu hình hoa hồng theo show."},{status:503});
+  }
+}

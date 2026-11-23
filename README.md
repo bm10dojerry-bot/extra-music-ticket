@@ -42,3 +42,37 @@ from geographic centroids. City coordinates and individual visitor locations are
 not plotted. Reports refresh every minute while visible. See the official
 [realtime API schema](https://developers.google.com/analytics/devguides/reporting/data/v1/realtime-api-schema)
 for supported geographic dimensions.
+
+## Sale commissions by show
+
+Apply `supabase/migrations/20261123151046_sale_commission_per_show_progressive.sql`
+before deploying the commission reporting and checkout changes. It adds private,
+service-only per-show policies and immutable checkout price snapshots while
+keeping the old reservation RPC and global settings table available for rollout.
+
+Admin's **Hoa hồng theo show** menu edits that show's thresholds and percentages.
+Each existing show starts with its own policy: tickets 1–10 at 15%, 11–30 at 18%,
+31–50 at 22%, and 51–550 at 25%. Newly saved shows without a policy use the same
+starter schedule until an Admin saves a separate policy. Saving a policy affects
+only that show and recalculates its displayed historical commissions. Concurrent
+edits use a version token and cannot silently overwrite each other.
+
+The shared server report builder groups lifetime paid orders by **Sale ID + show**,
+assigns ticket ordinals before applying report date filters, and applies each
+ticket's marginal rate to its actual net price after discounts. Gift and VIP/free
+tickets do not advance the sequence. Only verified, paid orders count; authoritative
+online status and exact Sale ID override duplicate legacy records. For example,
+20 paid tickets at 500,000 VND each produce 750,000 + 900,000 = **1,650,000 VND**.
+
+Checkout stores the paid/gift split and exact net amounts atomically with the seat
+reservation. Integer arithmetic preserves the order's paid total; commission is
+rounded once per order and its band breakdown sums to that rounded amount. The
+migration reconstructs old snapshots only where the original split can be
+established from same-row prices or unchanged show metadata and an exact promotion
+match. Unknown snapshots, invalid chronology and missing policy ranges are never
+silently estimated: reports show a reconciliation issue or fail safely. The final
+tier is a finite cap; Admin must extend the show's policy to cover later tickets.
+
+Admin, Sale and Staff views consume the same server-calculated results. Detailed
+rows and CSV exports may be capped, but displayed financial totals use complete
+history. The feature computes reportable commission and does not issue payouts.

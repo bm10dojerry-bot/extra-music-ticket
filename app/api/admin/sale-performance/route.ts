@@ -1,31 +1,13 @@
 import {NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb} from "../../../../lib/staff-auth";
-import {getSaleCommissionSettings} from "../../../../lib/sale-commission-db";
-import {loadShows} from "../../../../lib/show-data";
+import {getSaleCommissionPolicies} from "../../../../lib/sale-commission-db";
 import {
-  buildSalePerformance,validateSalePerformanceFilters,
-  type SalePerformanceAccount,type SalePerformanceOnlineOrder,type SalePerformanceLegacyOrder,
+  buildSalePerformance,validateSalePerformanceFilters,readAllSaleReportRows,SalePerformanceLimitError,SalePerformanceDataError,
+  type SalePerformanceAccount,type SalePerformanceOnlineOrder,type SalePerformanceLegacyOrder,type SalePerformanceManagedShow,
 } from "../../../../lib/sale-performance";
 
 export const dynamic="force-dynamic";
 export const runtime="nodejs";
-
-class ReportLimitError extends Error {}
-
-/** Continue after a short page as PostgREST can cap it below the requested size.
- * Stop only at an empty page; never return incomplete commission totals.
- */
-async function readAll<T>(path:string):Promise<T[]> {
-  const rows:T[]=[];
-  const maximum=50000;
-  while(true){
-    const page=await staffDb(path+"&limit=500&offset="+rows.length);
-    if(!Array.isArray(page))throw Error("Invalid report data");
-    if(page.length===0)return rows;
-    if(rows.length+page.length>maximum)throw new ReportLimitError();
-    rows.push(...page as T[]);
-  }
-}
 
 export async function GET(req:NextRequest){
   if(!await requireRole(["admin"]))
@@ -38,20 +20,21 @@ export async function GET(req:NextRequest){
   // could let a conflicting legacy row override the authoritative online order.
   const showFilter=filters.show?"&show_id=eq."+encodeURIComponent(filters.show):"";
   try{
-    const [accounts,onlineOrders,legacyOrders,record,shows]=await Promise.all([
-      readAll<SalePerformanceAccount>("staff_accounts?select=id,username,display_name,active,role&role=eq.sale&order=id.asc"),
-      readAll<SalePerformanceOnlineOrder>("extra_payment_orders?select=code,show_id,seats,amount_vnd,paid_at,sale_staff_id,is_vip_invitation,status&order=code.asc"),
-      readAll<SalePerformanceLegacyOrder>("ticket_sales?select=order_code,show_id,event_name,seats,amount_vnd,paid_at,payment_verified,seller_name&payment_verified=eq.true&order=id.asc"+showFilter),
-      getSaleCommissionSettings(),loadShows(),
+    const [accounts,onlineOrders,legacyOrders,shows]=await Promise.all([
+      readAllSaleReportRows<SalePerformanceAccount>(staffDb,"staff_accounts?select=id,username,display_name,active,role&role=eq.sale&order=id.asc"),
+      readAllSaleReportRows<SalePerformanceOnlineOrder>(staffDb,"extra_payment_orders?select=code,show_id,seats,amount_vnd,paid_at,sale_staff_id,is_vip_invitation,status,commission_lines&order=code.asc"),
+      readAllSaleReportRows<SalePerformanceLegacyOrder>(staffDb,"ticket_sales?select=order_code,show_id,event_name,seats,amount_vnd,paid_at,payment_verified,seller_name,commission_lines&payment_verified=eq.true&order=id.asc"+showFilter),
+      readAllSaleReportRows<SalePerformanceManagedShow>(staffDb,"managed_shows?select=id,artist,show_date,status&order=id.asc"),
     ]);
-    const settings={rate_1_10:record.rate_1_10,rate_11_30:record.rate_11_30,
-      rate_31_50:record.rate_31_50,rate_51_plus:record.rate_51_plus};
-    const result=buildSalePerformance({accounts,onlineOrders,legacyOrders,settings,filters,
-      shows:shows.map(show=>({id:show.id,artist:show.artist,date:show.date})),
+    const policies=await getSaleCommissionPolicies(shows.map(show=>show.id));
+    const result=buildSalePerformance({accounts,onlineOrders,legacyOrders,policies,filters,
+      shows:shows.map(show=>({id:show.id,artist:show.artist,date:show.show_date,hidden:show.status==="hidden"})),
       updatedAt:new Date().toISOString()});
     return NextResponse.json(result,{headers:{"Cache-Control":"no-store"}});
   }catch(error){
-    if(error instanceof ReportLimitError)
+    if(error instanceof SalePerformanceDataError)
+      return NextResponse.json({error:error.message},{status:503});
+    if(error instanceof SalePerformanceLimitError)
       return NextResponse.json({error:"Dữ liệu vượt giới hạn xử lý; chưa thể xuất báo cáo đầy đủ."},{status:503});
     console.error("[sale-performance] Report unavailable");
     return NextResponse.json({error:"Không tải được thống kê hiệu suất Sale. Vui lòng thử lại."},{status:503});
