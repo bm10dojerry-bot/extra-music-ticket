@@ -27,6 +27,8 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
  const [loaded,setLoaded]=useState(false);
  const fired=useRef(new Set<string>());
  const meta=validPixel(pixelId)?pixelId:"";
+ // Đình Dũng uses an additional Pixel on ad account extra 02; keep the original Pixel intact.
+ const extra02Pixel=showId==="dinh-dung-2811"&&meta?"2335529170354111":"";
  const ga4=validGa4(ga4Id)?ga4Id:"";
  const ads=validAds(googleAdsId)?googleAdsId:"";
  const label=validLabel(googleAdsLabel)?googleAdsLabel:"";
@@ -35,7 +37,7 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
   setLoaded(false);
   if(consent!=="yes")return;
   const w=window as AdsWindow;let active=true;
-  if(meta){
+  if(meta||extra02Pixel){
    if(!w.fbq){
     type QueuedFbq=((...args:unknown[])=>void)&{queue:unknown[][];loaded?:boolean;version?:string};
     const fn=function(...args:unknown[]){fn.queue.push(args)} as QueuedFbq;
@@ -43,7 +45,9 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
     const script=document.createElement("script");script.async=true;script.src="https://connect.facebook.net/en_US/fbevents.js";document.head.appendChild(script);
    }
    w.__extraPixelIds=w.__extraPixelIds||[];
-   if(!w.__extraPixelIds.includes(meta)){w.fbq?.("init",meta);w.__extraPixelIds.push(meta)}
+   for(const id of [...new Set([meta,extra02Pixel].filter(Boolean))]){
+    if(!w.__extraPixelIds.includes(id)){w.fbq?.("init",id);w.__extraPixelIds.push(id)}
+   }
   }
   if(ga4||ads){
    w.dataLayer=w.dataLayer||[];
@@ -60,7 +64,7 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
   }
   if(active)setLoaded(true);
   return()=>{active=false};
- },[consent,meta,ga4,ads]);
+ },[consent,meta,extra02Pixel,ga4,ads]);
  useEffect(()=>{
   if(consent!=="yes"||!loaded)return;
   const w=window as AdsWindow;
@@ -78,10 +82,12 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
   }
   const safeAmount=Number.isFinite(amount)&&amount>=0?amount:0;
   const common={content_ids:[showId],content_name:artist,content_type:"product",currency:"VND",value:safeAmount};
-  if(meta&&w.fbq){
-   if(event==="view")w.fbq("trackSingle",meta,"ViewContent",common);
-   if(event==="checkout")w.fbq("trackSingle",meta,"InitiateCheckout",common);
-   if(event==="purchase")w.fbq("trackSingle",meta,"Purchase",{...common,order_id:orderCode},{eventID:"extra_purchase_"+orderCode});
+  if(w.fbq){
+   for(const id of [...new Set([meta,extra02Pixel].filter(Boolean))]){
+    if(event==="view")w.fbq("trackSingle",id,"ViewContent",common);
+    if(event==="checkout")w.fbq("trackSingle",id,"InitiateCheckout",common);
+    if(event==="purchase")w.fbq("trackSingle",id,"Purchase",{...common,order_id:orderCode},{eventID:"extra_purchase_"+orderCode});
+   }
   }
   if(w.gtag){
    if(ga4){
@@ -92,7 +98,7 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
    if(ads&&label&&event==="purchase")w.gtag("event","conversion",{send_to:ads+"/"+label,value:safeAmount,currency:"VND",transaction_id:orderCode});
   }
   if(event==="purchase")try{localStorage.setItem("extra_ads_"+key,"1")}catch{}
- },[consent,loaded,event,showId,artist,amount,orderCode,meta,ga4,ads,label]);
+ },[consent,loaded,event,showId,artist,amount,orderCode,meta,extra02Pixel,ga4,ads,label]);
  function choose(value:"yes"|"no"){try{sessionStorage.setItem(consentKey,value)}catch{}setConsent(value)}
  if((!meta&&!ga4&&!ads)||consent!==null)return null;
  return <div className="extra-ads-consent" role="dialog" aria-label="Tùy chọn đo lường quảng cáo">
