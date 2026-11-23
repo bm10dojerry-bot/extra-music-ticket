@@ -8,7 +8,7 @@ const toDraft=(s:SaleCommissionSettings):Record<Key,string>=>({
  rate_1_10:String(s.rate_1_10),rate_11_30:String(s.rate_11_30),
  rate_31_50:String(s.rate_31_50),rate_51_plus:String(s.rate_51_plus)
 });
-export default function SaleCommissionManager(){
+export default function SaleCommissionManager({onSaved}:{onSaved?:()=>void}){
  const [saved,setSaved]=useState<Settings|null>(null);
  const [draft,setDraft]=useState<Record<Key,string>>({rate_1_10:"",rate_11_30:"",rate_31_50:"",rate_51_plus:""});
  const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false);
@@ -39,7 +39,7 @@ export default function SaleCommissionManager(){
    const d=await r.json();if(!r.ok)throw Error(d.error||"Không lưu được tỷ lệ thưởng.");
    const verify=await fetch("/api/admin/sale-commission",{cache:"no-store"});const confirmed=await verify.json();
    if(!verify.ok||!confirmed.settings||SALE_COMMISSION_BANDS.some(b=>Number(confirmed.settings[b.key])!==value[b.key]))throw Error("Đã lưu nhưng chưa xác minh được tỷ lệ mới. Hãy tải lại.");
-   setSaved(confirmed.settings);setDraft(toDraft(confirmed.settings));setNotice("Đã lưu và xác minh 4 tỷ lệ thưởng. Báo cáo Sale và Admin sẽ dùng mức mới khi tải lại.");
+   setSaved(confirmed.settings);setDraft(toDraft(confirmed.settings));setNotice("Đã lưu và xác minh 4 tỷ lệ thưởng. Báo cáo Sale và Admin sẽ dùng mức mới khi tải lại.");onSaved?.();
   }catch(e){setError(e instanceof Error?e.message:"Có lỗi khi lưu bảng thưởng.")}
   finally{setSaving(false)}
  }
@@ -67,7 +67,7 @@ export default function SaleCommissionManager(){
    <p style={{fontSize:13,color:"#adb7c7",lineHeight:1.7,margin:"15px 0"}}>Bậc tính thưởng: 1–10, 11–30, 31–50, 51–550 vé; nếu tổng số vé ở nhiều show vượt 550, tiếp tục dùng bậc cuối. Tỷ lệ được tính trên toàn bộ doanh thu có xác minh theo bộ lọc báo cáo, không cộng dồn tỷ lệ giữa các bậc. Vé miễn phí, vé chờ thanh toán và đơn chưa gán Sale không được tính thưởng cho nhân viên.</p>
    <div style={{display:"flex",gap:10,justifyContent:"flex-end",alignItems:"center",flexWrap:"wrap"}}>
     <button type="button" disabled={!dirty||saving||loading} onClick={()=>{if(saved){setDraft(toDraft(saved));setError("");setNotice("")}}} style={{padding:"11px 18px",borderRadius:9,background:"#2b3340",border:"1px solid #495264",color:"#fff"}}>Hoàn tác</button>
-    <button type="button" disabled={!valid||!dirty||saving||loading||!saved} onClick={()=>void save()} style={{padding:"12px 23px",borderRadius:9,background:"#e14c59",border:0,color:"white",fontWeight:800,opacity:!valid||!dirty||saving||loading||!saved?.6:1}}>{saving?"Đang lưu...":"Lưu thay đổi %"}</button>
+    <button type="button" disabled={!valid||!dirty||saving||loading||!saved} onClick={()=>void save()} style={{padding:"12px 23px",borderRadius:9,background:"#e14c59",border:0,color:"white",fontWeight:800,opacity:(!valid||!dirty||saving||loading||!saved)?0.6:1}}>{saving?"Đang lưu...":"Lưu thay đổi %"}</button>
    </div>
   </div>
   <div style={{background:"#151b26",border:"1px solid #333b49",borderRadius:16,padding:20,marginTop:16}}>
