@@ -22,7 +22,7 @@ const expectedSections=["overview","shows","artists","stages","venues","landingp
 const owner={id:"owner",username:"owner",display_name:"Synthetic Owner",role:"admin",active:true};
 const manager={id:"synthetic-manager",username:"manager",display_name:"Synthetic Show Manager",role:"show_manager",active:true};
 
-test("Admin navigation preserves editing context and verifies new-show artist uploads",{
+test("Admin navigation preserves editing context and verifies artist and poster uploads",{
  skip:rendererAvailable?false:"Optional matching React renderer is not installed; see the installation command above.",
 },async t=>{
  assert.equal(require(path.join(rendererPath,"package.json")).version,React.version);
@@ -37,7 +37,7 @@ test("Admin navigation preserves editing context and verifies new-show artist up
  const dynamicShow={...fixtureShow,id:"phamtruong02012007",artist:"Phạm Trưởng & Onis",status:"hidden"};
  const dynamicSlot="artist-"+dynamicShow.id;
  const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=","base64");
- let managedShows=[fixtureShow],publicImages={},mediaUploadHandler=null,publicMediaHandler=null,showListHandler=null,showSaveHandler=null;
+ let managedShows=[fixtureShow],publicImages={},mediaUploadHandler=null,publicMediaHandler=null,showListHandler=null,showSaveHandler=null,posterUploadHandler=null;
  const fixtureVenue={id:"ccc",name:"Synthetic Venue",city:"Synthetic City",address:"Synthetic Address",capacity:550,description:"Fixture only"};
  const fixtureReport={updatedAt:"2099-01-01T00:00:00Z",filters:{from:"",to:"",showId:"",saleId:""},shows:[fixtureShow],policies:{},commissionByShow:[],commissionBySeller:[],commissionTotal:0,commissionComplete:true,commissionIssues:[],bySeller:[],byDay:[],summary:[],totals:{orders:0,tickets:0,commissionTickets:0,complimentaryTickets:0,revenue:0,commissionPendingOrders:0},rows:[],rowCount:0,rowsLimited:false,limited:false,verifiedOnly:true,onlineOrders:0};
 
@@ -94,6 +94,7 @@ test("Admin navigation preserves editing context and verifies new-show artist up
   if(method==="GET"&&input==="/api/public/media"&&publicMediaHandler)return publicMediaHandler(init);
   if(method==="GET"&&input==="/api/admin/shows"&&showListHandler)return showListHandler(init);
   if(method==="POST"&&input==="/api/admin/shows"&&showSaveHandler)return showSaveHandler(init);
+  if(method==="POST"&&input==="/api/admin/show-poster"&&posterUploadHandler)return posterUploadHandler(init);
   const fixtures={
    "/api/public/media":{images:publicImages},
    "/api/admin/shows":{shows:managedShows},
@@ -114,6 +115,7 @@ test("Admin navigation preserves editing context and verifies new-show artist up
   const AdminWorkspace=loadSource(path.join(repo,"app/admin/admin-workspace.tsx")).default;
   const Dashboard=loadSource(path.join(repo,"app/admin/dashboard.tsx")).default;
   const media=loadSource(path.join(repo,"lib/media.ts"));
+  const poster=loadSource(path.join(repo,"lib/poster.ts"));
   function Harness({actor=owner,initialSection="overview"}) {
    const [section,setSection]=React.useState(()=>navigation.resolveAdminSection(initialSection,actor.role));
    return React.createElement(AdminWorkspace,{actor,section,onNavigate:next=>setSection(navigation.resolveAdminSection(next,actor.role))},React.createElement("section",{"data-current-section":section},section));
@@ -121,7 +123,7 @@ test("Admin navigation preserves editing context and verifies new-show artist up
   const update=async work=>{await act(async()=>{await work?.();});};
   async function flushFrames(){await update(()=>{for(const [id,callback] of [...frames]){frames.delete(id);callback();}});}
   async function mount(component,props) {
-   assert.equal(tree,null);desktopMatches=false;domById.clear();dialogNode=null;
+   assert.equal(tree===null,true,"the previous test must unmount its renderer");desktopMatches=false;domById.clear();dialogNode=null;
    await update(()=>{tree=renderer.create(React.createElement(component,props),{createNodeMock:element=>{
     const node={focus(options){focusCalls.push({id:element.props.id||element.props["aria-label"],options});document.activeElement=node;}};
     if(element.props.id)domById.set(element.props.id,node);
@@ -142,6 +144,9 @@ test("Admin navigation preserves editing context and verifies new-show artist up
   const fieldIn=(label,type="input")=>tree.root.findAllByType("label").find(node=>content(node).startsWith(label)).findByType(type);
   const buttonText=text=>tree.root.findAllByType("button").find(node=>content(node).startsWith(text));
   const artistCard=artist=>tree.root.findAllByProps({className:"admin-media-artist-card"}).find(card=>content(card.findByType("h3"))===artist);
+  const posterPreview=()=>tree.root.findByProps({className:"admin-poster-preview"});
+  const posterPicker=()=>tree.root.findByProps({"aria-label":"Chọn poster show"});
+  const posterStatus=()=>tree.root.findAllByProps({role:"status"}).find(node=>node.props["aria-live"]==="polite");
   async function chooseFile(input,file){
    const target={files:[file],value:file.name};
    await update(()=>input.props.onChange({target}));
@@ -257,7 +262,7 @@ test("Admin navigation preserves editing context and verifies new-show artist up
    await update(()=>artist.props.onChange({target:{value:"Synthetic Unsaved Artist"}}));
    const picker=tree.root.findAllByType("input").find(node=>node.props.type==="file");
    await update(()=>picker.props.onChange({target:{files:[new File(["synthetic-image"],"synthetic.png",{type:"image/png"})],value:"synthetic.png"}}));
-   const preview=tree.root.findAllByType("img").find(node=>node.props.alt==="Poster Synthetic Unsaved Artist").props.src;
+   const preview=posterPreview().findByType("img").props.src;
    assert.match(preview,/^blob:/);
    await click(byId("admin-nav-tickets"));
    assert.equal(tree.root.findByType(leaf("ticket-dashboard")).props.embedded,true);
@@ -267,7 +272,7 @@ test("Admin navigation preserves editing context and verifies new-show artist up
    assert.deepEqual(historyCalls.at(-1).state,{synthetic:true});
    await click(byId("admin-nav-shows"));
    assert.equal(fieldIn("Ca sĩ / nhóm nhạc").props.value,"Synthetic Unsaved Artist");
-   assert.equal(tree.root.findAllByType("img").find(node=>node.props.alt==="Poster Synthetic Unsaved Artist").props.src,preview);
+   assert.equal(posterPreview().findByType("img").props.src,preview);
    await click(buttonText("Mở quản lý chi phí show này"));
    const costs=tree.root.findByType(leaf("financial-breakdown"));
    assert.equal(costs.props.mode,"editor");assert.equal(costs.props.initialShowId,fixtureShow.id);
@@ -434,8 +439,111 @@ test("Admin navigation preserves editing context and verifies new-show artist up
    await unmount();showListHandler=null;showSaveHandler=null;
   });
 
+  await t.test("poster save sends the selected file and keeps the local preview until the exact normalized URL is verified",async()=>{
+   const oldUrl="https://media.synthetic.invalid/posters/"+fixtureShow.id+"/old.png";
+   const normalizedUrl="https://media.synthetic.invalid/posters/"+fixtureShow.id+"/normalized.webp";
+   managedShows=[{...fixtureShow,posterUrl:oldUrl}];
+   await mount(Dashboard,{actor:owner,initialSection:"shows"});
+   const file=new File([png],"replacement.png",{type:"image/png"});
+   await chooseFile(posterPicker(),file);
+   const localUrl=posterPreview().findByType("img").props.src;assert.match(localUrl,/^blob:/);
+   assert.match(content(tree.toJSON()),/Xem trước poster đang chọn, chưa lưu lên website/,"replacing an existing poster still identifies the draft as unsaved");
+   let releaseVerification;
+   const verification=new Promise(resolve=>{releaseVerification=resolve;});
+   showSaveHandler=init=>{assert.equal(JSON.parse(init.body).id,fixtureShow.id);return json({ok:true});};
+   posterUploadHandler=async init=>{
+    assert(init.body instanceof FormData);assert.equal(init.body.get("showId"),fixtureShow.id);
+    const sent=init.body.get("file");assert(sent instanceof File);assert.equal(sent.name,file.name);assert.equal(sent.type,"image/png");
+    assert.deepEqual(Buffer.from(await sent.arrayBuffer()),png,"the server receives the original file for normalization");
+    return json({ok:true,url:normalizedUrl,width:poster.POSTER_WIDTH,height:poster.POSTER_HEIGHT});
+   };
+   showListHandler=()=>verification;
+   const before=requests.length;
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.equal(posterPreview().findByType("img").props.src,localUrl,"the upload response alone cannot clear the selected draft");
+   assert.match(content(posterStatus()),/Đang xác minh/);assert.equal(posterPicker().props.disabled,true);
+   await update(()=>releaseVerification(json({shows:[{...fixtureShow,posterUrl:normalizedUrl}]})));
+   assert.equal(posterPreview().findByType("img").props.src,normalizedUrl);
+   assert.match(content(posterStatus()),/Đã lưu và đăng show thành công/);assert.equal(posterPicker().props.disabled,false);
+   assert.doesNotMatch(content(tree.toJSON()),/Xem trước poster đang chọn, chưa lưu lên website/);
+   assert.deepEqual(requests.slice(before).map(request=>[request.method,request.url]),[["POST","/api/admin/shows"],["POST","/api/admin/show-poster"],["GET","/api/admin/shows"]]);
+   showListHandler=()=>json({shows:[{...fixtureShow,posterUrl:normalizedUrl}]});
+   const savedBefore=requests.length;
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.deepEqual(requests.slice(savedBefore).map(request=>[request.method,request.url]),[["POST","/api/admin/shows"],["GET","/api/admin/shows"]],"a verified save clears the selected upload file");
+   await unmount();showSaveHandler=null;showListHandler=null;posterUploadHandler=null;managedShows=[fixtureShow];
+  });
+
+  await t.test("an old saved poster URL cannot falsely verify a replacement, and the same selected draft can be retried",async()=>{
+   const oldUrl="https://media.synthetic.invalid/posters/"+fixtureShow.id+"/old.webp";
+   managedShows=[{...fixtureShow,posterUrl:oldUrl}];
+   await mount(Dashboard,{actor:owner,initialSection:"shows"});
+   const file=new File([png],"retry-poster.png",{type:"image/png"});
+   await chooseFile(posterPicker(),file);
+   const localUrl=posterPreview().findByType("img").props.src;
+   let attempts=0,uploadedUrl="",verifyMatches=false;
+   showSaveHandler=()=>json({ok:true});
+   posterUploadHandler=async init=>{
+    assert.equal(init.body.get("showId"),fixtureShow.id);
+    assert.deepEqual(Buffer.from(await init.body.get("file").arrayBuffer()),png);
+    attempts++;uploadedUrl="https://media.synthetic.invalid/posters/"+fixtureShow.id+"/attempt-"+attempts+".webp";
+    return json({ok:true,url:uploadedUrl,width:1200,height:1800});
+   };
+   showListHandler=()=>json({shows:[{...fixtureShow,posterUrl:verifyMatches?uploadedUrl:oldUrl}]});
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.equal(attempts,1);assert.match(content(posterStatus()),/Chưa xác minh được poster mới/);
+   assert.doesNotMatch(content(posterStatus()),/Đã lưu và đăng show thành công/);
+   assert.equal(posterPreview().findByType("img").props.src,localUrl);
+   assert.equal(posterPicker().props.disabled,false);
+   verifyMatches=true;
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.equal(attempts,2,"a failed verification retains the selected File for a deliberate retry");
+   assert.equal(posterPreview().findByType("img").props.src,uploadedUrl);
+   assert.match(content(posterStatus()),/Đã lưu và đăng show thành công/);
+   await unmount();showSaveHandler=null;showListHandler=null;posterUploadHandler=null;managedShows=[fixtureShow];
+  });
+
+  await t.test("poster selection applies the shared 4 MiB limit and a non-JSON 413 preserves the valid local draft",async()=>{
+   await mount(Dashboard,{actor:owner,initialSection:"shows"});
+   const before=requests.length;
+   for(const {file,message} of [
+    {file:new File([],"empty.png",{type:"image/png"}),message:/rỗng/},
+    {file:new File([png],"unsupported.svg",{type:"image/svg+xml"}),message:/JPG, PNG hoặc WebP/},
+    {file:new File([Buffer.alloc(poster.MAX_POSTER_UPLOAD_BYTES+1)],"oversized.png",{type:"image/png"}),message:/4 MB/},
+   ]){
+    await chooseFile(posterPicker(),file);
+    assert.match(content(posterStatus()),message);assert.equal(posterPreview().findAllByType("img").length,0);
+   }
+   assert.equal(requests.length,before,"invalid selections cannot trigger a request");
+   await chooseFile(posterPicker(),new File([png],"valid.png",{type:"image/png"}));
+   const localUrl=posterPreview().findByType("img").props.src;
+   showSaveHandler=()=>json({ok:true});
+   posterUploadHandler=()=>new Response("Request Entity Too Large",{status:413,headers:{"Content-Type":"text/plain"}});
+   const saveBefore=requests.length;
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.match(content(posterStatus()),/4 MB/);assert.equal(posterPreview().findByType("img").props.src,localUrl);
+   assert.equal(posterPicker().props.disabled,false);
+   assert.deepEqual(requests.slice(saveBefore).map(request=>[request.method,request.url]),[["POST","/api/admin/shows"],["POST","/api/admin/show-poster"]],"a failed upload must not proceed to show verification");
+   await unmount();showSaveHandler=null;posterUploadHandler=null;
+  });
+
+  await t.test("selecting a different show discards the previous poster file so it cannot upload to the wrong show",async()=>{
+   managedShows=[fixtureShow,dynamicShow];
+   await mount(Dashboard,{actor:owner,initialSection:"shows"});
+   await chooseFile(posterPicker(),new File([png],"first-show-only.png",{type:"image/png"}));
+   assert.match(posterPreview().findByType("img").props.src,/^blob:/);
+   await click(tree.root.findAllByType("button").find(node=>node.props.className?.startsWith("admin-show-item")&&content(node.findByType("strong"))===dynamicShow.artist));
+   assert.equal(fieldIn("Mã show").props.value,dynamicShow.id);assert.equal(posterPreview().findAllByType("img").length,0);
+   showSaveHandler=init=>{assert.equal(JSON.parse(init.body).id,dynamicShow.id);return json({ok:true});};
+   const before=requests.length;
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.deepEqual(requests.slice(before).map(request=>[request.method,request.url]),[["POST","/api/admin/shows"],["GET","/api/admin/shows"]],"the previous show's selected image must not accompany this save");
+   assert.match(content(posterStatus()),/Đã lưu và đăng show thành công/);
+   await unmount();showSaveHandler=null;managedShows=[fixtureShow];
+  });
+
   assert.deepEqual(unexpected,[]);
-  assert.equal(requests.every(request=>request.method==="GET"||(request.method==="POST"&&["/api/admin/media","/api/admin/shows"].includes(request.url))),true,"only explicit synthetic image/show fixture actions may POST; no customer, order, email or payment mutation is permitted");
+  assert.equal(requests.every(request=>request.method==="GET"||(request.method==="POST"&&["/api/admin/media","/api/admin/show-poster","/api/admin/shows"].includes(request.url))),true,"only explicit synthetic image/show fixture actions may POST; no customer, order, email or payment mutation is permitted");
  }finally{
   if(tree){const renderer=require(rendererPath);await renderer.act(async()=>tree.unmount());}
   Module._load=originalLoad;console.error=originalError;

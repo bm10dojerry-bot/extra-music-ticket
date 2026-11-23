@@ -18,6 +18,25 @@ new URL through the public media API before reporting success and shows upload
 feedback next to the selected image. Regression checks use synthetic files and
 mocked storage: `node --test tests/media-upload-routes.test.cjs`.
 
+## Show poster frames and uploads
+
+Both homepage show grids and the Admin poster preview use a centered 2:3 frame.
+Existing posters cover that frame at display time, with excess edges clipped and
+proportions preserved. The selected-file preview uses the same crop as publication.
+
+New show-poster uploads accept JPEG, PNG or WebP up to 4 MiB. After authorization
+and an exact saved-show lookup, the server decodes the image with a 40-million-pixel
+limit, applies EXIF orientation, and creates a 1200 × 1800 WebP using centered
+cover resizing. The encoder uses quality 90 and retains transparency where present.
+See Sharp's [resize](https://sharp.pixelplumbing.com/api-resize/) and
+[orientation](https://sharp.pixelplumbing.com/api-operation/#autoorient) documentation.
+The immutable normalized object is saved before its path is assigned to the show.
+Admin verifies that exact new URL before clearing the selected-file draft.
+
+Poster processing is separate from artist PNG uploads. Existing stored source
+images are not rewritten. Regression fixtures use actual local Sharp processing
+with mocked external services: `node --test tests/show-poster-routes.test.cjs`.
+
 ## Google Analytics visitor map
 
 Admin Overview opens with a Vietnam-centered map using GA4's realtime Data API.
