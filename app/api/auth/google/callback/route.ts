@@ -2,10 +2,12 @@ import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
 import {staffDb,STAFF_COOKIE,createStaffSession,type Staff} from "../../../../../lib/staff-auth";
 import {ADMIN_COOKIE,createAdminSession} from "../../../../../lib/admin-session";
+import {handleAnalyticsCallback} from "../../../../../lib/google-analytics-oauth";
 export const runtime="nodejs";
 const origin="https://iextra.net";
 const failure=(reason:string,dest:string)=>NextResponse.redirect((dest==="admin"?"https://admin.iextra.net/admin":origin+"/staff")+"?login_error="+encodeURIComponent(reason));
 export async function GET(req:NextRequest){
+ if(req.nextUrl.searchParams.get("state")?.startsWith("ga4."))return handleAnalyticsCallback(req);
  const saved=req.cookies.get("extra_google_oauth")?.value||"";
  const [state,dest,extra]=saved.split(".");
  const destination=dest==="admin"?"admin":"staff";

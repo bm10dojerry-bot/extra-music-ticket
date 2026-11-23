@@ -1,8 +1,9 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
+import {usePathname} from "next/navigation";
+import {ensureGoogleTags,googleAnalyticsPageFields,isPublicMeasurementPage,useGlobalMeasurementId,useMeasurementConsent,validGa4MeasurementId} from "../../../lib/measurement-client";
 
 type EventName="view"|"checkout"|"purchase";
-type Consent="yes"|"no"|null;
 type AdsWindow=Window&{
  fbq?:(...args:unknown[])=>void;
  gtag?:(...args:unknown[])=>void;
@@ -15,27 +16,28 @@ type Props={
  googleAdsId?:string;googleAdsLabel?:string;
  event:EventName;amount:number;orderCode?:string;
 };
-const consentKey="extra_ads_consent_v1";
 const sessionKey="extra_ads_session_v1";
 const validPixel=(id:string)=>/^[0-9]{8,25}$/.test(id);
-const validGa4=(id:string)=>/^G-[A-Z0-9]{6,20}$/.test(id);
 const validAds=(id:string)=>/^AW-[0-9]{6,20}$/.test(id);
 const validLabel=(id:string)=>/^[A-Za-z0-9_-]{4,100}$/.test(id);
 
 export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId="",googleAdsLabel="",event,amount,orderCode}:Props){
- const [consent,setConsent]=useState<Consent>(null);
+ const pathname=usePathname();
+ const globalAnalytics=useGlobalMeasurementId(pathname);
+ const [consent,choose]=useMeasurementConsent();
  const [loaded,setLoaded]=useState(false);
  const fired=useRef(new Set<string>());
  const meta=validPixel(pixelId)?pixelId:"";
  // Đình Dũng uses an additional Pixel on ad account extra 02; keep the original Pixel intact.
  const extra02Pixel=showId==="dinh-dung-2811"&&meta?"2335529170354111":"";
- const ga4=validGa4(ga4Id)?ga4Id:"";
+ // Keep existing ecommerce destinations independent of the optional site-wide
+ // Analytics lookup. The global ID only enables this page's consent chooser.
+ const ga4=validGa4MeasurementId(ga4Id)?ga4Id:"";
  const ads=validAds(googleAdsId)?googleAdsId:"";
  const label=validLabel(googleAdsLabel)?googleAdsLabel:"";
- useEffect(()=>{try{const value=sessionStorage.getItem(consentKey);if(value==="yes"||value==="no")setConsent(value)}catch{}},[]);
  useEffect(()=>{
   setLoaded(false);
-  if(consent!=="yes")return;
+  if(consent!=="yes"||!isPublicMeasurementPage(window.location.hostname,window.location.pathname))return;
   const w=window as AdsWindow;let active=true;
   if(meta||extra02Pixel){
    if(!w.fbq){
@@ -50,23 +52,13 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
    }
   }
   if(ga4||ads){
-   w.dataLayer=w.dataLayer||[];
-   if(!w.gtag)w.gtag=(...args:unknown[])=>{w.dataLayer?.push(args)};
-   w.__extraGoogleIds=w.__extraGoogleIds||[];
-   const ids=[...new Set([ga4,ads].filter(Boolean))];
-   if(!document.querySelector('script[data-extra-gtag="yes"]')){
-    w.gtag("js",new Date());
-    const script=document.createElement("script");script.async=true;script.dataset.extraGtag="yes";
-    script.src="https://www.googletagmanager.com/gtag/js?id="+encodeURIComponent(ids[0]);
-    document.head.appendChild(script);
-   }
-   for(const id of ids){if(!w.__extraGoogleIds.includes(id)){w.gtag("config",id,{send_page_view:false});w.__extraGoogleIds.push(id)}}
+   ensureGoogleTags([ga4,ads]);
   }
   if(active)setLoaded(true);
   return()=>{active=false};
- },[consent,meta,extra02Pixel,ga4,ads]);
+ },[consent,meta,extra02Pixel,ga4,ads,pathname]);
  useEffect(()=>{
-  if(consent!=="yes"||!loaded)return;
+  if(consent!=="yes"||!loaded||!isPublicMeasurementPage(window.location.hostname,window.location.pathname))return;
   const w=window as AdsWindow;
   if(event==="purchase"&&!orderCode)return;
   const key=event==="purchase"?"purchase:"+orderCode:event+":"+showId;
@@ -91,18 +83,17 @@ export default function ShowAdsTracking({showId,artist,pixelId,ga4Id,googleAdsId
   }
   if(w.gtag){
    if(ga4){
-    const ecommerce={currency:"VND",value:safeAmount,items:[{item_id:showId,item_name:artist,quantity:1,price:safeAmount}]};
+    const ecommerce={currency:"VND",value:safeAmount,items:[{item_id:showId,item_name:artist,quantity:1,price:safeAmount}],...googleAnalyticsPageFields()};
     const gaEvent=event==="view"?"view_item":event==="checkout"?"begin_checkout":"purchase";
     w.gtag("event",gaEvent,event==="purchase"?{...ecommerce,transaction_id:orderCode,send_to:ga4}:{...ecommerce,send_to:ga4});
    }
    if(ads&&label&&event==="purchase")w.gtag("event","conversion",{send_to:ads+"/"+label,value:safeAmount,currency:"VND",transaction_id:orderCode});
   }
   if(event==="purchase")try{localStorage.setItem("extra_ads_"+key,"1")}catch{}
- },[consent,loaded,event,showId,artist,amount,orderCode,meta,extra02Pixel,ga4,ads,label]);
- function choose(value:"yes"|"no"){try{sessionStorage.setItem(consentKey,value)}catch{}setConsent(value)}
- if((!meta&&!ga4&&!ads)||consent!==null)return null;
+ },[consent,loaded,event,showId,artist,amount,orderCode,meta,extra02Pixel,ga4,ads,label,pathname]);
+ if((!meta&&!ga4&&!ads&&!globalAnalytics.measurementId)||consent!==null)return null;
  return <div className="extra-ads-consent" role="dialog" aria-label="Tùy chọn đo lường quảng cáo">
-  <p><strong>Quyền riêng tư</strong> · EXTRA sử dụng Meta Pixel và công cụ đo lường của Google nếu bạn đồng ý, để đo hiệu quả đặt chỗ. Từ chối không ảnh hưởng đến việc đặt chỗ.</p>
+  <p><strong>Quyền riêng tư</strong> · EXTRA sử dụng Meta Pixel và công cụ đo lường của Google nếu bạn đồng ý, để thống kê lượt truy cập, khu vực tổng hợp và hiệu quả đặt chỗ. Từ chối không ảnh hưởng đến việc đặt chỗ.</p>
   <div><button type="button" onClick={()=>choose("no")}>Không đồng ý</button><button type="button" onClick={()=>choose("yes")}>Đồng ý</button></div>
  </div>;
 }

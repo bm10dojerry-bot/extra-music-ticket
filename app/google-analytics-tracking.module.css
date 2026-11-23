@@ -1,0 +1,10 @@
+.banner{position:fixed;z-index:100;bottom:18px;left:18px;width:min(440px,calc(100vw - 36px));padding:18px;background:#202028f5;border:1px solid #76515c;border-radius:14px;box-shadow:0 12px 50px #000b;color:#f0e6e9;backdrop-filter:blur(12px)}
+.banner h2{margin:0 0 8px;font-size:15px;line-height:1.4;color:#fff}
+.banner p{font-size:12px;line-height:1.7;margin:0 0 14px}
+.banner a{color:#ffc2cb;text-decoration:underline;text-underline-offset:3px}
+.actions{display:flex;gap:9px}
+.actions button{flex:1;min-height:44px;padding:10px 12px;border-radius:9px;border:1px solid #655761;background:#32303a;color:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.actions .accept{background:#c72b40;border-color:#c72b40}
+.actions button:hover{filter:brightness(1.15)}
+.banner :is(a,button):focus-visible{outline:3px solid #ffcd91;outline-offset:3px}
+@media(max-width:650px){.banner{left:10px;bottom:calc(83px + env(safe-area-inset-bottom,0px));width:calc(100vw - 20px);padding:15px}.banner p{font-size:12px}}
