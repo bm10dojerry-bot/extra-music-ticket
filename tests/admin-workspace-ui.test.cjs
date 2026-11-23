@@ -1,5 +1,5 @@
 // Synthetic interaction checks for the actual Admin shell and Dashboard wiring.
-// No browser, customer data, network, email, payment or database writes are used.
+// No browser, customer data, real network, email, payment or database writes are used.
 // Optional renderer installation outside the repository (match resolved React):
 // npm install --prefix /tmp/extra-sale-ui-test-runtime --no-save --package-lock=false react@19.3.1 react-test-renderer@19.3.1
 // Run: node --test tests/admin-workspace-ui.test.cjs
@@ -22,7 +22,7 @@ const expectedSections=["overview","shows","artists","stages","venues","landingp
 const owner={id:"owner",username:"owner",display_name:"Synthetic Owner",role:"admin",active:true};
 const manager={id:"synthetic-manager",username:"manager",display_name:"Synthetic Show Manager",role:"show_manager",active:true};
 
-test("Admin navigation keeps every function reachable and preserves dashboard editing context",{
+test("Admin navigation preserves editing context and verifies new-show artist uploads",{
  skip:rendererAvailable?false:"Optional matching React renderer is not installed; see the installation command above.",
 },async t=>{
  assert.equal(require(path.join(rendererPath,"package.json")).version,React.version);
@@ -34,6 +34,10 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
  const mediaListeners=new Set();
  let tree=null,frameId=0,desktopMatches=false,dialogNode=null;
  const fixtureShow={id:"synthetic-show-alpha",artist:"Synthetic Artist Alpha",title:"Synthetic Show",date:"2099-01-15",time:"20:00",venue:"ccc",status:"announced",prices:{A:500000,B:400000,C:300000,D:200000},posterUrl:null};
+ const dynamicShow={...fixtureShow,id:"phamtruong02012007",artist:"Phạm Trưởng & Onis",status:"hidden"};
+ const dynamicSlot="artist-"+dynamicShow.id;
+ const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=","base64");
+ let managedShows=[fixtureShow],publicImages={},mediaUploadHandler=null,publicMediaHandler=null,showListHandler=null,showSaveHandler=null;
  const fixtureVenue={id:"ccc",name:"Synthetic Venue",city:"Synthetic City",address:"Synthetic Address",capacity:550,description:"Fixture only"};
  const fixtureReport={updatedAt:"2099-01-01T00:00:00Z",filters:{from:"",to:"",showId:"",saleId:""},shows:[fixtureShow],policies:{},commissionByShow:[],commissionBySeller:[],commissionTotal:0,commissionComplete:true,commissionIssues:[],bySeller:[],byDay:[],summary:[],totals:{orders:0,tickets:0,commissionTickets:0,complimentaryTickets:0,revenue:0,commissionPendingOrders:0},rows:[],rowCount:0,rowsLimited:false,limited:false,verifiedOnly:true,onlineOrders:0};
 
@@ -69,7 +73,6 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
    if(relative==="lib/venues")return {venues:[fixtureVenue],seatsFor:()=>[]};
    if(relative==="lib/shows")return {shows:[fixtureShow]};
    if(relative==="lib/show-data")return {defaultShows:()=>[fixtureShow]};
-   if(relative==="lib/media")return {mediaSlots:[{id:"artist-"+fixtureShow.id,name:"Ảnh PNG ca sĩ · "+fixtureShow.artist}]};
    for(const suffix of [".tsx",".ts","/index.tsx","/index.ts"]){const candidate=base+suffix;if(fs.existsSync(candidate))return loadSource(candidate);}
   }
   return originalLoad.apply(this,arguments);
@@ -86,10 +89,14 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
  });
  define("fetch",async(input,init={})=>{
   const method=init.method||"GET";
-  requests.push({url:input,method});
+  requests.push({url:input,method,init});
+  if(method==="POST"&&input==="/api/admin/media"&&mediaUploadHandler)return mediaUploadHandler(init);
+  if(method==="GET"&&input==="/api/public/media"&&publicMediaHandler)return publicMediaHandler(init);
+  if(method==="GET"&&input==="/api/admin/shows"&&showListHandler)return showListHandler(init);
+  if(method==="POST"&&input==="/api/admin/shows"&&showSaveHandler)return showSaveHandler(init);
   const fixtures={
-   "/api/public/media":{images:{}},
-   "/api/admin/shows":{shows:[fixtureShow]},
+   "/api/public/media":{images:publicImages},
+   "/api/admin/shows":{shows:managedShows},
    "/api/admin/venues":{venues:[]},
    "/api/venue-profiles":{profiles:{}},
    "/api/staff/reports":fixtureReport,
@@ -106,6 +113,7 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
   const navigation=loadSource(path.join(repo,"app/admin/admin-navigation.ts"));
   const AdminWorkspace=loadSource(path.join(repo,"app/admin/admin-workspace.tsx")).default;
   const Dashboard=loadSource(path.join(repo,"app/admin/dashboard.tsx")).default;
+  const media=loadSource(path.join(repo,"lib/media.ts"));
   function Harness({actor=owner,initialSection="overview"}) {
    const [section,setSection]=React.useState(()=>navigation.resolveAdminSection(initialSection,actor.role));
    return React.createElement(AdminWorkspace,{actor,section,onNavigate:next=>setSection(navigation.resolveAdminSection(next,actor.role))},React.createElement("section",{"data-current-section":section},section));
@@ -133,6 +141,12 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
   const searchIn=label=>tree.root.findAllByType("label").find(node=>content(node).includes(label)).findByType("input");
   const fieldIn=(label,type="input")=>tree.root.findAllByType("label").find(node=>content(node).startsWith(label)).findByType(type);
   const buttonText=text=>tree.root.findAllByType("button").find(node=>content(node).startsWith(text));
+  const artistCard=artist=>tree.root.findAllByProps({className:"admin-media-artist-card"}).find(card=>content(card.findByType("h3"))===artist);
+  async function chooseFile(input,file){
+   const target={files:[file],value:file.name};
+   await update(()=>input.props.onChange({target}));
+   assert.equal(target.value,"","clearing the picker permits selecting the same file again after an error");
+  }
 
   await t.test("all 22 sections resolve correctly, including content deep links, and restricted IDs fall back safely",async()=>{
    assert.deepEqual([...navigation.adminSections.map(item=>item.id)].sort(),[...expectedSections].sort());
@@ -274,7 +288,7 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
    assert.equal(tree.root.findAllByProps({className:"admin-media-venue-cards"}).length,1);
    await click(byId("admin-nav-venues"));
    assert.equal(tree.root.findAllByProps({className:"admin-media-artist-cards"}).length,1,"the ordinary media menu returns to the artist category");
-   await click(buttonText("Sửa tiểu sử"));
+   await click(artistCard(fixtureShow.artist).findAllByType("button").find(node=>content(node).startsWith("Sửa tiểu sử")));
    assert.equal(tree.root.findByType(AdminWorkspace).props.section,"artists");
    assert.equal(tree.root.findAllByType("h3").some(node=>content(node)===fixtureShow.artist),true);
    await click(byId("admin-nav-landingpage-ads"));
@@ -287,8 +301,141 @@ test("Admin navigation keeps every function reachable and preserves dashboard ed
    await unmount();
   });
 
+  await t.test("a saved new show appears in the artist grid and its PNG preview updates only after public verification",async()=>{
+   managedShows=[fixtureShow,dynamicShow];publicImages={};
+   await mount(Dashboard,{actor:owner,initialSection:"venues"});
+   const card=artistCard(dynamicShow.artist);assert(card,"saved artists outside the original catalog must have an upload control");
+   const expectedArtistCount=media.getMediaSlots(managedShows).filter(slot=>slot.id.startsWith("artist-")).length;
+   assert.equal(tree.root.findAllByProps({className:"admin-media-artist-card"}).length,expectedArtistCount);
+   assert.match(content(tree.root.findByProps({className:"admin-media-search"})),new RegExp("0/"+expectedArtistCount+" ảnh đã tải"));
+   const file=new File([png],"transparent-new-artist.png",{type:"image/png"});
+   const uploadedUrl="https://media.synthetic.invalid/"+dynamicSlot+"/new-transparent.png";
+   let releaseVerification;
+   const verification=new Promise(resolve=>{releaseVerification=resolve;});
+   const before=requests.length;
+   mediaUploadHandler=async init=>{
+    assert(init.body instanceof FormData);assert.equal(init.body.get("slot"),dynamicSlot);
+    const sent=init.body.get("file");assert(sent instanceof File);assert.equal(sent.name,file.name);assert.equal(sent.type,"image/png");
+    assert.deepEqual(Buffer.from(await sent.arrayBuffer()),png,"the client sends the original transparent PNG bytes");
+    return json({ok:true,url:uploadedUrl});
+   };
+   publicMediaHandler=()=>verification;
+   await chooseFile(card.findByType("input"),file);
+   assert.equal(artistCard(dynamicShow.artist).findAllByType("img").length,0,"an upload response alone must not display an unverified image");
+   assert.equal(byId("media-upload-status-"+dynamicSlot).props.role,"status");
+   assert.match(content(byId("media-upload-status-"+dynamicSlot)),/Đang xác minh/);
+   assert(tree.root.findAllByType("input").filter(node=>node.props.type==="file").every(node=>node.props.disabled));
+   await update(()=>releaseVerification(json({images:{[dynamicSlot]:uploadedUrl}})));
+   assert.equal(artistCard(dynamicShow.artist).findByType("img").props.src,uploadedUrl);
+   assert.match(content(byId("media-upload-status-"+dynamicSlot)),/Đã tải và xác minh/);
+   assert.equal(artistCard(dynamicShow.artist).findByType("input").props["aria-describedby"],"media-upload-status-"+dynamicSlot);
+   assert.equal(artistCard(dynamicShow.artist).findByType("input").props.disabled,false);
+   assert.deepEqual(requests.slice(before).map(request=>[request.method,request.url]),[["POST","/api/admin/media"],["GET","/api/public/media"]]);
+   await click(artistCard(dynamicShow.artist).findAllByType("button").find(node=>content(node).startsWith("Sửa tiểu sử")));
+   assert.equal(tree.root.findByType(AdminWorkspace).props.section,"artists");
+   assert.equal(tree.root.findByProps({alt:"Ảnh PNG "+dynamicShow.artist}).props.src,uploadedUrl);
+   assert.equal(tree.root.findByProps({"aria-label":"Tải ảnh PNG cho "+dynamicShow.artist}).props["aria-describedby"],"media-upload-status-"+dynamicSlot);
+   assert.match(content(byId("media-upload-status-"+dynamicSlot)),/Đã tải và xác minh/);
+   await unmount();mediaUploadHandler=null;publicMediaHandler=null;
+  });
+
+  await t.test("a stale public URL reports a local artist error and preserves the last verified preview",async()=>{
+   const oldUrl="https://media.synthetic.invalid/"+dynamicSlot+"/previous.png";
+   const newUrl="https://media.synthetic.invalid/"+dynamicSlot+"/replacement.png";
+   publicImages={[dynamicSlot]:oldUrl};
+   await mount(Dashboard,{actor:owner,initialSection:"venues"});
+   await click(artistCard(dynamicShow.artist).findAllByType("button").find(node=>content(node).startsWith("Sửa tiểu sử")));
+   mediaUploadHandler=()=>json({ok:true,url:newUrl});
+   const before=requests.length;
+   await chooseFile(tree.root.findByProps({"aria-label":"Tải ảnh PNG cho "+dynamicShow.artist}),new File([png],"retry.png",{type:"image/png"}));
+   const feedback=byId("media-upload-status-"+dynamicSlot);
+   assert.equal(feedback.props.role,"alert");assert.match(content(feedback),/Khung xem trước chưa cập nhật/);
+   assert.doesNotMatch(content(feedback),/Đã tải và xác minh/);
+   assert.equal(tree.root.findByProps({alt:"Ảnh PNG "+dynamicShow.artist}).props.src,oldUrl);
+   assert.equal(tree.root.findByProps({"aria-label":"Tải ảnh PNG cho "+dynamicShow.artist}).props.disabled,false);
+   assert.deepEqual(requests.slice(before).map(request=>[request.method,request.url]),[["POST","/api/admin/media"],["GET","/api/public/media"]]);
+   await click(byId("admin-nav-venues"));
+   assert.equal(artistCard(dynamicShow.artist).findByType("img").props.src,oldUrl);
+   assert.equal(byId("media-upload-status-"+dynamicSlot).props.role,"alert","the error stays attached to the same artist across views");
+   await unmount();mediaUploadHandler=null;publicImages={};
+  });
+
+  await t.test("non-JSON 413 and malformed success responses show actionable local errors without verification or false previews",async()=>{
+   await mount(Dashboard,{actor:owner,initialSection:"venues"});
+   for(const scenario of [
+    {response:()=>new Response("Request Entity Too Large",{status:413,headers:{"Content-Type":"text/plain"}}),message:/tối đa 4 MB/},
+    {response:()=>new Response("<html>not JSON</html>",{status:200,headers:{"Content-Type":"text/html"}}),message:/dữ liệu ảnh không hợp lệ/},
+    {response:()=>json({ok:true,url:""}),message:/Chưa nhận được đường dẫn ảnh/},
+   ]){
+    mediaUploadHandler=scenario.response;const before=requests.length;
+    await chooseFile(artistCard(dynamicShow.artist).findByType("input"),new File([png],"same-file.png",{type:"image/png"}));
+    const feedback=byId("media-upload-status-"+dynamicSlot);
+    assert.equal(feedback.props.role,"alert");assert.match(content(feedback),scenario.message);
+    assert.equal(artistCard(dynamicShow.artist).findAllByType("img").length,0);
+    assert.equal(artistCard(dynamicShow.artist).findByType("input").props.disabled,false);
+    assert.deepEqual(requests.slice(before).map(request=>[request.method,request.url]),[["POST","/api/admin/media"]]);
+   }
+   await unmount();mediaUploadHandler=null;
+  });
+
+  await t.test("client MIME, empty-file and size checks block invalid artist uploads before any request",async()=>{
+   await mount(Dashboard,{actor:owner,initialSection:"venues"});
+   const before=requests.length;
+   for(const scenario of [
+    {file:new File([png],"unsupported.svg",{type:"image/svg+xml"}),message:/Chỉ hỗ trợ ảnh PNG, JPG hoặc WebP/},
+    {file:new File([],"empty.png",{type:"image/png"}),message:/Tệp ảnh rỗng/},
+    {file:new File([Buffer.alloc(media.MAX_MEDIA_UPLOAD_BYTES+1)],"oversized.png",{type:"image/png"}),message:/vượt quá 4 MB/},
+   ]){
+    await chooseFile(artistCard(dynamicShow.artist).findByType("input"),scenario.file);
+    const feedback=byId("media-upload-status-"+dynamicSlot);
+    assert.equal(feedback.props.role,"alert");assert.match(content(feedback),scenario.message);
+   }
+   assert.equal(requests.length,before);
+   await unmount();managedShows=[fixtureShow];publicImages={};
+  });
+
+  await t.test("saving a hidden new show exposes its artist immediately and a stale initial load cannot remove it",async()=>{
+   let releaseInitialLoad,showReads=0,saved=false;
+   const initialLoad=new Promise(resolve=>{releaseInitialLoad=resolve;});
+   showListHandler=()=>{
+    showReads++;
+    if(showReads===1)return initialLoad;
+    assert.equal(saved,true,"verification must follow the successful synthetic save");
+    return json({shows:[fixtureShow,{...dynamicShow,status:"announced",rawStatus:"hidden"}]});
+   };
+   showSaveHandler=init=>{
+    const body=JSON.parse(init.body);
+    assert.equal(body.id,dynamicShow.id);assert.equal(body.artist,dynamicShow.artist);assert.equal(body.status,"hidden");
+    saved=true;return json({ok:true});
+   };
+   const before=requests.length;
+   await mount(Dashboard,{actor:owner,initialSection:"shows"});
+   assert.equal(showReads,1);
+   await click(buttonText("+ Thêm show"));
+   for(const [label,value,type] of [
+    ["Mã show",dynamicShow.id,"input"],
+    ["Ca sĩ / nhóm nhạc",dynamicShow.artist,"input"],
+    ["Trạng thái","hidden","select"],
+   ])await update(()=>fieldIn(label,type).props.onChange({target:{value}}));
+   await click(buttonText("Lưu & Đăng lên trang chủ"));
+   assert.equal(saved,true);assert.equal(showReads,2);
+   assert.equal(fieldIn("Trạng thái","select").props.value,"hidden","the raw stored visibility survives verification normalization");
+   assert.equal(fieldIn("Mã show").props.disabled,true,"the saved show is now part of the managed list");
+   await click(byId("admin-nav-venues"));
+   assert(artistCard(dynamicShow.artist),"the saved new artist is available without a page reload");
+   await update(()=>releaseInitialLoad(json({shows:[fixtureShow]})));
+   assert(artistCard(dynamicShow.artist),"an older initial request must not overwrite the verified saved show");
+   assert.equal(tree.root.findAllByProps({className:"admin-media-artist-card"}).filter(card=>content(card.findByType("h3"))===dynamicShow.artist).length,1);
+   await click(byId("admin-nav-shows"));
+   assert.equal(fieldIn("Ca sĩ / nhóm nhạc").props.value,dynamicShow.artist);
+   assert.equal(fieldIn("Trạng thái","select").props.value,"hidden");
+   assert.equal(requests.slice(before).filter(request=>request.method==="POST").length,1);
+   assert.equal(requests.slice(before).find(request=>request.method==="POST").url,"/api/admin/shows","saving this fixture must not trigger any other mutation");
+   await unmount();showListHandler=null;showSaveHandler=null;
+  });
+
   assert.deepEqual(unexpected,[]);
-  assert.equal(requests.every(request=>request.method==="GET"),true,"navigation never creates, edits, emails, or pays an order");
+  assert.equal(requests.every(request=>request.method==="GET"||(request.method==="POST"&&["/api/admin/media","/api/admin/shows"].includes(request.url))),true,"only explicit synthetic image/show fixture actions may POST; no customer, order, email or payment mutation is permitted");
  }finally{
   if(tree){const renderer=require(rendererPath);await renderer.act(async()=>tree.unmount());}
   Module._load=originalLoad;console.error=originalError;

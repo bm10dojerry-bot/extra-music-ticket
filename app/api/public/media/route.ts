@@ -7,7 +7,8 @@ export async function GET(){
  try{
  const res=await fetch(url+"/rest/v1/site_media?select=slot,image_path",{headers:{apikey:key,Authorization:"Bearer "+key},cache:"no-store"});
  if(!res.ok)throw Error("read failed");
- const rows=await res.json() as {slot:string;image_path:string}[];
- return NextResponse.json({images:Object.fromEntries(rows.filter(r=>validSlot(r.slot)).map(r=>[r.slot,mediaPublicUrl(r.image_path)]))},{headers:{"Cache-Control":"no-store"}});
+ const rows:unknown=await res.json();
+ if(!Array.isArray(rows))throw Error("invalid media response");
+ return NextResponse.json({images:Object.fromEntries(rows.filter((r):r is {slot:string;image_path:string}=>r&&typeof r.slot==="string"&&validSlot(r.slot)&&typeof r.image_path==="string").map(r=>[r.slot,mediaPublicUrl(r.image_path)]))},{headers:{"Cache-Control":"no-store"}});
  }catch{return NextResponse.json({images:{}},{status:503})}
 }

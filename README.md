@@ -1,6 +1,23 @@
 # extra-music-ticket
 Ticket booking system for Extra Music Show
 
+## Artist image uploads
+
+Apply `supabase/migrations/20261123193821_dynamic_artist_media_slots.sql` before
+deploying the dynamic artist upload fix. It extends the media slot constraint
+without modifying saved images or access policies. Nondefault artist slots must
+belong to an existing saved show, including hidden shows; the upload API verifies
+this before writing to Storage. Admin's artist editor and image gallery use the
+same show IDs, and public media reads return the same saved slots.
+
+Media uploads accept PNG, JPEG and WebP up to 4 MiB, with matching client/server
+validation to leave room for multipart data below Vercel's default
+[request-body limit](https://vercel.com/docs/functions/limitations#request-body-size).
+Original bytes are retained, including PNG transparency. Admin verifies the exact
+new URL through the public media API before reporting success and shows upload
+feedback next to the selected image. Regression checks use synthetic files and
+mocked storage: `node --test tests/media-upload-routes.test.cjs`.
+
 ## Google Analytics visitor map
 
 Admin Overview opens with a Vietnam-centered map using GA4's realtime Data API.
