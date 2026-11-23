@@ -3,9 +3,10 @@ Ticket booking system for Extra Music Show
 
 ## Google Analytics visitor map
 
-Admin Overview includes a country map and city ranking from GA4's realtime Data
-API. Counts describe active users in the last 30 minutes. The total, country and
-city reports are queried separately with the selected web stream's exact ID.
+Admin Overview opens with a Vietnam-centered map using GA4's realtime Data API.
+A compact Vietnam/world switch changes only the viewport. Counts describe active
+users in the last 30 minutes. The total, country and city reports are queried
+separately with the selected web stream's exact ID.
 
 ### Setup
 
@@ -38,8 +39,14 @@ and measurement ID; existing per-show ecommerce/Meta/Google Ads behavior remains
 independent of the optional global configuration lookup.
 
 The map uses bundled Natural Earth country geometry, with small-country symbols
-from geographic centroids. City coordinates and individual visitor locations are
-not plotted. Reports refresh every minute while visible. See the official
+from geographic centroids. The Vietnam view fits the country on desktop and
+mobile, highlights its outline, and keeps activity markers at a consistent screen
+size. Offscreen markers are excluded from keyboard focus; the world view restores
+international coverage without filtering report totals or making another request.
+Each activity point remains a country aggregate. City coordinates and individual
+visitor locations are not plotted. Reports refresh every minute while visible.
+Synthetic viewport and marker checks are in `tests/google-analytics-map-ui.test.cjs`.
+See the official
 [realtime API schema](https://developers.google.com/analytics/devguides/reporting/data/v1/realtime-api-schema)
 for supported geographic dimensions.
 

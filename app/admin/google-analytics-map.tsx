@@ -9,6 +9,7 @@ import {
 } from "../../lib/google-analytics-types";
 import {COUNTRY_SHAPES} from "./ga4-world-map-data";
 import {COUNTRY_POINTS} from "./ga4-country-points";
+import {analyticsMapViewport,pointInMapViewport,projectMapPoint,type AnalyticsMapView} from "./ga4-map-viewport";
 import styles from "./google-analytics-map.module.css";
 
 const formatNumber=new Intl.NumberFormat("vi-VN");
@@ -53,6 +54,7 @@ export default function GoogleAnalyticsMap(){
  const [selectedCountry,setSelectedCountry]=useState("");
  const [hoverCountry,setHoverCountry]=useState("");
  const [focusedCountry,setFocusedCountry]=useState("");
+ const [mapView,setMapView]=useState<AnalyticsMapView>("vietnam");
  const [mapSize,setMapSize]=useState({width:0,height:0});
  const panelRef=useRef<HTMLElement>(null);
  const canvasRef=useRef<HTMLDivElement>(null);
@@ -201,12 +203,13 @@ export default function GoogleAnalyticsMap(){
  const countryIndex=new Map(countries.map(country=>[countryKey(country.countryId),country]));
  const pointIndex=new Map(COUNTRY_POINTS.map(point=>[point.id,point]));
  const activePoints=COUNTRY_POINTS.filter(point=>countryIndex.has(point.id));
+ const viewport=analyticsMapViewport(mapView,mapSize);
+ const visiblePoints=activePoints.filter(point=>pointInMapViewport(point,viewport));
  const unmappedCountries=countries.some(country=>!pointIndex.has(countryKey(country.countryId)));
  const highlightedId=hoverCountry||focusedCountry||selectedCountry;
- const highlighted=countryIndex.get(highlightedId),highlightedPoint=pointIndex.get(highlightedId);
- const mapScale=Math.min(mapSize.width/800,mapSize.height/420);
- const pointX=highlightedPoint?(mapSize.width-800*mapScale)/2+highlightedPoint.x*mapScale:0;
- const pointY=highlightedPoint?(mapSize.height-420*mapScale)/2+highlightedPoint.y*mapScale:0;
+ const highlightedPoint=visiblePoints.find(point=>point.id===highlightedId);
+ const highlighted=highlightedPoint?countryIndex.get(highlightedId):undefined;
+ const {x:pointX,y:pointY}=highlightedPoint?projectMapPoint(highlightedPoint,viewport):{x:0,y:0};
  const tooltipBelow=pointY<100;
  const selectedStream=streams.find(stream=>stream.id===streamDraft&&stream.compatible);
  const canSave=Boolean(properties.some(property=>property.id===propertyDraft)&&selectedStream&&!propertiesError&&!streamsError&&!propertiesLoading&&!streamsLoading&&!action);
@@ -225,28 +228,35 @@ export default function GoogleAnalyticsMap(){
   :"Chưa có dữ liệu Google Analytics";
  const controlLabel=(data?.canManage?"Cài đặt bản đồ. ":"Thông tin bản đồ. ")+statusText;
  function openManagement(){setHoverCountry("");setFocusedCountry("");setSelectedCountry("");setManageOpen(true);}
+ function changeMapView(view:AnalyticsMapView){setMapView(view);setHoverCountry("");setFocusedCountry("");setSelectedCountry("");}
 
  return <section ref={panelRef} className={styles.mapSection} aria-labelledby={mapTitleId} aria-busy={loading}>
   <h2 id={mapTitleId} className={styles.srOnly}>Khách truy cập theo khu vực</h2>
-  <p id={mapDescriptionId} className={styles.srOnly}>Google Analytics 4. Người dùng hoạt động trong 30 phút qua. Mỗi chấm biểu thị một quốc gia có truy cập, không phải vị trí chính xác của từng người.</p>
+  <p id={mapDescriptionId} className={styles.srOnly}>Google Analytics 4. {mapView==="vietnam"?"Bản đồ phóng gần, lấy Việt Nam làm trung tâm.":"Bản đồ toàn thế giới."} Người dùng hoạt động trong 30 phút qua. Mỗi chấm biểu thị một quốc gia có truy cập, không phải vị trí chính xác của từng người.</p>
   <p className={styles.srOnly} role="status">{statusText}{report?.limited?" Một số khu vực vượt quá giới hạn báo cáo.":""}{unmappedCountries?" Có lượt truy cập chưa thể đặt lên bản đồ.":""}</p>
+  <div className={styles.viewToggle} role="group" aria-label="Phạm vi bản đồ">
+   <button type="button" className={mapView==="vietnam"?styles.viewActive:styles.viewButton} aria-pressed={mapView==="vietnam"} onClick={()=>changeMapView("vietnam")}>Việt Nam</button>
+   <button type="button" className={mapView==="world"?styles.viewActive:styles.viewButton} aria-pressed={mapView==="world"} onClick={()=>changeMapView("world")}>Thế giới</button>
+  </div>
   <div ref={canvasRef} className={styles.canvas} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
-   <svg viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet" role="group" aria-labelledby={mapTitleId} aria-describedby={mapDescriptionId} className={styles.map} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
-    <g aria-hidden="true" className={styles.land}>{COUNTRY_SHAPES.map((shape,index)=><path key={shape.id+"-"+index} d={shape.path}/>)}</g>
-    {activePoints.map(point=>{
+   <svg viewBox={[viewport.x,viewport.y,viewport.width,viewport.height].join(" ")} preserveAspectRatio="xMidYMid meet" role="group" aria-labelledby={mapTitleId} aria-describedby={mapDescriptionId} className={styles.map+(mapView==="vietnam"?" "+styles.vietnamView:"")} onClick={event=>{if(event.target===event.currentTarget){setSelectedCountry("");setHoverCountry("");}}}>
+    <g aria-hidden="true" className={styles.land}>{COUNTRY_SHAPES.map((shape,index)=><path key={shape.id+"-"+index} d={shape.path} className={mapView==="vietnam"&&shape.id==="VN"?styles.vietnamLand:undefined}/>)}</g>
+    {visiblePoints.map(point=>{
      const country=countryIndex.get(point.id)!;
      // Keep adjacent countries from intercepting one another's pointer targets.
-     const hitRadius=Math.min(20,...activePoints.filter(other=>other.id!==point.id).map(other=>Math.hypot(other.x-point.x,other.y-point.y)/2));
+     const hitRadius=Math.min(22,...visiblePoints.filter(other=>other.id!==point.id).map(other=>Math.hypot(other.x-point.x,other.y-point.y)*viewport.scale/2));
      const label=countryLabel(country)+": "+formatNumber.format(country.activeUsers)+" người dùng hoạt động trong 30 phút qua. Tổng hợp theo quốc gia.";
      return <g key={point.id} transform={`translate(${point.x} ${point.y})`} role="button" tabIndex={0} aria-label={label} aria-pressed={selectedCountry===point.id} aria-describedby={highlightedId===point.id?tooltipId:undefined} className={`${styles.marker} ${highlightedId===point.id?styles.markerActive:""}`} onMouseEnter={()=>setHoverCountry(point.id)} onMouseLeave={()=>setHoverCountry("")} onFocus={()=>setFocusedCountry(point.id)} onBlur={()=>setFocusedCountry("")} onClick={()=>setSelectedCountry(current=>current===point.id?"":point.id)} onKeyDown={event=>{
       if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedCountry(current=>current===point.id?"":point.id);}
       if(event.key==="Escape"){setSelectedCountry("");setHoverCountry("");setFocusedCountry("");}
      }}>
-      <circle className={styles.hitArea} r={hitRadius}/>
-      <circle className={styles.glow} r="12"/>
-      <circle className={styles.pulse} r="8"/>
-      <circle className={styles.focusRing} r="9"/>
-      <circle className={styles.dot} r="3.5"/>
+      <g transform={"scale("+(1/viewport.scale)+")"}>
+       <circle className={styles.hitArea} r={hitRadius}/>
+       <circle className={styles.glow} r="12"/>
+       <circle className={styles.pulse} r="8"/>
+       <circle className={styles.focusRing} r="9"/>
+       <circle className={styles.dot} r="3.5"/>
+      </g>
      </g>;
     })}
    </svg>
