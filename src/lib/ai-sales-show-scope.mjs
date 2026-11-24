@@ -65,6 +65,8 @@ function salesConversationGuidance(state = {}) {
   if (state.tone === "playful" && ["greeting","casual","objection","price"].includes(state.intent)) rules.push(" Khách đang nói vui: có thể đáp lại tự nhiên bằng một câu dí dỏm ngắn, sau đó giải đáp đúng nhu cầu.");
   if (["complaint","payment","refund"].includes(state.intent) || state.tone === "upset") rules.push(" Giữ giọng nghiêm túc, đồng cảm và rõ ràng; không đùa hoặc chen quảng cáo, khuyến mại ngoài yêu cầu.");
   if (state.intent === "promotion") rules.push(" Khách hỏi ưu đãi: kiểm tra chính sách hiện hành cho đúng show và nhu cầu trước khi trả lời. Nếu chưa xác minh được điều kiện hoặc giá cuối, nói rõ chưa xác nhận; không khẳng định có hay không có khuyến mại.");
+  rules.push(" Tạo cảm xúc tích cực bằng lời chào đón, lời cảm ơn và cách nói gần gũi phù hợp với khách; có thể nói Hẹn gặp anh/chị tại đêm diễn, Có anh/chị cùng tham gia thì đêm nhạc sẽ vui hơn nhiều. Không giả vờ là một cô gái hoặc nhân viên sẽ trực tiếp gặp khách, không hứa gặp riêng, không gây áp lực tình cảm.");
+  if (state.paymentVerified === true && state.intent === "booking_complete") rules.push(" Sau khi hệ thống xác minh thanh toán thành công, giữ nguyên thông báo xác nhận vé và hướng dẫn chính thức; có thể thêm một lời cảm ơn, chúc khách có buổi tối đáng nhớ và lời hẹn gặp tại đêm diễn từ đội ngũ Extra. Không tiếp tục thúc mua vé, không tự phát sinh tin nhắn trùng.");
   return rules.join("");
 }
 
