@@ -41,8 +41,30 @@ function scopeVerifiedShows(shows, scope) {
   return (Array.isArray(shows) ? shows : []).filter(show => ids.has(show?.id));
 }
 
-function salesTurnInstruction(scope) {
-  const common = "Trả lời bằng tiếng Việt tự nhiên, lịch sự; trả lời câu hỏi thực tế trước, mỗi lượt tối đa một câu hỏi khi cần. Không lặp thông tin đã biết, không vội chốt vé. Giá, giờ, địa điểm, ghế, link và thanh toán phải lấy từ dữ liệu/công cụ Extra đã xác minh. Không đoán hoặc tạo khan hiếm. Giữ quy trình báo giá, xác nhận giữ ghế, đối soát thanh toán và chuyển người hỗ trợ hiện có.";
+/** Accept only trusted, structured conversation state; do not interpolate customer text into policy. */
+function salesConversationGuidance(state = {}) {
+  if (!state || typeof state !== "object") state = {};
+  const rules = [
+    " Đọc toàn bộ ngữ cảnh liên quan và ưu tiên yêu cầu mới nhất của khách; hiểu cách nói ngắn, tiếng Việt không dấu, lỗi chính tả và câu hỏi tiếp nối. Không chạy một chuỗi chốt đơn cố định.",
+    " Không cần kết thúc mọi câu bằng câu hỏi. Trả lời trực tiếp và ngắn gọn; chỉ gợi ý bước tiếp theo khi thật sự hữu ích.",
+    " Nếu khách sửa lựa chọn, bỏ thông tin cũ đã bị thay thế; không xem việc hỏi giá hoặc khen ghế là đồng ý đặt vé.",
+    " Tư vấn chênh lệch giá, vị trí và lựa chọn phù hợp ngân sách dựa trên dữ liệu thật; không tự giảm giá, tạo ưu đãi hoặc hứa giữ ghế.",
+    " Nếu khách hỏi nhiều ý, trả lời từng ý theo thông tin đã xác minh trước khi hỏi một điều còn thiếu. Nếu chưa lấy được dữ liệu, nói rõ và chuyển hỗ trợ khi cần.",
+    " Không giả vờ là người thật nếu khách hỏi; giới thiệu đúng là trợ lý tư vấn của Extra."
+  ];
+  if (state.greeted === true) rules.push(" Đã chào khách: không chào lại.");
+  if (state.partySizeKnown === true) rules.push(" Đã biết số lượng vé: không hỏi lại số lượng trừ khi khách muốn thay đổi.");
+  if (state.budgetKnown === true) rules.push(" Đã biết ngân sách: không hỏi lại; tư vấn trong mức đó khi có lựa chọn phù hợp.");
+  if (state.seatingKnown === true) rules.push(" Đã biết khu ghế: giữ lựa chọn đó cho đến khi khách đổi.");
+  if (state.intent === "price") rules.push(" Khách hỏi giá: nếu show đã xác định, lấy giá hiện hành và nêu số tiền, đơn vị theo vé trước mọi lời mời chọn ghế. Nếu chưa xác định show, chỉ hỏi show.");
+  if (state.intent === "objection") rules.push(" Khách còn băn khoăn: giải đáp đúng điều đang lo, đưa lựa chọn thật phù hợp, không thúc ép.");
+  if (state.intent === "booking") rules.push(" Khách muốn đặt: kiểm tra ghế và báo tổng tiền, chỉ giữ ghế sau xác nhận rõ ràng qua quy trình tin cậy.");
+  if (state.intent === "payment") rules.push(" Khách hỏi thanh toán: dùng trạng thái đơn đã đối soát và hướng dẫn chính thức; không tự xác nhận đã thanh toán.");
+  return rules.join("");
+}
+
+function salesTurnInstruction(scope, conversation = {}) {
+  const common = "Trả lời bằng tiếng Việt tự nhiên, lịch sự; trả lời câu hỏi thực tế trước, mỗi lượt tối đa một câu hỏi khi cần. Không lặp thông tin đã biết, không vội chốt vé. Giá, giờ, địa điểm, ghế, link và thanh toán phải lấy từ dữ liệu/công cụ Extra đã xác minh. Không đoán hoặc tạo khan hiếm. Giữ quy trình báo giá, xác nhận giữ ghế, đối soát thanh toán và chuyển người hỗ trợ hiện có." + salesConversationGuidance(conversation);
   if (scope?.kind === "single") return common + " Chỉ tư vấn một show được xác định trong ngữ cảnh tin nhắn hiện tại. Không quảng cáo, báo giá, liệt kê hoặc đề xuất show khác khi khách không hỏi. Nếu khách hỏi giá, trả giá chính xác của show này trước khi hỏi thêm. Khi khách muốn đặt ghế, hỗ trợ đúng show và chỉ giữ ghế sau xác nhận rõ ràng.";
   if (scope?.kind === "comparison") return common + " Khách yêu cầu so sánh rõ ràng: chỉ so sánh những show được yêu cầu và không thêm show ngoài phạm vi.";
   if (scope?.kind === "catalog") return common + " Chỉ giới thiệu danh sách show khi khách thực sự hỏi danh sách.";
