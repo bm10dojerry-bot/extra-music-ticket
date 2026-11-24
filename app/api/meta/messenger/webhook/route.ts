@@ -3,7 +3,7 @@ import {createHmac,timingSafeEqual} from "node:crypto";
 import {staffDb} from "../../../../../lib/staff-auth";
 import {getMessengerConfig} from "../../../../../lib/facebook-messenger";
 import {customerRequestsHuman} from "../../../../../lib/messenger-sale-memory";
-import {classifyMessengerEcho,getMessengerSalePilot,readMessengerAdReferral} from "../../../../../lib/messenger-sale-pilot";
+import {classifyMessengerEcho,getMessengerSalePilot,readMessengerAdReferral,requiresMessengerSaleIsolation} from "../../../../../lib/messenger-sale-pilot";
 import {messengerSaleRpc,processMessengerSaleChats} from "../../../../../lib/messenger-sale-worker";
 
 export const runtime="nodejs";
@@ -17,6 +17,7 @@ const constantTimeEquals=(a:string,b:string)=>{
 export async function GET(req:NextRequest){
  const config=getMessengerConfig();
  if(!config)return reply("Messenger Page integration not configured",503);
+ if(requiresMessengerSaleIsolation()&&!getMessengerSalePilot(config.pageId))return reply("Messenger test environment not configured",503);
  const q=req.nextUrl.searchParams;
  const mode=q.get("hub.mode")||"",token=q.get("hub.verify_token")||"",challenge=q.get("hub.challenge")||"";
  if(mode==="subscribe"&&constantTimeEquals(token,config.verifyToken)&&challenge.length<512)return reply(challenge,200);
@@ -35,21 +36,22 @@ function messengerEventTime(value:unknown){
 export async function POST(req:NextRequest){
  const config=getMessengerConfig();
  if(!config)return reply("Messenger Page integration not configured",503);
+ const pilot=getMessengerSalePilot(config.pageId);
+ if(requiresMessengerSaleIsolation()&&!pilot)return reply("Messenger test environment not configured",503);
  const size=Number(req.headers.get("content-length")||0);
  if(size>150000)return reply("Payload too large",413);
- const raw=await req.text();
+ const raw=Buffer.from(await req.arrayBuffer());
  if(raw.length>150000)return reply("Payload too large",413);
  const provided=req.headers.get("x-hub-signature-256")||"";
  if(!/^sha256=[a-f0-9]{64}$/i.test(provided)){console.warn("[messenger-webhook] Rejected missing or malformed signed webhook");return reply("Invalid signature",403);}
  const expected="sha256="+createHmac("sha256",config.appSecret).update(raw).digest("hex");
  if(!constantTimeEquals(provided.toLowerCase(),expected)){console.warn("[messenger-webhook] Rejected signature mismatch; check App Secret belongs to connected Meta App");return reply("Invalid signature",403);}
  let data:Body;
- try{data=JSON.parse(raw) as Body}catch{return reply("Invalid JSON",400)}
+ try{data=JSON.parse(raw.toString("utf8")) as Body}catch{return reply("Invalid JSON",400)}
  if(data?.object!=="page"||!Array.isArray(data.entry)){
   console.info("[messenger-webhook] Verified non-page event ignored");
   return reply("Ignored",200);
  }
- const pilot=getMessengerSalePilot(config.pageId);
  const work=new Map<string,string>();
  let handoff=false;
  let processed=0,ignored=0,unmatchedPages=0,duplicate=0,unknownEcho=0;
@@ -80,6 +82,7 @@ export async function POST(req:NextRequest){
     }
     const psid=item?.sender?.id||"";
     const testConversation=pilot&&pilot.testers.has(psid)&&item.recipient?.id===config.pageId;
+    if(pilot&&!testConversation){ignored+=1;continue;}
     const referral=testConversation?readMessengerAdReferral(message?.referral??item.referral??item.postback?.referral):null;
     if(referral&&(!body||!mid)){
      await messengerSaleRpc("extra_messenger_ai_record_referral",{

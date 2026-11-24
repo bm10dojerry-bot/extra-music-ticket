@@ -5,14 +5,14 @@ const { resolve } = require("node:path");
 const { test } = require("node:test");
 const ts = require("typescript");
 
-function load(relativePath, dependencies = {}) {
+function load(relativePath, dependencies = {}, globals = {}) {
   const file = resolve(__dirname, "..", relativePath);
   const output = ts.transpileModule(readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   });
   const module = { exports: {} };
   const localRequire = name => Object.hasOwn(dependencies, name) ? dependencies[name] : require(name);
-  new Function("exports", "module", "require", output.outputText)(module.exports, module, localRequire);
+  new Function("exports", "module", "require", ...Object.keys(globals), output.outputText)(module.exports, module, localRequire, ...Object.values(globals));
   return module.exports;
 }
 
@@ -25,6 +25,8 @@ const pilotEnv = {
   META_MESSENGER_AI_MODE: "test", META_MESSENGER_AI_TEST_PAGE_ID: pageId,
   META_MESSENGER_AI_TEST_PSIDS: psid, META_MESSENGER_AI_APP_ID: appId,
   META_MESSENGER_AI_WORKER_SECRET: "synthetic durable worker secret",
+  META_MESSENGER_AI_TEST_CHECKOUT_ORIGIN: "https://store-pilot.example.invalid",
+  META_MESSENGER_AI_TEST_SUPABASE_URL: "https://db-pilot.example.invalid", SUPABASE_URL: "https://db-pilot.example.invalid",
 };
 const pilot = pilotModule.getMessengerSalePilot(pageId, pilotEnv);
 const token = "fd88af9a-00ee-49f9-906e-8e1e8e243830";
@@ -34,6 +36,17 @@ test("pilot only accepts explicitly configured tester conversations outside prod
   assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, VERCEL_ENV: "production" }), null);
   assert.equal(pilotModule.getMessengerSalePilot("110002", pilotEnv), null);
   assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, META_MESSENGER_AI_TEST_PSIDS: "" }), null);
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, META_MESSENGER_AI_TEST_CHECKOUT_ORIGIN: "https://iExtra.net./" }), null);
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, META_MESSENGER_AI_TEST_CHECKOUT_ORIGIN: "" }), null);
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, SEPAY_CHECKOUT_ENABLED: "true" }), null);
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, META_MESSENGER_AI_APP_ID: "2447629075989535" }), null);
+  assert.equal(pilotModule.getMessengerSalePilot("1223940670813189", { ...pilotEnv, META_MESSENGER_AI_TEST_PAGE_ID: "1223940670813189" }), null);
+  const liveDatabase = "https://fokntdvgzfldxbaglrdc.supabase.co";
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, META_MESSENGER_AI_TEST_SUPABASE_URL: liveDatabase, SUPABASE_URL: liveDatabase }), null);
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...pilotEnv, SUPABASE_URL: "https://different.example.invalid" }), null);
+  const local = { ...pilotEnv, META_MESSENGER_AI_TEST_CHECKOUT_ORIGIN: "http://127.0.0.1:3000" };
+  assert.ok(pilotModule.getMessengerSalePilot(pageId, local));
+  assert.equal(pilotModule.getMessengerSalePilot(pageId, { ...local, VERCEL_ENV: "preview" }), null);
   assert.equal(pilot.testers.has("999999"), false);
   assert.equal(pilotModule.checkMessengerWorkerAuth(null, pilot.workerSecret), false);
   assert.equal(pilotModule.checkMessengerWorkerAuth(`Bearer ${pilot.workerSecret}`, pilot.workerSecret), true);
@@ -51,7 +64,26 @@ test("echo attribution requires the matching App and marker or an explicitly ver
   assert.deepEqual(pilotModule.classifyMessengerEcho(undefined, metadata, verified), { kind: "unknown" });
 });
 
-function webhookHarness(testPilot) {
+test("Graph transport checks the cohort before sending, profile lookup, typing or audio", async () => {
+  const calls = [];
+  const transport = load("lib/facebook-messenger.ts", { "server-only": {}, "./messenger-sale-pilot": {
+    requiresMessengerSaleIsolation: () => true,
+    getMessengerSalePilot: page => pilotModule.getMessengerSalePilot(page, pilotEnv),
+  } }, {
+    process: { env: { META_MESSENGER_PAGE_ID: pageId, META_MESSENGER_PAGE_ACCESS_TOKEN: "synthetic page token for testing",
+      META_MESSENGER_APP_SECRET: appSecret, META_MESSENGER_VERIFY_TOKEN: "synthetic verification token" } },
+    fetch: async () => { calls.push("graph"); return Response.json({ message_id: "fake-graph-mid" }); },
+  });
+  await assert.rejects(transport.sendMessengerPageMessage("220099", "Chào"), reason => reason.deliveryUncertain === false);
+  await transport.sendMessengerTypingAction("220099", "typing_on");
+  assert.equal(await transport.getMessengerDisplayName("220099"), undefined);
+  await assert.rejects(transport.sendMessengerPageAudio(psid, "https://audio.example.invalid/fixture.mp3"));
+  assert.deepEqual(calls, []);
+  assert.equal((await transport.sendMessengerPageMessage(psid, "Chào")).messageId, "fake-graph-mid");
+  assert.deepEqual(calls, ["graph"]);
+});
+
+function webhookHarness(testPilot, isolation = Boolean(testPilot)) {
   const calls = [];
   const after = [];
   const route = load("app/api/meta/messenger/webhook/route.ts", {
@@ -61,7 +93,7 @@ function webhookHarness(testPilot) {
     },
     "../../../../../lib/facebook-messenger": { getMessengerConfig: () => ({ pageId, appSecret }) },
     "../../../../../lib/messenger-sale-memory": { customerRequestsHuman: body => body.includes("nhân viên") },
-    "../../../../../lib/messenger-sale-pilot": { ...pilotModule, getMessengerSalePilot: () => testPilot },
+    "../../../../../lib/messenger-sale-pilot": { ...pilotModule, getMessengerSalePilot: () => testPilot, requiresMessengerSaleIsolation: () => isolation },
     "../../../../../lib/messenger-sale-worker": {
       messengerSaleRpc: async (name, params) => (calls.push([name, params]), { outcome: "received", chat_id: "tester-chat" }),
       processMessengerSaleChats: async work => calls.push(["work", work]),
@@ -110,6 +142,21 @@ test("signed AI echoes only reconcile their own attempt and unknown echoes do no
     p_page_id: pageId, p_psid: psid, p_token: token, p_meta_mid: "echo-ai", p_sender: "ai", p_sent_at: null,
   }]]);
   assert.equal(after.length, 0);
+});
+
+test("isolated callbacks never fall back to the legacy inbox, including incomplete setup", async () => {
+  const blocked = webhookHarness(null, true);
+  assert.equal((await blocked.route.GET(new Request("http://localhost/api/meta/messenger/webhook"))).status, 503);
+  const first = { sender: { id: psid }, recipient: { id: pageId }, message: { mid: "test-3", text: "2 vé" } };
+  assert.equal((await blocked.route.POST(signedRequest([first]))).status, 503);
+  assert.deepEqual(blocked.calls, []);
+  const valid = webhookHarness(pilot);
+  const nonTester = { ...first, sender: { id: "220099" }, message: { ...first.message, mid: "test-4" } };
+  const wrongPage = { ...first, recipient: { id: "110099" }, message: { ...first.message, mid: "test-5" } };
+  assert.equal((await valid.route.POST(signedRequest([nonTester, wrongPage, first]))).status, 200);
+  assert.equal(valid.calls.length, 1);
+  assert.equal(valid.calls[0][0], "extra_messenger_ai_ingest");
+  assert.equal(valid.calls[0][1].p_mid, "test-3");
 });
 
 test("worker revalidates ownership before Graph and retains uncertain delivery for echo reconciliation", async () => {

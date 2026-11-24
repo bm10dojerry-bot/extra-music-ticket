@@ -77,7 +77,7 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   const needsInventory = context.intents.includes("seat_view") ||
    (context.intents.includes("price") && Boolean(context.seatView || context.zone));
   const inventory = show && needsInventory && messengerShowOpen(show, now) ? await loadMessengerSaleInventory(show, now) : null;
-  const result = composeMessengerSaleReply({ memory: context, message: message.body, displayName, now, show,
+  const result = composeMessengerSaleReply({ memory: context, message: message.body, displayName, now, show, checkoutOrigin: pilot.checkoutOrigin,
    showDataAvailable: Boolean(catalog), inventory, promotions: loadMessengerSalePromotions(), resumedAfterHuman: Boolean(claim.last_human_at) });
   await typing;
   const begin = await messengerSaleRpc<Outcome>("extra_messenger_ai_begin_send", {

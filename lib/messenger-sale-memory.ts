@@ -140,7 +140,9 @@ function seatPreference(text: string): SeatView | undefined {
   return last === "trai" ? "left" : last === "phai" ? "right" : "center";
 }
 
-function seatZone(text: string, clarification?: Clarification): SeatZone | undefined {
+function seatZone(body: string, clarification?: Clarification): SeatZone | undefined {
+  // The accent distinguishes price rank "hạng A" from seat row "hàng A".
+  const text = normalized(body.normalize("NFC").replace(/\bhạng(?=\s+[a-d](?![\p{L}\p{N}]))/giu, "hạng vé"));
   const explicit = [...text.matchAll(/\b(?:khu(?: vuc)?|hang ve|zone) ([abcd])\b/g)].pop()?.[1];
   const answer = clarification === "zone" ? text.match(/^([abcd])(?: (?:a|nhe|nha))?[.!]?$/)?.[1] : undefined;
   return (explicit ?? answer)?.toUpperCase() as SeatZone | undefined;
@@ -235,7 +237,7 @@ export function deriveMessengerSaleMemory(input: MemoryInput): MessengerSaleMemo
     memory.seatView = /\b(?:goc nhin nao cung duoc|ben nao cung duoc|khong quan trong goc nhin)\b/.test(text)
       ? undefined : seatPreference(text) ?? memory.seatView;
     memory.zone = /\b(?:khu nao cung duoc|hang nao cung duoc|khong can khu)\b/.test(text)
-      ? undefined : seatZone(text, memory.clarification) ?? memory.zone;
+      ? undefined : seatZone(message.body, memory.clarification) ?? memory.zone;
     if (/\b(?:ngan sach khong gioi han|khong gioi han ngan sach)\b/.test(text)) {
       delete memory.budgetVnd;
       delete memory.budgetBasis;

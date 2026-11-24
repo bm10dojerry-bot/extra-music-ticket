@@ -1,4 +1,5 @@
 import "server-only";
+import {getMessengerSalePilot,requiresMessengerSaleIsolation} from "./messenger-sale-pilot";
 
 type Config={pageId:string;pageToken:string;appSecret:string;verifyToken:string;apiVersion:string};
 export function getMessengerConfig():Config|null{
@@ -21,10 +22,15 @@ export function messengerOutboundMetadata(kind:"ai"|"staff",token:string){
  return `extra-sale-2:${kind}:${token}`;
 }
 
+function canContactMessenger(pageId:string,psid:string){
+ return !requiresMessengerSaleIsolation()||Boolean(getMessengerSalePilot(pageId)?.testers.has(psid));
+}
+
 export async function sendMessengerPageMessage(psid:string,message:string,metadata?:string):Promise<{messageId:string}>{
  const config=getMessengerConfig();
  if(!config)throw Error("Messenger API chưa được cấp quyền Fanpage hoặc chưa cấu hình trong Vercel");
  if(!/^[0-9]{5,80}$/.test(psid))throw Error("Mã khách Messenger không hợp lệ");
+ if(!canContactMessenger(config.pageId,psid))throw new MessengerSendError(false);
  const res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
   method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
   body:JSON.stringify({recipient:{id:psid},messaging_type:"RESPONSE",message:{text:message,...(metadata?{metadata}:{})}}),
@@ -40,7 +46,7 @@ export async function sendMessengerPageMessage(psid:string,message:string,metada
 
 export async function getMessengerDisplayName(psid:string):Promise<string|undefined>{
  const config=getMessengerConfig();
- if(!config||!/^\d{5,80}$/.test(psid))return;
+ if(!config||!/^\d{5,80}$/.test(psid)||!canContactMessenger(config.pageId,psid))return;
  try{
   const response=await fetch(`https://graph.facebook.com/${config.apiVersion}/${psid}?fields=first_name,last_name`,{
    headers:{Authorization:`Bearer ${config.pageToken}`},cache:"no-store",signal:AbortSignal.timeout(1500)
@@ -54,7 +60,7 @@ export async function getMessengerDisplayName(psid:string):Promise<string|undefi
 
 export async function sendMessengerTypingAction(psid:string,action:"typing_on"|"typing_off"){
  const config=getMessengerConfig();
- if(!config||!/^\d{5,80}$/.test(psid))return;
+ if(!config||!/^\d{5,80}$/.test(psid)||!canContactMessenger(config.pageId,psid))return;
  await fetch(`https://graph.facebook.com/${config.apiVersion}/${config.pageId}/messages`,{
   method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${config.pageToken}`},
   body:JSON.stringify({recipient:{id:psid},sender_action:action}),cache:"no-store",signal:AbortSignal.timeout(1500)
@@ -71,6 +77,7 @@ export async function sendMessengerPageAudio(psid:string,audioUrl:string):Promis
  const config=getMessengerConfig();
  if(!config)throw Error("Messenger Page chưa được cấu hình");
  if(!/^[0-9]{5,80}$/.test(psid))throw Error("Mã khách Messenger không hợp lệ");
+ if(requiresMessengerSaleIsolation())throw new MessengerSendError(false);
  const parsed=new URL(audioUrl);
  if(parsed.protocol!=="https:"||parsed.username||parsed.password)throw Error("Audio URL phải là HTTPS hợp lệ");
  const res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{

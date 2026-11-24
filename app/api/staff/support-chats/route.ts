@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb,type Staff} from "../../../../lib/staff-auth";
 import {getMessengerConfig,MessengerSendError,messengerOutboundMetadata,sendMessengerPageMessage} from "../../../../lib/facebook-messenger";
 import {HUMAN_IDLE_MS} from "../../../../lib/messenger-ai-ownership";
+import {getMessengerSalePilot,requiresMessengerSaleIsolation} from "../../../../lib/messenger-sale-pilot";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -13,6 +14,11 @@ const validId=(id:string)=>/^[a-f0-9-]{36}$/i.test(id);
 const requestIdPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const allowedOrigin=(req:NextRequest)=>{try{const origin=req.headers.get("origin");return !!origin&&new URL(origin).host===req.headers.get("host")}catch{return false}};
 const access=()=>requireRole(["admin","sale","show_manager"]);
+function isolatedInboxUnavailable(){
+ if(!requiresMessengerSaleIsolation())return false;
+ const config=getMessengerConfig();
+ return !config||!getMessengerSalePilot(config.pageId);
+}
 const manager=(actor:Staff)=>actor.role!=="sale";
 const dbActor=(actor:Staff)=>actor.id==="owner"?null:actor.id;
 const fields="id,show_id,customer_name,customer_phone,status,created_at,updated_at,last_customer_at,last_staff_at,assigned_staff_id,assigned_at,channel";
@@ -49,6 +55,7 @@ async function dbRpc<T>(name:string,params:Record<string,unknown>):Promise<T>{
  return await staffDb("rpc/"+name,{method:"POST",body:JSON.stringify(params)}) as T;
 }
 export async function GET(req:NextRequest){
+ if(isolatedInboxUnavailable())return reply({error:"Hộp thư thử nghiệm chưa được cấu hình"},503);
  const actor=await access();if(!actor)return reply({error:"Cần đăng nhập tài khoản Sale hoặc Admin"},403);
  const id=req.nextUrl.searchParams.get("chatId")||"";
  try{
@@ -127,6 +134,7 @@ async function sendManagedReply(chat:Chat,actor:Staff,psid:string,body:string,re
 }
 export async function POST(req:NextRequest){
  if(!allowedOrigin(req))return reply({error:"Nguồn yêu cầu không hợp lệ"},403);
+ if(isolatedInboxUnavailable())return reply({error:"Hộp thư thử nghiệm chưa được cấu hình"},503);
  const actor=await access();if(!actor)return reply({error:"Cần đăng nhập tài khoản Sale hoặc Admin"},403);
  if(Number(req.headers.get("content-length")||0)>12000)return reply({error:"Tin nhắn quá dài"},413);
  const input=await req.json().catch(()=>null);
@@ -144,6 +152,12 @@ export async function POST(req:NextRequest){
    const rec=await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id)+"&select=messenger_page_id,messenger_psid&limit=1") as {messenger_page_id:string|null;messenger_psid:string|null}[];
    const dest=rec[0];
    if(!dest?.messenger_psid||dest.messenger_page_id!==configs.pageId)return reply({error:"Cuộc chat không thuộc Fanpage được cấp quyền"},409);
+   if(chat.messenger_ai_managed||requiresMessengerSaleIsolation()){
+    const pilot=getMessengerSalePilot(configs.pageId);
+    if(!chat.messenger_ai_managed||!pilot?.testers.has(dest.messenger_psid)){
+     return reply({error:"Hộp thư này chỉ gửi tin cho tài khoản đã đăng ký thử nghiệm"},403);
+    }
+   }
    if(chat.messenger_ai_managed){
     const requestId:unknown=input?.requestId;
     if(typeof requestId!=="string"||!requestIdPattern.test(requestId))return reply({error:"Mã yêu cầu gửi không hợp lệ. Hãy tải lại hộp thư."},400);
@@ -161,6 +175,7 @@ export async function POST(req:NextRequest){
 }
 export async function PATCH(req:NextRequest){
  if(!allowedOrigin(req))return reply({error:"Nguồn yêu cầu không hợp lệ"},403);
+ if(isolatedInboxUnavailable())return reply({error:"Hộp thư thử nghiệm chưa được cấu hình"},503);
  const actor=await access();if(!actor)return reply({error:"Cần đăng nhập tài khoản Sale hoặc Admin"},403);
  const input=await req.json().catch(()=>null);
  const action=String(input?.action||""),id=String(input?.chatId||""),status=String(input?.status||"");

@@ -138,7 +138,10 @@ test("can remove seat constraints and keeps the row letter distinct from a price
   ]});
   assert.equal(relaxed.seatView, undefined);
   assert.equal(relaxed.zone, "B");
-  const flexible = deriveMessengerSaleMemory({shows, previous: relaxed, messages: [{sender: "customer", body: "Khu nào cũng được."}]});
+  const changed = deriveMessengerSaleMemory({shows, previous: relaxed, messages: [{sender: "customer", body: "Mình chọn hạng A."}]});
+  assert.equal(changed.zone, "A");
+  assert.deepEqual(changed.intents, ["seat_view"]);
+  const flexible = deriveMessengerSaleMemory({shows, previous: changed, messages: [{sender: "customer", body: "Khu nào cũng được."}]});
   assert.equal(flexible.zone, undefined);
 });
 

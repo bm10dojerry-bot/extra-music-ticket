@@ -21,7 +21,8 @@ class SyntheticSendError extends Error {
   }
 }
 
-function fixture({ managed = true, assigned = true, oldSchema = false, begin = "ready", failedTransport = false, owner = false } = {}) {
+function fixture({ managed = true, assigned = true, oldSchema = false, begin = "ready", failedTransport = false,
+  owner = false, isolated = managed && !oldSchema, configured = true, allowed = true } = {}) {
   const calls = [];
   const chat = {
     id: chatId, channel: "messenger", status: "open", customer_name: "Khách thử",
@@ -57,6 +58,10 @@ function fixture({ managed = true, assigned = true, oldSchema = false, begin = "
     "next/server": require("next/server"),
     "../../../../lib/staff-auth": { requireRole: async () => fakeStaff, staffDb: fakeDb },
     "../../../../lib/messenger-ai-ownership": { HUMAN_IDLE_MS: 180_000 },
+    "../../../../lib/messenger-sale-pilot": {
+      requiresMessengerSaleIsolation: () => isolated,
+      getMessengerSalePilot: () => isolated && configured ? { testers: new Set(allowed ? ["123456"] : []) } : null,
+    },
     "../../../../lib/facebook-messenger": {
       getMessengerConfig: () => ({ pageId: "12345" }),
       MessengerSendError: SyntheticSendError,
@@ -135,6 +140,17 @@ test("legacy Messenger staff replies retain the original send path with the form
   assert.equal((await f.post()).status, 200);
   assert.deepEqual(f.calls.map(([name]) => name), ["meta", "extra_support_staff_reply"]);
   assert.deepEqual(f.calls[0], ["meta", "123456", body]);
+});
+
+test("staff cannot use a Preview legacy chat, a non-tester, or incomplete settings to send a message", async () => {
+  for (const [options, status] of [
+    [{ managed: false, isolated: true }, 403], [{ allowed: false }, 403], [{ configured: false }, 503],
+    [{ managed: true, isolated: false }, 403],
+  ]) {
+    const f = fixture(options);
+    assert.equal((await f.post()).status, status);
+    assert.deepEqual(f.calls, []);
+  }
 });
 
 test("staff can explicitly take over, and a waiting customer's human request blocks release", async () => {

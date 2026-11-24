@@ -6,6 +6,7 @@ import type { ManagedShow } from "../lib/show-data";
 import { seatsFor } from "../lib/venues";
 
 const now = new Date("2026-11-25T01:00:00.000Z");
+const checkoutOrigin = "https://store-pilot.example.invalid";
 const show: ManagedShow = {
   id: "show-test", artist: "Ca sĩ thử", title: "Đêm ca sĩ thử", date: "2026-12-20", time: "19:30", status: "announced",
   venue: "laocai", posterUrl: null, prices: { A: 800_000, B: 600_000, C: 450_000, D: 300_000 },
@@ -18,7 +19,7 @@ const reply = (
   rest: Partial<Parameters<typeof composeMessengerSaleReply>[0]> = {},
 ) => {
   const context = deriveMessengerSaleMemory({ shows: [show], previous: remembered, messages: [{ sender: "customer", body: message }] });
-  return composeMessengerSaleReply({ memory: { ...context, ...memory }, now, message, show, showDataAvailable: true, ...rest }).text;
+  return composeMessengerSaleReply({ memory: { ...context, ...memory }, now, message, show, checkoutOrigin, showDataAvailable: true, ...rest }).text;
 };
 const inventoryWith = (event: ManagedShow, ids: readonly string[]): MessengerSaleInventory => ({
   showId: event.id, rowCounts: {}, unavailable: new Set(seatsFor(event.venue).flatMap(seat => ids.includes(seat.id) ? [] : [seat.id])),
@@ -28,7 +29,7 @@ test("answers a direct price request using the ad referral, Facebook name and re
   const message = "Giá vé bao nhiêu?";
   const memory = deriveMessengerSaleMemory({ shows: [show], referral: { ref: `show:${show.id}` }, messages: [{ sender: "customer", body: message }] });
   assert.equal(memory.showId, show.id);
-  const { text } = composeMessengerSaleReply({ memory, message, now, displayName: "Minh", show, showDataAvailable: true });
+  const { text } = composeMessengerSaleReply({ memory, message, now, checkoutOrigin, displayName: "Minh", show, showDataAvailable: true });
   assert.match(text, /Minh.*buổi sáng/);
   assert.match(text, /công nghệ AI/);
   assert.match(text, /hạng A 800\.000đ.*hạng D 300\.000đ mỗi vé/);
@@ -43,7 +44,7 @@ test("retains show and answers known pending questions after a human interventio
     { sender: "customer", body: "Có giao lưu không?" },
   ] as const;
   const memory = deriveMessengerSaleMemory({ shows: [show], previous: remembered, messages });
-  const { text } = composeMessengerSaleReply({ memory, now, message: messages[2].body, show, showDataAvailable: true, resumedAfterHuman: true });
+  const { text } = composeMessengerSaleReply({ memory, now, message: messages[2].body, show, checkoutOrigin, showDataAvailable: true, resumedAfterHuman: true });
   assert.match(text, /20–30 phút/);
   assert.match(text, /300\.000đ/);
   assert.doesNotMatch(text, /Em chào|công nghệ AI|ca sĩ nào/);
@@ -82,6 +83,8 @@ test("an unavailable inventory read cannot produce positive availability", () =>
 test("a catalog read failure cannot fall back to a possibly outdated price", () => {
   const text = reply("Bảng giá đêm nhạc bao nhiêu?", {}, { show: null, showDataAvailable: false, inventory: null });
   assert.match(text, /chưa tải được thông tin chương trình/);
+  assert.ok(text.includes(checkoutOrigin));
+  assert.doesNotMatch(text, /iextra\.net/);
   assert.doesNotMatch(text, /\d+đ/);
 });
 
@@ -100,7 +103,8 @@ test("only valid matching promotion and eligibility are described", () => {
 
 test("gives official booking and payment steps without creating a hold", () => {
   const text = reply("Mua vé thế nào?");
-  assert.match(text, /https:\/\/iextra\.net\/show\/show-test#booking/);
+  assert.match(text, /https:\/\/store-pilot\.example\.invalid\/show\/show-test#booking/);
+  assert.doesNotMatch(text, /iextra\.net/);
   assert.match(text, /giữ ghế 15 phút từ lúc tạo đơn thành công/);
   assert.match(reply("Hướng dẫn thanh toán thế nào?"), /mã QR hiện trên đơn/);
   assert.match(reply("Đặt vé cho nhóm.", { quantity: 16 }), /12 ghế mỗi đơn/);
@@ -131,6 +135,6 @@ test("combined sales replies fit the inbox limit without cutting checkout links"
     promotions: [promotion, promotion, promotion, promotion],
   });
   assert.ok(text.length <= 1200);
-  assert.match(text, /https:\/\/iextra\.net\/show\/show-test#booking/);
+  assert.match(text, /https:\/\/store-pilot\.example\.invalid\/show\/show-test#booking/);
   assert.match(text, /20–30 phút/);
 });

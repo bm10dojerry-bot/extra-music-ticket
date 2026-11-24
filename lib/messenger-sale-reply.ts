@@ -20,6 +20,7 @@ type ReplyInput = {
   displayName?: string;
   salutation?: "anh" | "chị";
   now: Date;
+  checkoutOrigin: string;
   show?: ManagedShow | null;
   showDataAvailable: boolean;
   inventory?: MessengerSaleInventory | null;
@@ -34,9 +35,7 @@ const zones = ["A", "B", "C", "D"] as const;
 const moneyFormat = new Intl.NumberFormat("vi-VN");
 const localHour = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hourCycle: "h23" });
 const views = { left: "bên trái", center: "chính diện", right: "bên phải" } as const;
-const checkoutOrigin = "https://iextra.net";
 const money = (price: number) => `${moneyFormat.format(price)}đ`;
-const seatMapUrl = (showId: string) => `${checkoutOrigin}/show/${encodeURIComponent(showId)}#booking`;
 const viewName = (view: SeatView) => views[view];
 
 export function messengerShowOpen(show: ManagedShow, now: Date): boolean {
@@ -118,11 +117,11 @@ function priceLine(show: ManagedShow, memory: MessengerSaleMemory, allPrices: bo
     : "Em chưa có giá đã xác minh cho hạng vé mình hỏi ạ.";
 }
 
-function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | null | undefined, memory: MessengerSaleMemory): {
+function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | null | undefined, memory: MessengerSaleMemory, mapLink: string): {
   answer: string; question?: string;
 } {
   if (!inventory || inventory.showId !== show.id) {
-    return { answer: "Em chưa xác minh được ghế đang trống. Mình có thể xem sơ đồ cập nhật tại " + seatMapUrl(show.id) };
+    return { answer: "Em chưa xác minh được ghế đang trống. Mình có thể xem sơ đồ cập nhật tại " + mapLink };
   }
 
   const seats = availableSeats(show, inventory);
@@ -156,7 +155,7 @@ function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | nu
     }
     const group = memory.quantity && memory.quantity > 1 ? `${memory.quantity} ghế liền nhau` : "ghế";
     return {
-      answer: `Em chưa tìm được ${group} phù hợp với các lựa chọn hiện tại${memory.budgetVnd === undefined ? "" : " trong mức ngân sách mình đưa"}. Mình có thể xem thêm trên sơ đồ: ${seatMapUrl(show.id)}`,
+      answer: `Em chưa tìm được ${group} phù hợp với các lựa chọn hiện tại${memory.budgetVnd === undefined ? "" : " trong mức ngân sách mình đưa"}. Mình có thể xem thêm trên sơ đồ: ${mapLink}`,
     };
   }
   const details = options.map(option => {
@@ -166,7 +165,7 @@ function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | nu
     return `hạng ${first.zone} (${seats}), góc ${viewName(first.view)}, ${money(first.price)}/vé${total}`;
   }).join("\n");
   return {
-    answer: `Em tìm được ${memory.quantity ? "lựa chọn" : "ghế tham khảo"} đang trống theo sơ đồ:\n${details}.\nTình trạng có thể thay đổi đến khi tạo đơn tại ${seatMapUrl(show.id)}`,
+    answer: `Em tìm được ${memory.quantity ? "lựa chọn" : "ghế tham khảo"} đang trống theo sơ đồ:\n${details}.\nTình trạng có thể thay đổi đến khi tạo đơn tại ${mapLink}`,
     question: !memory.seatView ? seatViewQuestion
       : !memory.quantity ? "Mình đi bao nhiêu người để em kiểm tra ghế phù hợp ạ?"
       : memory.budgetVnd === undefined ? "Mình dự tính ngân sách khoảng bao nhiêu cho mỗi vé ạ?" : undefined,
@@ -189,11 +188,11 @@ function paymentReply(memory: MessengerSaleMemory, show?: ManagedShow | null): s
   return "Em chưa xác minh được trạng thái thanh toán trong cuộc trò chuyện này. Mình kiểm tra trên trang đơn hàng đã mở khi đặt vé. Hệ thống xác nhận sau khi đối soát thành công ạ.";
 }
 
-function bookingReply(show: ManagedShow, memory: MessengerSaleMemory): string {
+function bookingReply(show: ManagedShow, memory: MessengerSaleMemory, mapLink: string): string {
   if ((memory.quantity ?? 1) > 12) {
-    return `Mình xem sơ đồ đêm ${show.artist} tại ${seatMapUrl(show.id)}. Trang đặt vé trực tiếp nhận tối đa 12 ghế mỗi đơn. Nếu cần giữ chỗ cả nhóm, mình có thể yêu cầu nhân viên Extra hỗ trợ ạ.`;
+    return `Mình xem sơ đồ đêm ${show.artist} tại ${mapLink}. Trang đặt vé trực tiếp nhận tối đa 12 ghế mỗi đơn. Nếu cần giữ chỗ cả nhóm, mình có thể yêu cầu nhân viên Extra hỗ trợ ạ.`;
   }
-  return `Mình chọn ghế và tạo đơn tại ${seatMapUrl(show.id)}. Hệ thống giữ ghế 15 phút từ lúc tạo đơn thành công. Mình thanh toán theo mã QR hiện trên đơn và theo dõi xác nhận của hệ thống ạ.`;
+  return `Mình chọn ghế và tạo đơn tại ${mapLink}. Hệ thống giữ ghế 15 phút từ lúc tạo đơn thành công. Mình thanh toán theo mã QR hiện trên đơn và theo dõi xác nhận của hệ thống ạ.`;
 }
 
 function textForReply(input: ReplyInput): string {
@@ -217,7 +216,7 @@ function textForReply(input: ReplyInput): string {
     if (interactionAsked) answers.push(artistInteractionExplanation);
     if (showNeeded || onlyGeneral) answers.push(input.showDataAvailable
       ? "Mình muốn tìm hiểu đêm nhạc của ca sĩ nào hoặc ngày nào ạ?"
-      : "Em chưa tải được thông tin chương trình hiện hành. Mình có thể xem lịch trên https://iextra.net ạ.");
+      : `Em chưa tải được thông tin chương trình hiện hành. Mình có thể xem lịch tại ${input.checkoutOrigin} ạ.`);
     return answers.join("\n");
   }
 
@@ -240,7 +239,8 @@ function textForReply(input: ReplyInput): string {
 
   const hasPreference = Boolean(memory.seatView || memory.zone);
   const adviseSeats = intents.has("seat_view") || (intents.has("price") && hasPreference);
-  const seatReply = adviseSeats ? findSeatReply(show, inventory, memory) : undefined;
+  const mapLink = `${input.checkoutOrigin}/show/${encodeURIComponent(show.id)}#booking`;
+  const seatReply = adviseSeats ? findSeatReply(show, inventory, memory, mapLink) : undefined;
   if (seatReply) answers.push(seatReply.answer);
   if (showAsked) answers.push(showDetails);
   if (interactionAsked) answers.push(artistInteractionExplanation);
@@ -254,7 +254,7 @@ function textForReply(input: ReplyInput): string {
   if (askHowToPay || (intents.has("booking") && !intents.has("payment"))) {
     answers.push(memory.paymentStatus || memory.bookingStatus
       ? paymentReply(memory, show)
-      : bookingReply(show, memory));
+      : bookingReply(show, memory, mapLink));
   } else if (!intents.has("payment") && !intents.has("promotion")) {
     const question = seatReply?.question ?? (!hasPreference && intents.has("price") ? seatViewQuestion
       : onlyGeneral ? "Mình muốn tìm hiểu thêm thông tin nào về đêm nhạc ạ?" : undefined);
