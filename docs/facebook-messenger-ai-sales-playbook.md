@@ -127,3 +127,12 @@ Performance objectives (not measured achievements):
 - Start the indicator concurrently with necessary retrieval and generation. Bound the action request independently (1.5 seconds); never insert artificial delays or block the real answer on a failed indicator. Do not repeatedly refresh it to simulate activity. Keep one active processing owner per conversation and prevent a late indicator from reappearing after the reply.
 - Staged adapter: `src/lib/ai-sales-typing.mjs`. Ten isolated mocked checks passed. No live Messenger requests were made. Wire the adapter into the recovered production worker using the existing Page credentials and permission checks; verify the visible indicator and unchanged reply delivery on an internal test conversation before activating.
 - Reference: https://developers.facebook.com/docs/graph-api/reference/page/messages/
+
+
+## Final evening-call additions: warm, adaptive sales personality
+
+- Native typing indicator is desired even when an answer takes under three seconds, where supported, without delaying a ready answer or showing a stale indicator afterward.
+- Mirror the customer's tone; use brief, context-appropriate humor and occasional emojis. Do not joke in complaints, refund or payment problems. Prefer warmth over scripted sales pressure.
+- Verify applicable promotions through the existing trusted booking/quote workflow; explain eligibility, paid/gift ticket counts and verified final total. No invented discounts, false scarcity or unauthorized stacking.
+- Welcome customers to the show naturally: “Có anh tham gia thì đêm nhạc sẽ vui hơn nhiều đấy ạ!” After verified successful payment, retain the existing receipt and ticket flow; add a personalized thank-you, correct venue/artist when verified, and one or two suitable emojis, e.g. “Em cảm ơn anh nhiều ạ! Hẹn gặp anh tại đêm diễn nhé 🎶”. Do not claim personal physical attendance or a private meeting.
+- Owner approved an upgrade to the existing production system; this branch is not the full production source. Do not deploy it as a replacement for the current site. Restore the exact deployed worker and source tree, integrate, run the regression suite and isolated end-to-end checks, then verify live behavior. This note does not indicate completed integration or deployment.
