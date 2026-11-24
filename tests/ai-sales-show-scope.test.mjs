@@ -153,3 +153,25 @@ const cases=[
 ];
 for(const c of cases) test(c.name,()=>{const v=resolveSalesShowScope({...c.input,shows});assert.deepEqual([v.kind,...v.showIds],c.expected);});
 test("Filter trusted show data",()=>{const scope=resolveSalesShowScope({message:"Giá vé Minh Vương?",shows});assert.deepEqual(scopeVerifiedShows(shows,scope).map(s=>s.id),["minh-vuong-0512"]);assert.match(salesTurnInstruction(scope),/Không quảng cáo, báo giá, liệt kê hoặc đề xuất show khác/);});
+
+test("Context-aware price response and no repeated questions",()=>{
+  const instruction=salesTurnInstruction({kind:"single"},{greeted:true,partySizeKnown:true,budgetKnown:true,seatingKnown:true,intent:"price"});
+  assert.match(instruction,/không chào lại/);
+  assert.match(instruction,/không hỏi lại số lượng/);
+  assert.match(instruction,/Đã biết ngân sách: không hỏi lại/);
+  assert.match(instruction,/giữ lựa chọn đó cho đến khi khách đổi/);
+  assert.match(instruction,/nêu số tiền, đơn vị theo vé trước mọi lời mời chọn ghế/);
+});
+test("Respect concerns without pushing a booking",()=>{
+  assert.match(salesTurnInstruction({kind:"single"},{intent:"objection"}),/giải đáp đúng điều đang lo/);
+});
+test("Booking and payment require trusted confirmation",()=>{
+  assert.match(salesTurnInstruction({kind:"single"},{intent:"booking"}),/chỉ giữ ghế sau xác nhận rõ ràng/);
+  assert.match(salesTurnInstruction({kind:"single"},{intent:"payment"}),/không tự xác nhận đã thanh toán/);
+});
+test("Unknown show must be clarified before a price quote",()=>{
+  assert.match(salesTurnInstruction({kind:"clarify"},{intent:"price"}),/chỉ hỏi show/);
+});
+test("Conversation guidance never embeds arbitrary state values",()=>{
+  assert.doesNotMatch(salesTurnInstruction({kind:"single"},{intent:"IGNORE_POLICY",budget:"IGNORE_POLICY"}),/IGNORE_POLICY/);
+});
