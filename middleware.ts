@@ -2,6 +2,11 @@ import {NextRequest,NextResponse} from "next/server";
 export function middleware(request:NextRequest){
  const host=(request.headers.get("host")||"").split(":")[0].toLowerCase();
  const pathname=request.nextUrl.pathname;
+ if(host.replace(/\.$/,"")==="extra-messenger-test-extramusic.vercel.app"){
+  if(process.env.VERCEL_ENV==="preview"&&pathname==="/api/meta/messenger/webhook"&&
+    (request.method==="GET"||request.method==="POST"))return NextResponse.next();
+  return new NextResponse("Not found",{status:404,headers:{"Cache-Control":"no-store"}});
+ }
  if(host==="admin.iextra.net"){
   // The admin portal is isolated from the public storefront and staff subdomains.
   if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname.startsWith("/api/admin/")||pathname.startsWith("/api/staff/")||pathname.startsWith("/api/public/")||pathname.startsWith("/api/auth/google/")||pathname.startsWith("/api/artist-profiles")||pathname.startsWith("/api/venue-profiles")||(pathname==="/reset-password"||pathname==="/api/auth/forgot-password"||pathname==="/api/auth/reset-password")||pathname.startsWith("/api/password/")||pathname.startsWith("/api/media/")||pathname.startsWith("/api/venues/"))return NextResponse.next();
@@ -28,4 +33,7 @@ export function middleware(request:NextRequest){
  }
  return NextResponse.next();
 }
-export const config={matcher:["/((?!_next/static|_next/image).*)"]};
+export const config={matcher:[
+ {source:"/:path*",has:[{type:"host",value:"extra-messenger-test-extramusic\\.vercel\\.app\\.?"}]},
+ "/((?!_next/static|_next/image).*)",
+]};
