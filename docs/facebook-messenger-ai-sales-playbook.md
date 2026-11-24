@@ -119,3 +119,11 @@ Performance objectives (not measured achievements):
 - For longer processing, optionally send Messenger typing status where supported and permitted; do not send repeated filler, duplicate responses or a fake price just to meet a target. Do not apply the 10/30-minute customer follow-up delays to first responses.
 - Measure ingress-to-enqueue, queue wait, retrieval, model time, outbox dispatch and total latency separately; record percentile metrics without logging customer identifiers or message bodies. Inspect any job over 15 seconds, and stale pending/failed jobs; test idempotency, payment safeguards and correct data before production.
 - These are staged requirements only. The full deployed worker must be recovered before altering its scheduling, quick reply path or model configuration. No production timing change has been made by this document.
+
+
+## Native Messenger typing indicator — owner priority
+
+- Use Meta's native `typing_on` at the start of real, authorized inbound processing. The three-dot indicator is not a text message. Meta clears it when a reply is sent or after 20 seconds. Use `typing_off` on cancellation, failure, or handoff when safe and still authorized. Do not send stale indicators for replays, duplicates or conversations owned by a human.
+- Start the indicator concurrently with necessary retrieval and generation. Bound the action request independently (1.5 seconds); never insert artificial delays or block the real answer on a failed indicator. Do not repeatedly refresh it to simulate activity. Keep one active processing owner per conversation and prevent a late indicator from reappearing after the reply.
+- Staged adapter: `src/lib/ai-sales-typing.mjs`. Ten isolated mocked checks passed. No live Messenger requests were made. Wire the adapter into the recovered production worker using the existing Page credentials and permission checks; verify the visible indicator and unchanged reply delivery on an internal test conversation before activating.
+- Reference: https://developers.facebook.com/docs/graph-api/reference/page/messages/
