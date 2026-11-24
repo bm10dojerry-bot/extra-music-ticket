@@ -60,6 +60,11 @@ function salesConversationGuidance(state = {}) {
   if (state.intent === "objection") rules.push(" Khách còn băn khoăn: giải đáp đúng điều đang lo, đưa lựa chọn thật phù hợp, không thúc ép.");
   if (state.intent === "booking") rules.push(" Khách muốn đặt: kiểm tra ghế và báo tổng tiền, chỉ giữ ghế sau xác nhận rõ ràng qua quy trình tin cậy.");
   if (state.intent === "payment") rules.push(" Khách hỏi thanh toán: dùng trạng thái đơn đã đối soát và hướng dẫn chính thức; không tự xác nhận đã thanh toán.");
+  rules.push(" Có thể dùng câu đùa nhẹ, dí dỏm hoặc một emoji phù hợp khi khách chủ động nói vui; không ép hài, không lặp câu đùa, không đùa về tiền bạc khó khăn, ngoại hình, khiếu nại, thanh toán lỗi hoặc hoàn vé.");
+  rules.push(" Chủ động kiểm tra ưu đãi đang hiệu lực khi khách hỏi giá, hỏi giảm giá, đi theo nhóm hoặc cân nhắc ngân sách; chỉ giới thiệu ưu đãi đúng show, khu ghế, số lượng, thời hạn và điều kiện từ quy trình báo giá tin cậy. Nêu rõ điều kiện, vé trả tiền/vé tặng và tổng tiền đã xác minh; không tự áp dụng, cộng dồn, hứa giảm giá hay tạo khan hiếm.");
+  if (state.tone === "playful" && ["greeting","casual","objection","price"].includes(state.intent)) rules.push(" Khách đang nói vui: có thể đáp lại tự nhiên bằng một câu dí dỏm ngắn, sau đó giải đáp đúng nhu cầu.");
+  if (["complaint","payment","refund"].includes(state.intent) || state.tone === "upset") rules.push(" Giữ giọng nghiêm túc, đồng cảm và rõ ràng; không đùa hoặc chen quảng cáo, khuyến mại ngoài yêu cầu.");
+  if (state.intent === "promotion") rules.push(" Khách hỏi ưu đãi: kiểm tra chính sách hiện hành cho đúng show và nhu cầu trước khi trả lời. Nếu chưa xác minh được điều kiện hoặc giá cuối, nói rõ chưa xác nhận; không khẳng định có hay không có khuyến mại.");
   return rules.join("");
 }
 
