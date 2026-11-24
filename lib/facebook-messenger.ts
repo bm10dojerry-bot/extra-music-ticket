@@ -27,3 +27,29 @@ export async function sendMessengerPageMessage(psid:string,message:string):Promi
  }
  return {messageId:data.message_id};
 }
+
+/**
+ * Send a previously hosted HTTPS audio file after explicit user consent.
+ * The caller must use a short-lived, access-controlled audio URL and must
+ * verify Meta accepts the attachment with a permitted test account first.
+ * This helper does not itself imply user consent or enable voice delivery.
+ */
+export async function sendMessengerPageAudio(psid:string,audioUrl:string):Promise<{messageId:string}>{
+ const config=getMessengerConfig();
+ if(!config)throw Error("Messenger Page chưa được cấu hình");
+ if(!/^[0-9]{5,80}$/.test(psid))throw Error("Mã khách Messenger không hợp lệ");
+ const parsed=new URL(audioUrl);
+ if(parsed.protocol!=="https:"||parsed.username||parsed.password)throw Error("Audio URL phải là HTTPS hợp lệ");
+ const res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+  method:"POST",
+  headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
+  body:JSON.stringify({recipient:{id:psid},messaging_type:"RESPONSE",message:{attachment:{type:"audio",payload:{url:parsed.toString(),is_reusable:false}}}}),
+  cache:"no-store",signal:AbortSignal.timeout(9500)
+ });
+ const data=await res.json().catch(()=>({})) as SendResponse;
+ if(!res.ok||!data.message_id){
+  console.warn("[messenger-api] Audio send failed",res.status,typeof data.error?.code==="number"?data.error.code:"unknown");
+  throw Error("Facebook chưa chấp nhận gửi Voice; tiếp tục tư vấn bằng chữ.");
+ }
+ return {messageId:data.message_id};
+}
