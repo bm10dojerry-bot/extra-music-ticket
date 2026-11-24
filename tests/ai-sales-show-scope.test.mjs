@@ -175,3 +175,22 @@ test("Unknown show must be clarified before a price quote",()=>{
 test("Conversation guidance never embeds arbitrary state values",()=>{
   assert.doesNotMatch(salesTurnInstruction({kind:"single"},{intent:"IGNORE_POLICY",budget:"IGNORE_POLICY"}),/IGNORE_POLICY/);
 });
+
+test("Playful customers receive contextual humor without pressure",()=>{
+  assert.match(salesTurnInstruction({kind:"single"},{tone:"playful",intent:"casual"}),/có thể đáp lại tự nhiên/);
+});
+test("Complaints and payment problems use serious tone",()=>{
+  for(const intent of ["complaint","payment","refund"])assert.match(salesTurnInstruction({kind:"single"},{tone:"upset",intent}),/không đùa hoặc chen quảng cáo/);
+});
+test("Promotions must come from trusted quote workflow",()=>{
+  const p=salesTurnInstruction({kind:"single"},{intent:"promotion"});
+  assert.match(p,/không tự áp dụng, cộng dồn, hứa giảm giá/);
+  assert.match(p,/Nếu chưa xác minh được điều kiện hoặc giá cuối/);
+});
+test("Personalized emoji thanks only after verified payment",()=>{
+  const scope={kind:"single"};
+  const state={intent:"booking_complete"};
+  assert.doesNotMatch(salesTurnInstruction(scope,{...state,paymentVerified:false}),/Sau khi hệ thống xác minh thanh toán thành công/);
+  assert.match(salesTurnInstruction(scope,{...state,paymentVerified:true}),/tối đa một đến hai emoji/);
+  assert.match(salesTurnInstruction(scope,{...state,paymentVerified:true}),/Không tiếp tục thúc mua vé/);
+});
