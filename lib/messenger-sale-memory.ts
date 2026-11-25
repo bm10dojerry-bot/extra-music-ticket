@@ -11,6 +11,8 @@ export type MessengerSaleMemory = {
   showSelectionUnresolved?: boolean;
   quantity?: number;
   seatView?: SeatView;
+  // A preference for the closest rows, distinct from the lateral viewing angle.
+  seatPriority?: "closest_to_stage";
   zone?: SeatZone;
   budgetVnd?: number;
   budgetBasis?: "per_ticket" | "total" | "unspecified";
@@ -131,6 +133,13 @@ function ticketQuantity(text: string, memory: MessengerSaleMemory): number | und
   return updated > 0 && updated <= 999 ? updated : undefined;
 }
 
+function closestStageRequested(text: string): boolean {
+  // Detect an actual seating preference, not arbitrary mention of a performer.
+  return /\b(?:gan|sat|canh)\s+(?:(?:cho|khu|vi tri)\s+)?(?:san khau|ca si|nghe si)\b/.test(text)
+    || /\b(?:ngoi|cho ngoi|ghe|ve)\b.*\b(?:hang dau|gan nhat|sat nhat)\b/.test(text)
+    || /\b(?:hang dau|hang 1)\b.*\b(?:ghe|ve|ngoi|san khau)\b/.test(text);
+}
+
 function seatPreference(text: string): SeatView | undefined {
   const matches = [...text.matchAll(/\b(trai|phai|chinh dien|trung tam|o giua|chinh giua|khu giua|giua san khau)\b/g)]
     .filter(match => !/^(?:trai|phai)$/.test(match[1]) || /\b(?:ben|goc|sang|ve|chuyen|thich|chon|lay|ngoi|khu)\s*$/.test(text.slice(0, match.index)) || /^(?:trai|phai)(?: (?:a|nhe|nha|di))?[.!]?$/.test(text))
@@ -176,11 +185,11 @@ function recordBudget(memory: MessengerSaleMemory, text: string) {
 function classify(text: string): SaleIntent[] {
   const intents: SaleIntent[] = [];
   if (/\b(?:gia(?: ve)?|bao nhieu tien|bao nhieu|chi phi|ngan sach)\b/.test(text)) intents.push("price");
-  if (/\b(?:ghe|khu|cho ngoi|goc nhin|ben trai|ben phai|chinh dien|trung tam)\b/.test(text)) intents.push("seat_view");
+  if (/\b(?:ghe|khu|cho ngoi|ngoi dau|hang dau|goc nhin|ben trai|ben phai|chinh dien|trung tam|mau|xam|khoa|da mua|da ban)\b/.test(text) || closestStageRequested(text)) intents.push("seat_view");
   if (/\b(?:giao luu|gap ca si|gan ca si|loi di)\b/.test(text)) intents.push("interaction");
   if (/\b(?:khuyen ma[ij]|uu dai|giam gia|tang ve|ma giam)\b/.test(text)) intents.push("promotion");
   if (/\b(?:dat ve|mua ve|giu cho|giu ghe|chot ve|lay ve)\b/.test(text)) intents.push("booking");
-  if (/\b(?:thanh toan|chuyen khoan|chuyen tien|tra tien|quet qr|da tra|da ck|xac nhan tien)\b/.test(text)) intents.push("payment");
+  if (/\b(?:thanh toan|chuyen khoan|chuyen tien|tra tien|quet qr|da tra|da ck|xac nhan tien|so tai khoan|stk)\b/.test(text)) intents.push("payment");
   if (/\b(?:show|dem nhac|chuong trinh|ngay nao|may gio|o dau|dia diem)\b/.test(text)) intents.push("show");
   return intents;
 }
@@ -231,11 +240,16 @@ export function deriveMessengerSaleMemory(input: MemoryInput): MessengerSaleMemo
       memory.clarification = assistantClarification(text);
       continue;
     }
-    const {showId, showDate, quantity, seatView, zone, budgetVnd, budgetBasis} = memory;
+    const {showId, showDate, quantity, seatView, seatPriority, zone, budgetVnd, budgetBasis} = memory;
     selectShow(memory, text, input.shows);
     memory.quantity = ticketQuantity(text, memory) ?? memory.quantity;
     memory.seatView = /\b(?:goc nhin nao cung duoc|ben nao cung duoc|khong quan trong goc nhin)\b/.test(text)
       ? undefined : seatPreference(text) ?? memory.seatView;
+    if (/\b(?:khong can gan san khau|ngoi xa cung duoc|o xa cung duoc|khong quan trong gan san khau)\b/.test(text)) {
+      delete memory.seatPriority;
+    } else if (closestStageRequested(text)) {
+      memory.seatPriority = "closest_to_stage";
+    }
     memory.zone = /\b(?:khu nao cung duoc|hang nao cung duoc|khong can khu)\b/.test(text)
       ? undefined : seatZone(message.body, memory.clarification) ?? memory.zone;
     if (/\b(?:ngan sach khong gioi han|khong gioi han ngan sach)\b/.test(text)) {
@@ -248,7 +262,7 @@ export function deriveMessengerSaleMemory(input: MemoryInput): MessengerSaleMemo
     const intents = classify(text);
     if (!intents.length) {
       if (memory.showId !== showId || memory.showDate !== showDate) intents.push("show");
-      if (memory.quantity !== quantity || memory.seatView !== seatView || memory.zone !== zone) intents.push("seat_view");
+      if (memory.quantity !== quantity || memory.seatView !== seatView || memory.seatPriority !== seatPriority || memory.zone !== zone) intents.push("seat_view");
       if (memory.budgetVnd !== budgetVnd || memory.budgetBasis !== budgetBasis) intents.push(memory.seatView || memory.zone ? "seat_view" : "price");
     }
     memory.intents = [...new Set([...memory.intents.filter(intent => intent !== "general"), ...intents])];
