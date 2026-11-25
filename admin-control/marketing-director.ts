@@ -20,6 +20,7 @@ export const jobDefinitions = {
   research: {agent: "Research", title: "Nghiên cứu thị trường", dependencies: []},
   archive_report: {agent:"Analyst", title:"Lưu ảnh chụp số liệu lên Drive", dependencies:["analyst"]},
   analyst: {agent: "Analyst", title: "Đối soát doanh thu đã thanh toán", dependencies: []},
+  analyst_plan: {agent: "Analyst", title: "Phân tích kế hoạch tài chính nội bộ", dependencies: []},
   plan: {agent: "Planner", title: "Lập concept và kế hoạch marketing", dependencies: ["research", "analyst"]},
   content: {agent: "Content", title: "Soạn nội dung chiến dịch", dependencies: ["plan"]},
   drive: {agent: "Creative", title: "Xác minh và tổ chức tư liệu Drive", dependencies: []},
@@ -110,4 +111,18 @@ export function analyzeInternalPlans(
   for (const r of retail) { if (valid(r.intake.budget)) retailBudget += r.intake.budget; else missingRetail++; }
   risks.sort((a,b)=>b.gap-a.gap);
   return {showCount: shows.length, retailCount: retail.length, missing, missingRetail, showCost, targetRevenue, projectedRevenue, retailBudget, risks, actualRevenue: null, actualCost: null, actualProfit: null};
+}
+
+/** Director's local, read-only executor. Actual reconciliation remains a separate blocked job. */
+export function executeAnalystPlan(input: {artist: string}, finance: Partial<ShowFinancialPlan>) {
+  const analysis = analyzeInternalPlans([{intake:input,finance}], []);
+  if (analysis.missing) return {status:"blocked" as const, note:"Thiếu dữ liệu dự kiến hợp lệ; chưa phân tích.", analysis};
+  const vnd = (v:number) => v.toLocaleString("vi-VN") + " đ";
+  const gap = Math.max(0,analysis.targetRevenue-analysis.projectedRevenue);
+  const note = "KẾ HOẠCH (không phải doanh thu thực tế): chi phí "+vnd(analysis.showCost)+
+    "; doanh thu dự kiến "+vnd(analysis.projectedRevenue)+"; mục tiêu "+vnd(analysis.targetRevenue)+
+    "; lợi nhuận dự kiến "+vnd(analysis.projectedRevenue-analysis.showCost)+"; thiếu mục tiêu "+vnd(gap)+
+    ". "+(analysis.risks[0]?.recommendation || "Chưa phát hiện thiếu mục tiêu theo giả định kế hoạch.")+
+    " Đối soát thực tế chờ API.";
+  return {status:"succeeded" as const,note,analysis};
 }
