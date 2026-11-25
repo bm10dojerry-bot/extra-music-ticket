@@ -21,7 +21,8 @@ const sourceModule=new Module(sourcePath,module);
 sourceModule.filename=sourcePath;
 sourceModule.paths=Module._nodeModulePaths(root);
 sourceModule._compile(compiled.outputText,sourcePath);
-const {middleware}=sourceModule.exports;
+const {middleware,config}=sourceModule.exports;
+const {unstable_doesMiddlewareMatch}=require("next/experimental/testing/server");
 
 function request(pathname,host="sale.iextra.net",method="GET"){
   return new NextRequest("https://"+host+pathname,{method,headers:{host}});
@@ -69,4 +70,24 @@ test("existing Sale reports, reservation and customer/payment routes still reach
     ["/api/staff/sale-requests","GET"],
     ["/api/payments/sepay/status?code=EX0000000000000001","GET"],
   ])passed(middleware(request(pathname,"sale.iextra.net",method)));
+});
+
+test("only the signed callback route is routed on the dedicated Meta test host",t=>{
+  const host="extra-messenger-test-extramusic.vercel.app";
+  const originalEnv=process.env.VERCEL_ENV;
+  t.after(()=>{if(originalEnv===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=originalEnv;});
+  process.env.VERCEL_ENV="preview";
+  passed(middleware(request("/api/meta/messenger/webhook?hub.mode=subscribe",host,"GET")));
+  passed(middleware(request("/api/meta/messenger/webhook",host,"POST")));
+  for(const [pathname,method] of [["/","GET"],["/admin","GET"],["/api/cron/messenger-sale","POST"],
+    ["/api/staff/support-chats","GET"],["/api/meta/messenger/webhook/another","POST"],["/api/meta/messenger/webhook","PUT"],
+    ["/_next/static/chunks/test.js","GET"],["/_next/image","GET"]]){
+    const response=middleware(request(pathname,host,method));
+    assert.equal(response.status,404);
+    assert.equal(response.headers.get("x-middleware-next"),null);
+    assert.equal(unstable_doesMiddlewareMatch({config,nextConfig:{},url:pathname,headers:{host}}),true);
+  }
+  assert.equal(unstable_doesMiddlewareMatch({config,nextConfig:{},url:"/_next/static/chunks/test.js",headers:{host:"iextra.net"}}),false);
+  process.env.VERCEL_ENV="production";
+  assert.equal(middleware(request("/api/meta/messenger/webhook",host,"POST")).status,404);
 });

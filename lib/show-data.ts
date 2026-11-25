@@ -31,10 +31,10 @@ export async function loadShows():Promise<ManagedShow[]>{
  return [...defaults,...rows.filter(r=>r.status!=="hidden").map(normalizeShow)].sort((a,b)=>a.date.localeCompare(b.date));
  }catch{return defaultShows()}
 }
-export async function loadAllShows():Promise<(ManagedShow&{rawStatus?:string})[]>{
+export async function loadAllShows(signal?:AbortSignal):Promise<(ManagedShow&{rawStatus?:string})[]>{
  const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)throw Error("Thiếu cấu hình Supabase");
- const res=await fetch(url+"/rest/v1/managed_shows?select=*&order=show_date.asc&limit=300",{headers:{apikey:key,Authorization:"Bearer "+key},cache:"no-store"});
+ const res=await fetch(url+"/rest/v1/managed_shows?select=*&order=show_date.asc&limit=300",{headers:{apikey:key,Authorization:"Bearer "+key},cache:"no-store",signal});
  if(!res.ok)throw Error("Chưa có bảng managed_shows. Hãy chạy SQL 004.");
  const rows=await res.json() as Row[];
  return rows.map(r=>({...normalizeShow(r),rawStatus:r.status}));
