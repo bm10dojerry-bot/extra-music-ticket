@@ -8,10 +8,24 @@ import type {AdAllocation, DirectorPanel, OsAsset, OsJob, OsLog, OsReport, OsSho
 
 export class WorkBlocked extends Error {}
 
-export function deploymentAllowsExtraOs() {
-  if (process.env.VERCEL_ENV !== "preview") return true;
-  const current = process.env.SUPABASE_URL?.replace(/\/$/, "");
-  return Boolean(current && current === process.env.EXTRA_OS_PREVIEW_DATABASE_URL?.replace(/\/$/, ""));
+// Preview runs must never use the live ticketing database or its privileged key.
+const EXTRA_OS_TEST_PROJECT = "cucmanjakryycfxvplmt";
+export function deploymentAllowsExtraOs(env: NodeJS.ProcessEnv = process.env) {
+  if (env.VERCEL_ENV !== "preview") return true;
+  const expected = "https://" + EXTRA_OS_TEST_PROJECT + ".supabase.co";
+  if (env.SUPABASE_URL?.replace(/\/$/, "") !== expected ||
+      env.EXTRA_OS_PREVIEW_DATABASE_URL?.replace(/\/$/, "") !== expected ||
+      env.EXTRA_OS_MARKETING_LIVE !== "false") return false;
+  // The test configuration uses the legacy service_role JWT. Decode only to
+  // detect accidental project/role mismatches; Supabase authenticates it.
+  const parts = env.SUPABASE_SERVICE_ROLE_KEY?.split(".");
+  if (!parts || parts.length !== 3 || parts.some(part => !part)) return false;
+  try {
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return claims?.ref === EXTRA_OS_TEST_PROJECT && claims?.role === "service_role";
+  } catch {
+    return false;
+  }
 }
 
 export async function osDb<T>(path: string, init?: RequestInit): Promise<T> {
