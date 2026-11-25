@@ -1,5 +1,6 @@
 import "server-only";
 import {getMessengerSalePilot,requiresMessengerSaleIsolation} from "./messenger-sale-pilot";
+import {checkedMediaUrl} from "./messenger-sale-media";
 
 type Config={pageId:string;pageToken:string;appSecret:string;verifyToken:string;apiVersion:string};
 export function getMessengerConfig():Config|null{
@@ -44,6 +45,28 @@ export async function sendMessengerPageMessage(psid:string,message:string,metada
  return {messageId:data.message_id};
 }
 
+/** Send an approved CCC/Lao Cai image to a permitted pilot tester, not a random PSID. */
+export async function sendMessengerPageImage(psid:string,imageUrl:string,metadata?:string):Promise<{messageId:string}>{
+ const config=getMessengerConfig();
+ if(!config)throw Error("Messenger Page chưa được cấu hình");
+ if(!/^\d{5,80}$/.test(psid))throw Error("Mã khách Messenger không hợp lệ");
+ if(!canContactMessenger(config.pageId,psid))throw new MessengerSendError(false);
+ const url=checkedMediaUrl(imageUrl);
+ if(!url)throw new MessengerSendError(false);
+ const res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+  method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
+  body:JSON.stringify({recipient:{id:psid},messaging_type:"RESPONSE",
+   message:{attachment:{type:"image",payload:{url,is_reusable:false}},...(metadata?{metadata}:{})}}),
+  cache:"no-store",signal:AbortSignal.timeout(9500)
+ }).catch(()=>{throw new MessengerSendError(true)});
+ const data=await res.json().catch(()=>({})) as SendResponse;
+ if(!res.ok||!data.message_id){
+  console.warn("[messenger-api] Image send failed",res.status,typeof data.error?.code==="number"?data.error.code:"unknown");
+  throw new MessengerSendError(res.ok||res.status>=500||typeof data.error?.code!=="number");
+ }
+ return {messageId:data.message_id};
+}
+
 export async function getMessengerDisplayName(psid:string):Promise<string|undefined>{
  const config=getMessengerConfig();
  if(!config||!/^\d{5,80}$/.test(psid)||!canContactMessenger(config.pageId,psid))return;
@@ -77,13 +100,13 @@ export async function sendMessengerPageAudio(psid:string,audioUrl:string):Promis
  const config=getMessengerConfig();
  if(!config)throw Error("Messenger Page chưa được cấu hình");
  if(!/^[0-9]{5,80}$/.test(psid))throw Error("Mã khách Messenger không hợp lệ");
- if(requiresMessengerSaleIsolation())throw new MessengerSendError(false);
- const parsed=new URL(audioUrl);
- if(parsed.protocol!=="https:"||parsed.username||parsed.password)throw Error("Audio URL phải là HTTPS hợp lệ");
+ if(!canContactMessenger(config.pageId,psid))throw new MessengerSendError(false);
+ const checked=checkedMediaUrl(audioUrl);
+ if(!checked)throw new MessengerSendError(false);
  const res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
   method:"POST",
   headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
-  body:JSON.stringify({recipient:{id:psid},messaging_type:"RESPONSE",message:{attachment:{type:"audio",payload:{url:parsed.toString(),is_reusable:false}}}}),
+  body:JSON.stringify({recipient:{id:psid},messaging_type:"RESPONSE",message:{attachment:{type:"audio",payload:{url:checked,is_reusable:false}}}}),
   cache:"no-store",signal:AbortSignal.timeout(9500)
  });
  const data=await res.json().catch(()=>({})) as SendResponse;
