@@ -24,9 +24,10 @@ export async function maybeSendHeart(page:string,psid:string,mid:string,history:
  }
  const response=await fetch("https://graph.facebook.com/"+cfg.apiVersion+"/"+page+"/messages",{method:"POST",
   headers:{Authorization:"Bearer "+cfg.pageToken,"Content-Type":"application/json"},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(2800),
-  body:JSON.stringify({recipient:{id:psid},sender_action:"react",payload:{message_id:mid,reaction:"love"}})});
+  body:JSON.stringify({recipient:{id:psid},sender_action:"react",payload:{message_id:mid,reaction:"❤️"}})});
  const ack=await response.json().catch(()=>null) as {success?:boolean;recipient_id?:string;error?:{code?:number;error_subcode?:number}}|null;
  if(!response.ok||!ack||ack.error){
+   console.warn("[messenger-heart] Reaction declined",response.status,ack?.error?.code??null,ack?.error?.error_subcode??null);
    if(gate.verified_at && (ack?.error?.code===190||ack?.error?.error_subcode===2018311))await staffDb(path,{method:"PATCH",body:JSON.stringify({verified_at:null})});
    return;
  }

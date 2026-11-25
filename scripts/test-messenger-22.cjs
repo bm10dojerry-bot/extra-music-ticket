@@ -165,7 +165,7 @@ test('heart directly targets the incoming message and ordinary customers require
    await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body}],async()=>{});assert.equal(requests.length,0);
   }
   await heart.maybeSendHeart(pageId,id,mid,positive,async()=>{});
-  assert.deepEqual(requests.pop(),{recipient:{id},sender_action:'react',payload:{message_id:mid,reaction:'love'}});
+  assert.deepEqual(requests.pop(),{recipient:{id},sender_action:'react',payload:{message_id:mid,reaction:'❤️'}});
   await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body:'Vui quá cả nhà đi được rồi'}],async()=>{});assert.equal(requests.length,1);
   const sample='Cảm ơn Extra a1b2c3d4e5';gate={verified_at:null,test_digest:require('node:crypto').createHash('sha256').update(sample).digest('hex'),test_until:new Date(Date.now()+60000).toISOString(),attempted_at:null};
   await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body:sample}],async()=>{});assert.equal(claims,1);assert.equal(patches,2);
