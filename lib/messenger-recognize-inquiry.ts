@@ -9,6 +9,9 @@ import {recentShowSignal,rememberImageShow,matchShowEvidence} from "./messenger-
 const marker="[Khách gửi ảnh; chưa đọc nội dung ảnh.]";
 type Message={id:number;sender:string;body:string;staff_name?:string|null;external_message_id?:string|null;created_at?:string};
 type Recognition={showId?:string|null;since?:string;caption?:string;reply?:string;reading?:Awaited<ReturnType<typeof readMessengerImage>>};
+export function simplePriceQuestion(body:string){
+ return /^(?:(?:da |em oi |cho (?:minh|anh|chi|em) (?:hoi|xin) |xin |cho xin )*)(?:gia(?: ve)?(?: (?:show|dem nhac|chuong trinh))?(?: (?:nay|do))?(?: (?:la )?bao nhieu(?: tien)?| the nao)?|ve(?: gia)? bao nhieu(?: tien)?)(?: (?:a|em|voi|nhe|nhi))*$/.test(norm(body));
+}
 export async function recognizeInquiry(messages:readonly Message[],page:string,psid:string):Promise<Recognition>{
  const customer=messages.filter(m=>m.sender==="customer"),latest=customer.at(-1);
  if(!latest?.created_at)return {};
@@ -19,7 +22,12 @@ export async function recognizeInquiry(messages:readonly Message[],page:string,p
  const signal=await recentShowSignal(page,psid,latest.created_at).catch(()=>null);
  const result:Recognition=signal?{showId:signal.show_id,since:signal.occurred_at}:{};
  if(!signal && !image)return result;
- const question=isImage?latest.body.slice(marker.length).trim():latest.body;
+ let question=isImage?latest.body.slice(marker.length).trim():latest.body;
+ // Messenger can deliver one composed message as a text event followed by the attachment.
+ if(isImage && !question && previous?.sender==="customer" && simplePriceQuestion(previous.body)){
+  const gap=stamp-Date.parse(previous.created_at??"");
+  if(gap>=0 && gap<=8000)question=previous.body;
+ }
  const shows=await listAiSalesShows();
  const textMatch=matchShowEvidence(question,shows);
  if(image?.external_message_id && process.env.EXTRA_AI_SALE_INBOUND_IMAGE!=="0"){
@@ -44,9 +52,8 @@ export async function recognizeInquiry(messages:readonly Message[],page:string,p
  const show=shows.find(s=>s.id===(textMatch.id||(!memory.showSelectionUnresolved&&memory.showId)));
  if(!show||result.reply||sensitiveQuestion(question)||customerRequestsHuman(question))return result;
  result.showId=show.id;
- const simple=/^(?:(?:da |em oi |cho (?:minh|anh|chi|em) (?:hoi|xin) |xin |cho xin )*)(?:gia(?: ve)?(?: (?:show|dem nhac|chuong trinh))?(?: (?:la )?bao nhieu(?: tien)?| the nao)?|ve(?: gia)? bao nhieu(?: tien)?)(?: (?:a|em|voi|nhe|nhi))*$/.test(norm(question));
  const name=show.artist+" ngày "+show.date.slice(8,10)+"/"+show.date.slice(5,7);
- if(simple)result.reply="Dạ, vé đêm "+name+" có các hạng sau ạ.\n"+priceLines(show,question);
+ if(simplePriceQuestion(question))result.reply="Dạ, vé đêm "+name+" có các hạng sau ạ.\n"+priceLines(show,question);
  if(isImage && result.caption==="" && !result.reply)result.reply="Dạ, đây là "+(result.reading?.kind==="seat_map"?"sơ đồ ghế của đêm ":"poster đêm ")+name+" tại "+show.venueName+". Mình muốn xem giá vé hay chọn chỗ ngồi ạ?";
  return result;
 }

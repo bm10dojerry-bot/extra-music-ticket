@@ -1,4 +1,5 @@
 import {recordSignedBatch} from "../../../../../lib/messenger-show-signals";
+import {simplePriceQuestion} from "../../../../../lib/messenger-recognize-inquiry";
 import {after,NextRequest,NextResponse} from "next/server";
 import {createHmac,timingSafeEqual} from "node:crypto";
 import {staffDb} from "../../../../../lib/staff-auth";
@@ -51,6 +52,7 @@ export async function POST(req:NextRequest){
   return reply("Ignored",200);
  }
  let processed=0,ignored=0,unmatchedPages=0,duplicate=0,aiQueued=false,commentsQueued=false,commentIngestFailed=false;
+ let singlePrice=false;
  const commentInbounds:Event[]=[];
  const manualChats=new Map<string,number>();
  const marketingReferrals=new Map<string,MarketingMessengerReferral>();
@@ -79,7 +81,10 @@ export async function POST(req:NextRequest){
     if(result.outcome==="duplicate"){duplicate+=1;continue;}
     if(result.outcome==="received"&&result.chat_id){
      processed+=1;
-     if(result.ai_queued)aiQueued=true;
+     if(result.ai_queued){
+      aiQueued=true;
+      singlePrice=processed===1 && simplePriceQuestion(body);
+     }
      else{
       try{await staffDb("rpc/extra_support_assign_chat",{method:"POST",body:JSON.stringify({p_chat_id:result.chat_id})})}
       catch{console.warn("[messenger-webhook] Chat queued; assignment retry on next inbox load")}
@@ -114,7 +119,13 @@ export async function POST(req:NextRequest){
  });
  if(aiQueued||commentsQueued)after(async()=>{
   const work:Promise<unknown>[]=[];
-  if(aiQueued)work.push((async()=>{await runAiSalesQueue({maxJobs:3});await sendAiSalesOwnerNotifications()})());
+  if(aiQueued)work.push((async()=>{
+   if(singlePrice && processed===1)await new Promise<void>(resolve=>setTimeout(resolve,1400));
+   const first=await runAiSalesQueue({maxJobs:3});
+   // An attachment in a separate webhook can arrive while the first job holds its chat lease.
+   if(first.processed)await runAiSalesQueue({maxJobs:3});
+   await sendAiSalesOwnerNotifications();
+  })());
   if(commentsQueued)work.push(runCommentQueue({maxJobs:2}));
   const results=await Promise.allSettled(work);
   if(results.some(result=>result.status==="rejected"))console.warn("[ai-sales] Webhook follow-up deferred to scheduled retry");

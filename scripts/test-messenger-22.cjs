@@ -105,6 +105,9 @@ test('fresh ad question, poster, split caption, explicit change and unreadable i
  assert.match((await inbox(marker,[],false,{...fresh,image:poster})).join(' '),/poster đêm Đình Dũng/);
  assert.match((await inbox(marker+' '+q,[],false,{...fresh,image:poster})).join(' '),/349.000/);
  assert.match((await inbox(q,[marker],false,{...fresh,image:poster})).join(' '),/349.000/);
+ const separate=await inbox(marker,['Giá vé đêm nhạc này là bao nhiêu ạ?'],false,{...fresh,image:poster});
+ assert.equal(separate.length,1);
+ for(const fact of ['Đình Dũng','399.000','349.000','249.000','199.000'])assert.ok(separate[0].includes(fact),fact);
  assert.match((await inbox('Giá vé VIP Khắc Việt bao nhiêu?',[],false,ad)).join(' '),/449.000/);
  assert.match((await inbox(marker,[],false,{...fresh,image:{...poster,multipleShows:true}})).join(' '),/ca sĩ nào/);
  const unreadable=(await inbox(marker,[],false,{...fresh,image:{...poster,kind:'unreadable',showText:null}})).join(' ');
