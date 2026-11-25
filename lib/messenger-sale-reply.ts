@@ -129,7 +129,7 @@ function seatColorReply(show: ManagedShow, inventory: MessengerSaleInventory | n
   // The source of truth is seat status, not a sampled pixel from a screenshot.
   const free = availableSeats(show, inventory);
   const byZone = zones.map(zone => `${zone}: ${free.filter(seat => seat.zone === zone).length} ghế`).join(", ");
-  return `Dạ, ghế màu xám có biểu tượng ổ khóa là ghế đã khóa hoặc không còn được đặt. Các màu còn lại dùng phân biệt hạng vé A, B, C, D; em không dựa riêng vào màu để khẳng định ghế trống. Theo dữ liệu đặt vé mới nhất của đêm ${show.artist}, còn ${free.length} ghế có thể chọn (${byZone}). Ghế đã bán hoặc đang giữ chỗ không được bán lại ạ.`;
+  return `Dạ, ghế màu xám có biểu tượng ổ khóa là ghế đã khóa hoặc không đặt được. Các màu còn lại dùng phân biệt hạng vé A, B, C, D; em không dựa riêng vào màu để khẳng định ghế trống. Theo dữ liệu đặt vé mới nhất của đêm ${show.artist}, còn ${free.length} ghế có thể chọn (${byZone}). Ghế đã bán hoặc đang giữ chỗ không được bán lại ạ.`;
 }
 
 function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | null | undefined, memory: MessengerSaleMemory, mapLink: string): {
