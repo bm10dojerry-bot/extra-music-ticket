@@ -16,7 +16,7 @@ replaceOnce('  if(!confirmationProblem&&isSeatMapRequest(latest.body)){', [
   '    await sendAiSalesMessage(job,chat,{purpose:"reply",body:advice.text});',
   '    return;',
   '  }',
-  '  if(!confirmationProblem&&(advice?.sendImage||isSeatMapRequest(latest.body))){'
+  '  if(!confirmationProblem&&(advice?.sendImage||(!seatAdviceEnabled(chat.messenger_page_id,chat.messenger_psid)&&isSeatMapRequest(latest.body)))){'
 ].join('\n'));
 replaceOnce('const selected=selectSeatMap(latest.body,', 'const selected=advice?.selected??selectSeatMap(latest.body,');
 replaceOnce('body:seatMapCaption(selected,availability)', 'body:advice?.text??seatMapCaption(selected,availability)');

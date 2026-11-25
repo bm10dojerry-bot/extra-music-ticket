@@ -1,5 +1,5 @@
 import 'server-only';
-import {createHash} from 'node:crypto';
+import {seatAdvicePage} from './show-family-policy';
 import {getAiSeatSnapshot, listAiSalesShows} from './ai-sales-checkout';
 import {salesPreferences} from './ai-sales-consultation';
 import {selectSeatMap, seatMapVenueName} from './ai-sales-seat-map';
@@ -9,18 +9,22 @@ import {staffDb} from './staff-auth';
 type Message = {sender:string; body:string; staff_name?:string|null};
 
 export function seatAdviceEnabled(page: string, psid: string) {
-  const scope = process.env.EXTRA_SEAT_ADVICE_CHAT_SHA256;
-  return Boolean(scope && createHash('sha256').update(page + ':' + psid).digest('hex') === scope);
+  return seatAdvicePage(page,psid);
 }
 
-async function previousAttachment(chatId:string, jobId:string, marker:string) {
-  const query = new URLSearchParams({chat_id:'eq.' + chatId,job_id:'neq.' + jobId,
+async function previousAttachment(chatId:string, jobId:string|null, marker:string) {
+  const query = new URLSearchParams({chat_id:'eq.' + chatId,
     body:'eq.' + marker,state:'in.(sent,uncertain,sending)',select:'state',limit:'1'});
+  if(jobId)query.set('job_id','neq.' + jobId);
+  const sent = new URLSearchParams({chat_id:'eq.'+chatId,sender:'eq.staff',body:'eq.'+marker,select:'id',limit:'1'});
+  const uncertain = new URLSearchParams({chat_id:'eq.'+chatId,state:'eq.uncertain',select:'id',limit:'1'});
+  const [messages,unresolved]=await Promise.all([staffDb('extra_support_messages?'+sent),staffDb('extra_messenger_ai_timeout_ledger?'+uncertain)]) as [unknown[],unknown[]];
+  if(messages.length || unresolved.length)return true;
   const rows = await staffDb('extra_messenger_ai_outbox?' + query) as {state:string}[];
   return rows.length > 0;
 }
 
-export async function prepareSeatAdvice(chatId:string, jobId:string, body:string, history:Message[], referral: {showId?:string|null} | null, knownShow?:string|null) {
+export async function prepareSeatAdvice(chatId:string, jobId:string|null, body:string, history:Message[], referral: {showId?:string|null} | null, knownShow?:string|null) {
   const prior = history.slice(0,-1).filter(m => m.sender === 'customer' || m.sender === 'staff' && m.staff_name === 'EXTRA AI').slice(-4);
   const recentMap = prior.some(m => /sơ đồ|so do/i.test(m.body));
   const intent = seatInquiry(body, recentMap);

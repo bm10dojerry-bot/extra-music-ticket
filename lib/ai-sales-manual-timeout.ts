@@ -3,6 +3,8 @@ import {consultationPolicy, salesPreferences, priceLines, tierPriceQuestion} fro
 import {customerRequestsHuman} from "./messenger-sale-memory";
 import {openingMessage, seatViewQuestion} from "./extra-sale-text-script";
 import {generateText} from "ai";
+import {prepareSeatAdvice} from "./ai-sales-seat-advisor";
+import {artistPhotoNotice,childFareNotice} from "./show-family-policy";
 import {staffDb} from "./staff-auth";
 import {getMessengerConfig,sendMessengerPageMessage,sendMessengerPageImage,MessengerSendError} from "./facebook-messenger";
 import {listAiSalesShows,getAiLatestQuote,getAiOrderStatus,getAiSeatOptions} from "./ai-sales-checkout";
@@ -39,6 +41,18 @@ async function plan(item:Due):Promise<Plan|null>{
  const [shows,order]=await Promise.all([listAiSalesShows(),orderCode?getAiOrderStatus(item.chat_id,orderCode).catch(()=>null):Promise.resolve(null)]);
  const known=order?.showId||quote?.showId||chatRows[0]?.show_id||comment?.showId;
  const logical=[...history.filter(m=>m.id<item.first_waiting_id),{id:item.customer_message_id,sender:"customer",body:question}];
+ const family=question.normalize("NFD").replace(/\p{M}/gu,"").replace(/[đĐ]/g,"d").toLowerCase();
+ if(/\b(chup (anh|hinh)|tre em|em be|duoi [0-9]+ tuoi)\b/.test(family)){
+  const notes=[];
+  if(/chup (anh|hinh)/.test(family))notes.push(artistPhotoNotice);
+  if(/tre em|em be|tuoi/.test(family))notes.push(childFareNotice);
+  return {body:notes.join(" ")};
+ }
+ if(getMessengerConfig()?.pageId==="1223940670813189"){
+  const advice=await prepareSeatAdvice(item.chat_id,null,question,logical,comment,known);
+  if(advice?.sendImage && advice.selected)return {body:"[Ảnh sơ đồ ghế "+seatMapVenueName(advice.selected.venue)+"]",image:SEAT_MAP_URL(advice.selected.venue),fallback:advice.text||"Em chưa gửi được ảnh. Mình muốn ưu tiên ghế gần ca sĩ hay một khoảng giá cụ thể ạ?"};
+  if(advice?.text)return {body:advice.text};
+ }
  const choice=selectSeatMap(question,logical,shows,comment,known);
  const memory=salesPreferences(history,shows,known);
  const scoped=!memory.showSelectionUnresolved?shows.find(x=>x.id===memory.showId):undefined;
@@ -54,7 +68,7 @@ async function plan(item:Due):Promise<Plan|null>{
   return {body:full.length<=1150?full:body};
  }
  const isMap=isSeatMapRequest(question),price=wantsPrices(question)||tierPriceQuestion(question),availability=wantsSeatAvailability(question),schedule=wantsSchedule(question),venue=wantsVenue(question);
- if(isMap&&choice&&!price&&!availability&&!schedule&&!venue){
+ if(getMessengerConfig()?.pageId!=="1223940670813189"&&isMap&&choice&&!price&&!availability&&!schedule&&!venue){
   return {body:"[Ảnh sơ đồ ghế "+seatMapVenueName(choice.venue)+"]",image:SEAT_MAP_URL(choice.venue),fallback:show?"Dạ, ảnh chưa gửi được. Mình xem sơ đồ ghế và ghế còn trống tại "+show.url+" nhé ạ.":"Dạ, mình xem ảnh sơ đồ ghế tại "+SEAT_MAP_URL(choice.venue)+" nhé ạ."};
  }
  if(isMap||price||availability||schedule||venue){

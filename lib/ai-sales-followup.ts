@@ -16,6 +16,8 @@ export async function runAiSalesFollowup():Promise<{enabled:boolean;sent:number;
   const rows=await rpc<Due[]>("due",{p_page_id:config.pageId,p_chat_id:null});
   const item=rows?.[0];
   if(!item||![10,30].includes(item.stage))return {enabled,sent:0,result:"none_due"};
+  const dayReminder=await staffDb("extra_messenger_day_before?chat_id=eq."+encodeURIComponent(item.chat_id)+"&claimed_at=gte."+encodeURIComponent(new Date(Date.now()-86400000).toISOString())+"&select=chat_id&limit=1") as unknown[];
+  if(dayReminder.length)return {enabled,sent:0,result:"day_before_already_contacted"};
   const claim=await rpc<Claim>("claim",{p_page_id:config.pageId,p_chat_id:item.chat_id,p_customer_message_id:item.customer_message_id,p_anchor_reply_id:item.anchor_reply_id,p_stage:item.stage});
   if(claim.outcome!=="send"||!claim.id||!claim.claim_token||!claim.psid||claim.stage!==item.stage)return {enabled,sent:0,result:claim.outcome};
   const body=item.stage===10?"Dạ, mình còn cần em hỗ trợ chọn vé hoặc kiểm tra vị trí ghế phù hợp không ạ?":"Dạ, em xin phép hỏi thêm: mình đang phân vân về giá vé, vị trí ngồi hay lịch diễn ạ? Em có thể kiểm tra lại thông tin để mình dễ lựa chọn hơn.";

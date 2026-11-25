@@ -4,6 +4,7 @@ import {loadShows} from "../../../../../lib/show-data";
 import {seatsFor,venues,type VenueId} from "../../../../../lib/venues";
 import {requireRole,staffDb} from "../../../../../lib/staff-auth";
 import {allocateSaleCommissionLines} from "../../../../../lib/sale-commission";
+import {seatFare,validChildSeats} from "../../../../../lib/show-family-policy";
 export const runtime="nodejs";
 export async function POST(req:NextRequest){
  if(process.env.SEPAY_CHECKOUT_ENABLED!=="true")return NextResponse.json({error:"Thanh toán đang được cấu hình, chưa mở nhận tiền."},{status:503});
@@ -14,6 +15,8 @@ export async function POST(req:NextRequest){
  const showId=String(body?.showId||""),seats=body?.seats,name=String(body?.name||"").trim(),phone=String(body?.phone||"").trim(),email=String(body?.email||"").trim();
  if(!/^[a-z0-9-]{3,100}$/.test(showId)||!Array.isArray(seats)||seats.length<1||seats.length>(body?.promotion&&body.promotion!=="none"?20:12)||seats.some((x:unknown)=>typeof x!=="string")||new Set(seats).size!==seats.length||name.length<2||name.length>120||!/^[0-9+(). -]{9,20}$/.test(phone)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"Thông tin đặt vé không hợp lệ."},{status:400});
  const promotion=String(body?.promotion||"none");
+ const childSeats=body?.childSeats===undefined?[]:body.childSeats;
+ if(!validChildSeats(childSeats,seats))return NextResponse.json({error:"Ghế vé trẻ em phải thuộc các ghế mua và không được trùng."},{status:400});
  const giftSeats=body?.giftSeats??[];
  const giftCounts:Record<string,number>={none:0,couple5:0,buy5:1,buy10:2,buy20:3};
  if(!Object.prototype.hasOwnProperty.call(giftCounts,promotion)||!Array.isArray(giftSeats)||giftSeats.some((x:unknown)=>typeof x!=="string")||new Set(giftSeats).size!==giftSeats.length||giftSeats.some((x:string)=>seats.includes(x)))return NextResponse.json({error:"Ghế tặng hoặc chương trình khuyến mại không hợp lệ."},{status:400});
@@ -24,7 +27,7 @@ export async function POST(req:NextRequest){
  const layoutRows=await staffDb("venue_seat_rows?venue_id=eq."+encodeURIComponent(show.venue)+"&select=row_code,seat_count") as {row_code:string;seat_count:number}[];
  const counts=Object.fromEntries(layoutRows.map(r=>[r.row_code,r.seat_count]));
  const valid=new Map(seatsFor(show.venue as VenueId,counts).map(s=>[s.id,s.zone]));
- let amount=0;for(const id of seats as string[]){const zone=valid.get(id),price=zone?show.prices[zone as "A"|"B"|"C"|"D"]:null;if(!zone||!Number.isSafeInteger(price)||!price||price<=0)return NextResponse.json({error:"Ghế hoặc giá vé không hợp lệ."},{status:400});amount+=price}
+ let amount=0;for(const id of seats as string[]){const zone=valid.get(id),price=zone?show.prices[zone as "A"|"B"|"C"|"D"]:null;if(!zone||!Number.isSafeInteger(price)||!price||price<=0)return NextResponse.json({error:"Ghế hoặc giá vé không hợp lệ."},{status:400});amount+=seatFare(price,childSeats.includes(id))}
  if(promotion==="couple5")amount=Math.round(amount*95/100);
  if(giftSeats.length){
   const rank:Record<string,number>={A:0,B:1,C:2,D:3};
@@ -34,7 +37,7 @@ export async function POST(req:NextRequest){
  const allSeats=[...seats,...giftSeats];
  const code="EX"+randomBytes(8).toString("hex").toUpperCase(),token=randomBytes(24).toString("hex");
  try{
- const commissionLines=allocateSaleCommissionLines((seats as string[]).map(seat=>({seat,price:show.prices[valid.get(seat)! as "A"|"B"|"C"|"D"]!})),giftSeats as string[],amount);
+ const commissionLines=allocateSaleCommissionLines((seats as string[]).map(seat=>({seat,price:seatFare(show.prices[valid.get(seat)! as "A"|"B"|"C"|"D"]!,childSeats.includes(seat))})),giftSeats as string[],amount);
  const rows=await staffDb("rpc/extra_reserve_order_with_commission",{method:"POST",body:JSON.stringify({p_code:code,p_token:token,p_show:show.id,p_venue:show.venue,p_seats:allSeats,p_amount:amount,p_name:name,p_phone:phone,p_email:email,p_commission_lines:commissionLines})}) as {order_code:string;expires_at:string}[];
  if(!rows?.length)throw Error("Reservation failed");
  // Attribution is optional and must never prevent a successful seat reservation.
