@@ -81,3 +81,44 @@ test("invalid dates, values, Drive links and missing rights fail before start", 
     "http://drive.google.com/drive/folders/file",
   ]) assert.equal(driveFileId(link), null);
 });
+
+test("Preview rejects live Supabase, missing or mismatched service role keys and live marketing", () => {
+  const filename = path.join(__dirname, "../lib/extra-os/db.ts");
+  const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    fileName: filename,
+    compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
+  }).outputText;
+  const exports = {};
+  // Load only the configuration guard; no imports may touch a real database.
+  require("node:vm").runInNewContext(compiled, {
+    exports, require: () => ({}), Buffer, process: {env: {}},
+  }, {filename});
+  const allows = exports.deploymentAllowsExtraOs;
+  const ref = "cucmanjakryycfxvplmt";
+  const liveRef = "fokntdvgzfldxbaglrdc";
+  const url = "https://" + ref + ".supabase.co";
+  const liveUrl = "https://" + liveRef + ".supabase.co";
+  const jwt = (project, role) => "fixture." +
+    Buffer.from(JSON.stringify({ref: project, role})).toString("base64url") + ".fixture";
+  const valid = {
+    VERCEL_ENV: "preview",
+    SUPABASE_URL: url,
+    EXTRA_OS_PREVIEW_DATABASE_URL: url,
+    EXTRA_OS_MARKETING_LIVE: "false",
+    SUPABASE_SERVICE_ROLE_KEY: jwt(ref, "service_role"),
+  };
+  assert.equal(allows(valid), true);
+  assert.equal(allows({...valid, SUPABASE_URL: url + "/"}), true);
+  for (const patch of [
+    {SUPABASE_SERVICE_ROLE_KEY: undefined},
+    {SUPABASE_SERVICE_ROLE_KEY: "not-a-jwt"},
+    {SUPABASE_SERVICE_ROLE_KEY: jwt(liveRef, "service_role")},
+    {SUPABASE_SERVICE_ROLE_KEY: jwt(ref, "anon")},
+    {SUPABASE_URL: liveUrl, EXTRA_OS_PREVIEW_DATABASE_URL: liveUrl},
+    {SUPABASE_URL: liveUrl},
+    {EXTRA_OS_PREVIEW_DATABASE_URL: undefined},
+    {EXTRA_OS_MARKETING_LIVE: "true"},
+    {EXTRA_OS_MARKETING_LIVE: undefined},
+  ]) assert.equal(allows({...valid, ...patch}), false);
+  assert.equal(allows({VERCEL_ENV: "production"}), true);
+});
