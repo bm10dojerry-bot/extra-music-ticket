@@ -48,6 +48,7 @@ async function inbox(body,prior=[],paid=false,scenario={}){
  const show={id:'dinh-dung-2811',url:page,artist:'Đình Dũng',title:'Đêm Đình Dũng',date:'2026-11-28',time:'19:30',venueId:'ccc',venueName:'CCC Sa Pa',prices:load("poster-offers").posterPrices["dinh-dung-2811"]};
  const modules={'server-only':{},'./staff-auth':{staffDb:async(path,options)=>{
    if(path.startsWith('show_landing_content?'))return [{setlist:scenario.setlist??''}];
+   if(path.startsWith('extra_messenger_ai_settings?'))return [{question_quotes_enabled:scenario.quotes===true}];
    if(path.startsWith('extra_messenger_heart_verification?'))return [];
    if(path.startsWith('extra_messenger_show_signals?'))return scenario.signal?[{occurred_at:rows[0].created_at,show_id:scenario.signal}]:[];
    if(path.startsWith('extra_support_messages?'))return path.includes('body=eq.')?[]:rows;
@@ -58,7 +59,7 @@ async function inbox(body,prior=[],paid=false,scenario={}){
    if(path.endsWith('_finish_send'))return {outcome:'sent'};
    if(path.endsWith('_set_state'))return {outcome:'updated'};
    throw Error('Unexpected DB access: '+path);
- }},'./facebook-messenger':{sendMessengerPageMessage:async(id,text)=>{posted.push(text);return {messageId:'fixture-mid'};},
+ }},'./facebook-messenger':{sendMessengerPageMessage:async(id,text,quote)=>{scenario.anchors?.push(quote?.mid);posted.push(text);return {messageId:'fixture-mid'};},
  sendMessengerPageImage:async()=>{posted.push('[image]');return {messageId:'fixture-image'};}},
  './ai-comment-context':{getCommentContextForChat:async()=>scenario.fresh?null:({showId:show.id})},
  './ai-sales-checkout':{listAiSalesShows:async()=>[show,{...show,id:'thai-hoc-3112',artist:'Thái Học',venueId:'laocai',venueName:'Sân khấu Lào Cai',date:'2026-12-31'}, {...show,id:'khac-viet-2612',artist:'Khắc Việt',date:'2026-12-26',prices:load('poster-offers').posterPrices['khac-viet-2612']}],getAiLatestQuote:async()=>null,isAiPurchaseConfirmation:()=>false,
@@ -208,4 +209,46 @@ test('heart directly targets the incoming message and ordinary customers require
   await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body:sample}],async()=>{});assert.equal(claims,1);assert.equal(patches,2);
   assert.equal(gate.verified_at,null);
  }finally{global.fetch=original;}
+});
+
+test('quote the current question only, including an adjacent caption and a ping after a question',async()=>{
+ const anchors=[];
+ await inbox('Show Đình Dũng có kèm nước không?', ['Có map không?'],false,{quotes:true,anchors});
+ await inbox('Xin map chỉ đường đến CCC được không?',[],false,{quotes:true,anchors});
+ await inbox('Cảm ơn em nhé',[],false,{quotes:true,anchors});
+ await inbox('Vé VIP Đình Dũng bao nhiêu?',[],false,{anchors});
+ assert.deepEqual(anchors,['m_fixture_2','m_fixture_1',undefined,undefined]);
+ const policy=load('ai-sales-timeout-policy');
+ const q=load('messenger-question-reply',{'server-only':{},'./staff-auth':{},'./ai-sales-timeout-policy':policy});
+ const turns=['Gia ve bao nhieu','alo'].map((body,i)=>({id:i+1,sender:'customer',body,external_message_id:'m_'+i}));
+ assert.equal(q.questionMessageId(turns,policy.selectWaitingQuestion(turns,1,2)),'m_0');
+ assert.equal(q.questionMessageId(turns,'alo'),undefined);
+ assert.equal(q.questionMessageId(turns,'giá ghế?'),undefined);
+ assert.equal(q.questionMessageId([{...turns[0],sender:'staff'}],turns[0].body),undefined);
+});
+test('short follow-up suggests a next step and observes pauses, closed transactions and handoff',()=>{
+ const advice=load('messenger-short-followup',{'server-only':{},'./staff-auth':{},'./facebook-messenger':{},
+  './ai-sales-timeout-policy':load('ai-sales-timeout-policy'),'./messenger-conversation-style':style,'./messenger-sale-memory':{customerRequestsHuman:s=>s.includes('nhân viên')}}).nextAdvice;
+ assert.match(advice('Cho chị hỏi giá vé?','Hạng A 399.000đ, VIP 349.000đ.'),/^Chị muốn em so sánh/);
+ assert.match(advice('Có nước không?','Trong khu diễn có điểm bán nước.'),/tư vấn thêm/);
+ assert.match(advice('Anh muốn xem một show khác','Có đêm Khắc Việt ngày 26/12.'),/^Anh muốn em giới thiệu/);
+ for(const q of ['Cảm ơn','Alo','Để anh hỏi vợ đã','Cho mình gặp nhân viên','Vé lỗi rồi','Mình chuyển khoản rồi','Báo giá sau nhé, đừng nhắn nữa'])
+  assert.equal(advice(q,'VIP 349.000đ.'),null,q);
+ assert.equal(advice('Có ghế đẹp không?','Mình thích gần sân khấu hay chính diện ạ?'),null);
+});
+test('native reply points at a message; only explicit invalid targets permit a guarded plain resend',async()=>{
+ const env={META_MESSENGER_PAGE_ID:'123456',META_MESSENGER_PAGE_ACCESS_TOKEN:'t'.repeat(25),META_MESSENGER_APP_SECRET:'s'.repeat(20),META_MESSENGER_VERIFY_TOKEN:'v'.repeat(20)};
+ const originalEnv=Object.fromEntries(Object.keys(env).map(k=>[k,process.env[k]]));Object.assign(process.env,env);
+ const sender=load('facebook-messenger',{'server-only':{},'./facebook-page-connection':{resolveFacebookPageCredential:async()=>({pageId:'123456',pageToken:env.META_MESSENGER_PAGE_ACCESS_TOKEN})},'./messenger-pilot-upload':{}});
+ const old=global.fetch,received=[];let failure,checks=0;
+ global.fetch=async(_,opts)=>{received.push(JSON.parse(opts.body));if(failure){const value=failure;failure=null;if(value==='disconnect')throw Error();return Response.json({error:value},{status:400});}return Response.json({message_id:'m_out'});};
+ const quote={mid:'m_customer',beforeFallback:async()=>{checks++;}};
+ try{
+  await sender.sendMessengerPageMessage('10000001','Answer',quote);
+  assert.deepEqual(received[0].reply_to,{mid:'m_customer'});assert.equal(received[0].message.text,'Answer');
+  failure={code:100,message:'Invalid reply_to.mid'};await sender.sendMessengerPageMessage('10000001','Answer',quote);
+  assert.equal(checks,1);assert.equal(received.length,3);assert.equal(received.at(-1).reply_to,undefined);
+  failure='disconnect';await assert.rejects(sender.sendMessengerPageMessage('10000001','Answer',quote));assert.equal(received.length,4);
+  failure={code:190,message:'Token invalid'};await assert.rejects(sender.sendMessengerPageMessage('10000001','Answer',quote));assert.equal(received.length,5);
+ }finally{global.fetch=old;for(const [key,value] of Object.entries(originalEnv)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });

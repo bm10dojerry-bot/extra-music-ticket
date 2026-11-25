@@ -77,6 +77,39 @@ change('  const pageWanted=wantsBookingPage(latest.body,messages);',`  const fri
   }
   serviceNote=service?.body||"";
   const pageWanted=wantsBookingPage(latest.body,messages);`);
+// A quote always comes from the customer turn that produced this answer.
+change('import "server-only";','import "server-only";\nimport {allowedQuestionReply,questionMessageId} from "./messenger-question-reply";\nimport {followUpAfterAnswer} from "./messenger-short-followup";');
+change('style?:{customer:string;history:Message[];page?:string}', 'style?:{customer:string;history:Message[];page?:string;replyToMid?:string}');
+change('  if(recognition.caption)latest.body=recognition.caption;', `  const sourceText=recognition.caption||latest.body;
+  const quoteCandidates=recognition.caption && latest.body.startsWith("[Khách gửi ảnh; chưa đọc nội dung ảnh.]")?messages.slice(-2):[latest];
+  const replyToMid=await allowedQuestionReply(chat.messenger_page_id,chat.messenger_psid,questionMessageId(quoteCandidates,sourceText));
+  if(recognition.caption)latest.body=recognition.caption;`);
+change('const style:{customer:string;history:Message[];page?:string}={customer:latest.body,history:messages};',
+ 'const style:{customer:string;history:Message[];page?:string;replyToMid?:string}={customer:latest.body,history:messages,replyToMid};');
+change('sendMessengerPageMessage(chat.messenger_psid,parts[index])',
+ 'sendMessengerPageMessage(chat.messenger_psid,parts[index],index===0&&style?.replyToMid?{mid:style.replyToMid,beforeFallback:()=>guard(job)}:undefined)');
+change('    console.info("[ai-sales] Job completed",job.kind);', `    console.info("[ai-sales] Job completed",job.kind);
+    if(job.kind==="inbound" && job.source_message_id)await followUpAfterAnswer(job.id,chat.id,job.source_message_id).catch(()=>console.warn("[ai-sales] Optional follow-up skipped"));`);
+
+// Earlier build stages generate image delivery from the original text transport.
+// Only extend the text transport after the image and typing handlers have been installed.
+const transport="lib/facebook-messenger.ts";
+let source=fs.readFileSync(transport,"utf8");
+const textStart=source.indexOf("export async function sendMessengerPageMessage(");
+const textEnd=source.indexOf("export async function sendMessengerPageImage(",textStart);
+assert(textStart>=0&&textEnd>textStart);
+let send=source.slice(textStart,textEnd);
+function updateSend(before,after){assert.equal(send.split(before).length,2);send=send.replace(before,()=>after);}
+updateSend("psid:string,message:string)", "psid:string,message:string,replyTo?:{mid:string;beforeFallback:()=>Promise<unknown>})");
+updateSend("message:{text:message}", "...(replyTo?{reply_to:{mid:replyTo.mid}}:{}),message:{text:message}");
+updateSend('  console.warn("[messenger-api] Failed"', `  const quoteRejected=res.status===400 && (data.error?.code===9000001 ||
+    (data.error?.code===100 && /reply.to|quoted message|message.to.reply|invalid.*mid/i.test(data.error?.message||"")));
+  if(replyTo && quoteRejected){
+    await replyTo.beforeFallback();
+    return sendMessengerPageMessage(psid,message);
+  }
+  console.warn("[messenger-api] Failed"`);
+fs.writeFileSync(transport,source.slice(0,textStart)+send+source.slice(textEnd));
 fs.writeFileSync(file,worker);
 const quickFile="lib/ai-sales-quick-reply.ts";
 const quick=fs.readFileSync(quickFile,"utf8");
