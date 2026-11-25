@@ -178,3 +178,32 @@ test("an explicit switch to an unknown show drops old pricing scope and outlives
   assert.equal(resolved.showId, "minh-vuong-0512");
   assert.equal(resolved.showSelectionUnresolved, undefined);
 });
+
+
+test("retains the request for the nearest seats and interprets locked-seat colour questions", () => {
+  const preferred = deriveMessengerSaleMemory({ shows, previous: { showId: "khac-viet-2612" }, messages: [
+    { id: 41, sender: "customer", body: "Chị lấy 1 vé ngồi sát sân khấu, gần ca sĩ nhất nhé." },
+  ]});
+  assert.equal(preferred.quantity, 1);
+  assert.equal(preferred.seatPriority, "closest_to_stage");
+  assert.ok(preferred.intents.includes("seat_view"));
+
+  const askedColour = deriveMessengerSaleMemory({ shows, previous: preferred, messages: [
+    { id: 42, sender: "customer", body: "Ghế màu xám có hình khóa là hết vé rồi à?" },
+  ]});
+  assert.ok(askedColour.intents.includes("seat_view"));
+  assert.equal(askedColour.seatPriority, "closest_to_stage");
+
+  const relaxed = deriveMessengerSaleMemory({ shows, previous: askedColour, messages: [
+    { id: 43, sender: "customer", body: "Ngồi xa cũng được ạ." },
+  ]});
+  assert.equal(relaxed.seatPriority, undefined);
+});
+
+test("asks about payment details after booking without losing the customer context", () => {
+  const memory = deriveMessengerSaleMemory({ shows, previous: {
+    showId: "khac-viet-2612", paymentStatus: "paid", bookingStatus: "confirmed",
+  }, messages: [{ sender: "customer", body: "Gửi mình STK với ạ." }] });
+  assert.ok(memory.intents.includes("payment"));
+  assert.equal(memory.paymentStatus, "paid");
+});
