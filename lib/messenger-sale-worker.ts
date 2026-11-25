@@ -1,6 +1,9 @@
 import "server-only";
+import {seatInquiry} from "./v2-seat-guidance";
 import { getMessengerDisplayName, MessengerSendError, messengerOutboundMetadata, sendMessengerPageMessage, sendMessengerPageImage, sendMessengerPageAudio, sendMessengerTypingAction } from "./facebook-messenger";
-import { checkedMediaUrl, configuredSeatMaps, requestedSeatMaps, requestedVoiceChoice, shouldOfferVoice, voiceOfferEnabled, voiceOfferMessage } from "./messenger-sale-media";
+import { checkedMediaUrl, requestedSeatMaps, requestedVoiceChoice, shouldOfferVoice, voiceOfferEnabled, voiceOfferMessage } from "./messenger-sale-media";
+import { readMessengerSeatMap } from "./messenger-seatmap-files";
+import { seatMapNames } from "./ai-sale-extra-2-1";
 import { voiceReplyAllowed } from "./messenger-voice";
 import { loadMessengerSaleInventory, loadMessengerSalePromotions, loadMessengerSaleShows } from "./messenger-sale-data";
 import { deriveMessengerSaleMemory, type MessengerSaleMemory } from "./messenger-sale-memory";
@@ -74,29 +77,33 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   context.aiDisclosed ||= claim.ai_disclosed;
   const message = messages.find(row => String(row.id) === String(claim.through_message_id) && row.sender === "customer");
   if (!message) throw new Error("Missing pending Messenger customer message");
-  const show = catalog?.find(candidate => candidate.id === context.showId);
+  const knownShow = catalog?.find(candidate => candidate.id === context.showId);
   const now = new Date();
-  const needsInventory = context.intents.includes("seat_view") ||
+  const inquiry = seatInquiry(message.body, Boolean(context.lastSeatMapVenue));
+  const mapCandidates = requestedSeatMaps(message.body, knownShow?.venue ?? context.lastSeatMapVenue);
+  const show = mapCandidates.length && !mapCandidates.some(venue => venue === knownShow?.venue) ? undefined : knownShow;
+  const plainImage = /(?:gửi|xem|xin) (?:giúp |cho )?(?:mình |em |anh |chị )?(?:ảnh|hình)\b/iu.test(message.body.normalize("NFC"));
+  const declinedImage = /(?:đừng|khỏi|không|ko) (?:cần |muốn )?(?:gửi|xem)/iu.test(message.body);
+  const wantedMaps = inquiry.requestImage || (!inquiry.relevant && plainImage && !declinedImage) ? mapCandidates : [];
+  if (wantedMaps.length === 1) context.lastSeatMapVenue = wantedMaps[0];
+  const seatComparison = inquiry.relevant && (inquiry.advice || wantedMaps.length > 0);
+  const needsInventory = seatComparison || context.intents.includes("seat_view") ||
    (context.intents.includes("price") && Boolean(context.seatView || context.zone));
   const inventory = show && needsInventory && messengerShowOpen(show, now) ? await loadMessengerSaleInventory(show, now) : null;
   const result = composeMessengerSaleReply({ memory: context, message: message.body, displayName, now, show, checkoutOrigin: pilot.checkoutOrigin,
-   showDataAvailable: Boolean(catalog), inventory, promotions: loadMessengerSalePromotions(), resumedAfterHuman: Boolean(claim.last_human_at) });
+   showDataAvailable: Boolean(catalog), inventory, seatComparison, promotions: loadMessengerSalePromotions(), resumedAfterHuman: Boolean(claim.last_human_at) });
   // This whole worker is restricted to the configured pilot testers.
   // Never infer that a static venue poster represents live availability or pricing.
-  const wantedMaps = requestedSeatMaps(message.body, show?.venue);
-  const urls = configuredSeatMaps();
-  const images = wantedMaps.flatMap(venue => urls[venue] ? [{ venue, url: urls[venue]! }] : []);
+  const images = await Promise.all(wantedMaps.map(async venue => ({venue, file: await readMessengerSeatMap(venue)})));
   const voiceReady = voiceOfferEnabled();
   const voiceChoice = requestedVoiceChoice(message.body, Boolean(context.voiceOffered));
   const voiceAccepted = voiceChoice === "yes" && voiceReady;
   const voiceUrl = checkedMediaUrl(process.env.MESSENGER_SALE_VOICE_AUDIO_URL);
   const extras: string[] = [];
   if (wantedMaps.length) {
-    const missing = wantedMaps.filter(venue => !urls[venue]);
-    if (images.length) extras.push("Em gửi kèm ảnh sơ đồ bố cục để mình tham khảo, còn vị trí và số ghế có thể mua phải kiểm tra trên trang đặt vé trực tiếp ạ. "
-      + images.map(item => item.url).join(" "));
-    if (missing.length) extras.push("Ảnh sơ đồ " + missing.map(v => v === "ccc" ? "CCC Sa Pa" : "Lào Cai").join(" và ")
-      + " chưa sẵn sàng gửi trên Messenger. Mình có thể xem sơ đồ ghế cập nhật trên trang đặt vé ạ.");
+    const missing = images.filter(item => !item.file);
+    if (missing.length) extras.push("Ảnh sơ đồ " + missing.map(item => seatMapNames[item.venue]).join(" và ")
+      + " hiện chưa sẵn sàng. Mình có thể xem ghế trên trang đặt vé ạ.");
   }
   if (voiceChoice === "no") {
     context.voiceConsent = "no";
@@ -126,7 +133,7 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   prepared = true;
   let delivery: { messageId: string };
   try {
-   delivery = await sendMessengerPageMessage(psid, result.text!, messengerOutboundMetadata("ai", claim.token));
+   delivery = await sendMessengerPageMessage(psid, replyText, messengerOutboundMetadata("ai", claim.token));
   } catch (error) {
    await finish(error instanceof MessengerSendError && !error.deliveryUncertain ? "rejected" : "unknown");
    if (!(error instanceof MessengerSendError)) console.warn("[messenger-ai] Outbound delivery could not be verified");
@@ -137,12 +144,19 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   // secondary attachment failed; that would duplicate a sale conversation.
   await finish("sent", delivery.messageId);
   for (const item of images) {
+    if (!item.file) continue;
+    const record = (action:string) => messengerSaleRpc<Outcome>("extra_messenger_ai_seat_map", {
+      ...lease, p_venue:item.venue, p_action:action, p_repeat:inquiry.repeat
+    });
+    const gate = await record("claim").catch(() => null);
+    if (gate?.outcome !== "send") continue;
+    let status = "sent";
     try {
-      await sendMessengerPageImage(psid, item.url, messengerOutboundMetadata("ai", claim.token));
-      console.info("[messenger-ai-media] Seat-map delivery accepted", item.venue);
-    } catch {
-      console.warn("[messenger-ai-media] Seat-map delivery not confirmed", item.venue);
+      await sendMessengerPageImage(psid, item.file, messengerOutboundMetadata("ai", claim.token));
+    } catch (error) {
+      status = error instanceof MessengerSendError && !error.deliveryUncertain ? "rejected" : "unknown";
     }
+    await record(status).catch(() => console.warn("[messenger-ai-media] Seat-map outcome pending", item.venue));
   }
   // Consent is attached to the customer's current message, not guessed from
   // a greeting, seat inquiry, prior unrelated "yes", or a general preference.

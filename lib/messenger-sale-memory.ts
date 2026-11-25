@@ -22,6 +22,7 @@ export type MessengerSaleMemory = {
   aiDisclosed: boolean;
   bookingStatus?: "held" | "expired" | "cancelled" | "confirmed";
   paymentStatus?: "pending" | "paid" | "expired" | "cancelled";
+  lastSeatMapVenue?: "ccc" | "laocai";
   voiceOffered?: boolean;
   voiceConsent?: "yes" | "no";
   intents: SaleIntent[];

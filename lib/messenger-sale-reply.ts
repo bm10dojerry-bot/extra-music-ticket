@@ -1,3 +1,5 @@
+import {describeSeats,rankSeatGroups} from "./v2-seat-guidance";
+import { artistPhotoNotice } from "./ai-sale-extra-2-1";
 import {
   applicablePromotions, artistInteractionExplanation, openingMessage, promotionMessage,
   seatViewQuestion, type Promotion, type SeatView,
@@ -23,6 +25,7 @@ type ReplyInput = {
   checkoutOrigin: string;
   show?: ManagedShow | null;
   showDataAvailable: boolean;
+  seatComparison?: boolean;
   inventory?: MessengerSaleInventory | null;
   promotions?: readonly Promotion[];
   resumedAfterHuman?: boolean;
@@ -191,7 +194,7 @@ function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | nu
 
 function paymentReply(memory: MessengerSaleMemory, show?: ManagedShow | null): string {
   if (memory.paymentStatus === "paid") {
-    return `Hệ thống đã xác nhận thanh toán thành công. Cảm ơn mình đã đặt vé${show ? ` đêm ${show.artist}` : " của Extra"} ạ!`;
+    return `Hệ thống đã xác nhận thanh toán thành công. Cảm ơn mình đã đặt vé${show ? ` đêm ${show.artist}` : " của Extra"} ạ! ${artistPhotoNotice}`;
   }
   if (memory.paymentStatus === "pending" && memory.bookingStatus === "held") {
     return "Hệ thống ghi nhận đơn đang giữ chỗ và chờ thanh toán. Mình kiểm tra hạn giữ chỗ và quét mã QR của chính đơn trên trang đặt vé ạ.";
@@ -220,11 +223,13 @@ function textForReply(input: ReplyInput): string {
   if (onlyGeneral && /^(?:da\s+)?(?:cam on(?:\s+(?:em|ban|a))?|khong can(?:\s+nua)?|de\s+(?:minh|em|anh|chi)\s+xem)(?:\s|[.!])*$/.test(message.trim())) {
     return "Dạ vâng, khi cần thêm thông tin mình cứ nhắn Extra ạ.";
   }
+  const asksArtistPhoto = /\bchup (?:anh|hinh)\b/.test(message) && /\b(?:ca si|nghe si|sau (?:show|dem nhac|buoi dien)|dang ky|giao luu)\b/.test(message);
+  if (asksArtistPhoto && (onlyGeneral || [...intents].every(intent => ["show", "interaction", "general"].includes(intent)))) return artistPhotoNotice;
   const open = Boolean(show && messengerShowOpen(show, now));
   const askHowToPay = intents.has("payment") && !memory.paymentStatus &&
     /\b(?:cach|huong dan|lam sao|the nao|nhu the nao)\b/.test(message) &&
     !/\bda\s+(?:thanh toan|chuyen khoan)|\b(?:thanh toan|chuyen khoan)\s+(?:roi|xong|chua)\b/.test(message);
-  const answers: string[] = [];
+  const answers: string[] = asksArtistPhoto && !(intents.has("payment") && memory.paymentStatus === "paid") ? [artistPhotoNotice] : [];
   if (intents.has("payment") && !askHowToPay) {
     const askingAccount = /\b(?:so tai khoan|stk)\b/.test(message);
     answers.push(askingAccount && memory.paymentStatus === "paid"
@@ -242,6 +247,17 @@ function textForReply(input: ReplyInput): string {
     return answers.join("\n");
   }
 
+  if (input.seatComparison && open && inventory?.showId === show.id && !intents.has("payment") && !intents.has("booking")) {
+    if (memory.budgetVnd && memory.budgetBasis !== "per_ticket" && (!memory.quantity || (memory.quantity>1 && memory.budgetBasis !== "total"))) {
+      return "Ngân sách mình dự tính là cho mỗi vé hay cho cả nhóm ạ?";
+    }
+    const layout = seatsFor(show.venue,inventory.rowCounts);
+    const count = memory.quantity ?? 1;
+    const ceiling = memory.budgetVnd && memory.budgetBasis === "total" ? Math.floor(memory.budgetVnd/count) : memory.budgetVnd;
+    const compareTiers = /re hon|gia thap|gia cao|tiet kiem|so sanh/.test(message);
+    const options = rankSeatGroups(show.venue,layout,layout.filter(s=>!inventory.unavailable.has(s.id)),show.prices,count,compareTiers ? undefined : memory.zone,memory.seatView,ceiling);
+    return describeSeats(options,show.artist);
+  }
   const venue = venues.find(venue => venue.id === show.venue);
   const time = /^[0-9]{2}:[0-9]{2}/.test(show.time) ? ` lúc ${show.time.slice(0, 5)}` : "";
   const showDetails = `Đêm ${show.artist} diễn ra ngày ${formatShowDate(show.date)}${time}${venue ? ` tại ${venue.name}` : ""} ạ.`;

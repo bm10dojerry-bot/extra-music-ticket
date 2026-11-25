@@ -66,13 +66,13 @@ test("echo attribution requires the matching App and marker or an explicitly ver
 
 test("Graph transport checks the cohort before sending, profile lookup, typing or audio", async () => {
   const calls = [];
-  const transport = load("lib/facebook-messenger.ts", { "server-only": {}, "./messenger-sale-pilot": {
+  const transport = load("lib/facebook-messenger.ts", { "server-only": {}, "./messenger-sale-media": load("lib/messenger-sale-media.ts"), "./messenger-sale-pilot": {
     requiresMessengerSaleIsolation: () => true,
     getMessengerSalePilot: page => pilotModule.getMessengerSalePilot(page, pilotEnv),
   } }, {
     process: { env: { META_MESSENGER_PAGE_ID: pageId, META_MESSENGER_PAGE_ACCESS_TOKEN: "synthetic page token for testing",
       META_MESSENGER_APP_SECRET: appSecret, META_MESSENGER_VERIFY_TOKEN: "synthetic verification token" } },
-    fetch: async () => { calls.push("graph"); return Response.json({ message_id: "fake-graph-mid" }); },
+    fetch: async (_url, init) => { calls.push(init.body); return Response.json({ message_id: "fake-graph-mid" }); },
   });
   await assert.rejects(transport.sendMessengerPageMessage("220099", "Chào"), reason => reason.deliveryUncertain === false);
   await transport.sendMessengerTypingAction("220099", "typing_on");
@@ -80,7 +80,16 @@ test("Graph transport checks the cohort before sending, profile lookup, typing o
   await assert.rejects(transport.sendMessengerPageAudio(psid, "https://audio.example.invalid/fixture.mp3"));
   assert.deepEqual(calls, []);
   assert.equal((await transport.sendMessengerPageMessage(psid, "Chào")).messageId, "fake-graph-mid");
-  assert.deepEqual(calls, ["graph"]);
+  assert.equal(calls.length, 1);
+  const file = new File(["fixture"], "ccc-sa-pa-550.png", {type:"image/png"});
+  await assert.rejects(transport.sendMessengerPageImage("220099", file));
+  assert.equal(calls.length, 1);
+  assert.equal((await transport.sendMessengerPageImage(psid, file)).messageId, "fake-graph-mid");
+  const form = calls[1];
+  assert.equal(JSON.parse(form.get("recipient")).id, psid);
+  assert.equal(JSON.parse(form.get("message")).attachment.type, "image");
+  assert.equal(form.get("filedata").name, file.name);
+  assert.equal(await form.get("filedata").text(), "fixture");
 });
 
 function webhookHarness(testPilot, isolation = Boolean(testPilot)) {
@@ -164,6 +173,11 @@ test("worker revalidates ownership before Graph and retains uncertain delivery f
     const calls = [];
     class SendError extends Error { deliveryUncertain = true; }
     const worker = load("lib/messenger-sale-worker.ts", {
+      "./v2-seat-guidance": load("lib/v2-seat-guidance.ts"),
+      "./ai-sale-extra-2-1": load("lib/ai-sale-extra-2-1.ts"),
+      "./messenger-sale-media": load("lib/messenger-sale-media.ts"),
+      "./messenger-voice": load("lib/messenger-voice.ts"),
+      "./messenger-seatmap-files": {readMessengerSeatMap: async () => null},
       "server-only": {},
       "./facebook-messenger": {
         getMessengerDisplayName: async () => "Ngọc", MessengerSendError: SendError,
