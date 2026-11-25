@@ -1,5 +1,6 @@
 import {askedOffer,hasPoster,posterChildren} from "./poster-offers";
 import "server-only";
+import {recognizeInquiry} from "./messenger-recognize-inquiry";
 import {alsoNeedsAdvice,catalogSeatPage,chatFirstPolicy,clarifyBookingPage,requestsImageAndPage,styleSalesReply,wantsBookingPage} from "./messenger-conversation-style";
 import {consultationPolicy, salesPreferences, priceLines, tierPriceQuestion} from "./ai-sales-consultation";
 import {customerRequestsHuman} from "./messenger-sale-memory";
@@ -25,13 +26,14 @@ const db=async<T>(path:string):Promise<T>=>staffDb(path,{signal:AbortSignal.time
 function fmtDate(v:string){return v.split("-").reverse().join("/")}
 async function plan(item:Due):Promise<Plan|null>{
  const id=encodeURIComponent(item.chat_id);
- const [rows,stateRows,chatRows,quote,comment]=await Promise.all([
-  db<WaitingMessage[]>("extra_support_messages?chat_id=eq."+id+"&select=id,sender,body,staff_name&order=id.desc&limit=50"),
+ const [rows,stateRows,chatRows,quote,baseComment]=await Promise.all([
+  db<WaitingMessage[]>("extra_support_messages?chat_id=eq."+id+"&select=id,sender,body,staff_name,created_at,external_message_id&order=id.desc&limit=50"),
   db<{status:string;current_order_code:string|null}[]>("extra_messenger_ai_state?chat_id=eq."+id+"&select=status,current_order_code&limit=1"),
-  db<{show_id:string|null;customer_name:string|null}[]>("extra_support_chats?id=eq."+id+"&select=show_id,customer_name&limit=1"),
+  db<{show_id:string|null;customer_name:string|null;messenger_page_id:string;messenger_psid:string}[]>("extra_support_chats?id=eq."+id+"&select=show_id,customer_name,messenger_page_id,messenger_psid&limit=1"),
   getAiLatestQuote(item.chat_id).catch(()=>null),getCommentContextForChat(item.chat_id).catch(()=>null)
  ]);
- const history=[...rows].reverse(),question=selectWaitingQuestion(history,item.first_waiting_id,item.customer_message_id);
+ const history=[...rows].reverse();
+ let question=selectWaitingQuestion(history,item.first_waiting_id,item.customer_message_id);
  if(!question)return null;
  let page:string|undefined;
  const reply=(body:string):Plan=>({body:styleSalesReply(body,question!,history,page)});
@@ -41,6 +43,12 @@ async function plan(item:Due):Promise<Plan|null>{
  if(sensitiveQuestion(question)){
   return {body:"Dạ, em xin lỗi vì mình phải đợi. Phần giao dịch hoặc yêu cầu xử lý đơn vé của mình cần nhân viên kiểm tra trực tiếp; em chưa thể xác nhận hay thay đổi đơn khi chưa đối soát xong. Em vẫn có thể hỗ trợ ngay thông tin show, giá và sơ đồ ghế ạ."};
  }
+ const target=chatRows[0];
+ const recognition=target?.messenger_psid?await recognizeInquiry(history.filter(m=>m.id<=item.customer_message_id),target.messenger_page_id,target.messenger_psid).catch(()=>({} as Awaited<ReturnType<typeof recognizeInquiry>>)):{};
+ const comment=recognition.showId===undefined?baseComment:recognition.showId?{comment:"",post:"",firstReply:"",showId:recognition.showId}:null;
+ if(recognition.reply)return reply(recognition.reply);
+ if(recognition.caption)question=recognition.caption;
+ if(recognition.reading?.kind==="transfer_receipt")return reply("Em đã nhận ảnh chuyển khoản. Tiền về và vé của mình cần được đối chiếu theo đơn ạ.");
  const orderCode=stateRows[0]?.current_order_code;
  const [shows,order]=await Promise.all([listAiSalesShows(),orderCode?getAiOrderStatus(item.chat_id,orderCode).catch(()=>null):Promise.resolve(null)]);
  const known=order?.showId||quote?.showId||chatRows[0]?.show_id||comment?.showId;

@@ -1,3 +1,4 @@
+import {recordSignedBatch} from "../../../../../lib/messenger-show-signals";
 import {after,NextRequest,NextResponse} from "next/server";
 import {createHmac,timingSafeEqual} from "node:crypto";
 import {staffDb} from "../../../../../lib/staff-auth";
@@ -62,6 +63,8 @@ export async function POST(req:NextRequest){
     catch{commentIngestFailed=true;console.warn("[comment-ai] Signed comment intake deferred");}
    }
    if(!Array.isArray(page.messaging))continue;
+   // Save signed attachments and ad context before the intake RPC exposes jobs to the cron worker.
+   await recordSignedBatch(config.pageId,page.messaging.slice(0,35));
    for(const item of page.messaging.slice(0,35)){
     const referral=extractMarketingMessengerReferral(config.pageId,item);
     if(referral&&marketingReferrals.size<100)marketingReferrals.set(referral.sourceEventId,referral);
