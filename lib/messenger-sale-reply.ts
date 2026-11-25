@@ -96,7 +96,12 @@ function optionsFor(
 
   const target = memory.seatView === "left" ? 25 : memory.seatView === "right" ? 75 : 50;
   const distance = (option: Option) => Math.abs(option.seats.reduce((sum, seat) => sum + seat.lateral, 0) / count - target);
-  const ordered = options.sort((first, second) => first.total - second.total || distance(first) - distance(second));
+  const stageRow = (option: Option) => option.seats[0].row.charCodeAt(0) - 65;
+  const ordered = options.sort((first, second) =>
+    memory.seatPriority === "closest_to_stage"
+      ? stageRow(first) - stageRow(second) || distance(first) - distance(second) || first.total - second.total
+      : first.total - second.total || distance(first) - distance(second)
+  );
   // Show at most two distinct price tiers, avoiding overlapping options.
   const first = ordered[0];
   if (!first) return [];
@@ -117,6 +122,16 @@ function priceLine(show: ManagedShow, memory: MessengerSaleMemory, allPrices: bo
     : "Em chưa có giá đã xác minh cho hạng vé mình hỏi ạ.";
 }
 
+function seatColorReply(show: ManagedShow, inventory: MessengerSaleInventory | null | undefined): string {
+  if (!inventory || inventory.showId !== show.id) {
+    return "Ghế màu xám có hình ổ khóa trên sơ đồ là ghế không đặt được. Các màu còn lại biểu thị hạng vé, nhưng em chưa tải được trạng thái ghế mới nhất để xác nhận số chỗ còn bán.";
+  }
+  // The source of truth is seat status, not a sampled pixel from a screenshot.
+  const free = availableSeats(show, inventory);
+  const byZone = zones.map(zone => `${zone}: ${free.filter(seat => seat.zone === zone).length} ghế`).join(", ");
+  return `Dạ, ghế màu xám có biểu tượng ổ khóa là ghế đã khóa hoặc không còn được đặt. Các màu còn lại dùng phân biệt hạng vé A, B, C, D; em không dựa riêng vào màu để khẳng định ghế trống. Theo dữ liệu đặt vé mới nhất của đêm ${show.artist}, còn ${free.length} ghế có thể chọn (${byZone}). Ghế đã bán hoặc đang giữ chỗ không được bán lại ạ.`;
+}
+
 function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | null | undefined, memory: MessengerSaleMemory, mapLink: string): {
   answer: string; question?: string;
 } {
@@ -135,7 +150,7 @@ function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | nu
     answer: `Em chưa thấy ghế trống${preference}${memory.zone ? ` trong hạng ${memory.zone}` : ""} theo lựa chọn của mình ạ.`,
     question: memory.seatView ? "Mình có muốn xem thêm góc khác không ạ?" : seatViewQuestion,
   };
-  if (!memory.seatView && !memory.zone) return {
+  if (!memory.seatView && !memory.zone && !memory.seatPriority) return {
     answer: `Em thấy vẫn có ghế đang mở bán cho đêm ${show.artist} ạ.`,
     question: seatViewQuestion,
   };
@@ -162,11 +177,13 @@ function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | nu
     const first = option.seats[0];
     const seats = option.seats.map(seat => seat.id).join(", ");
     const total = option.seats.length > 1 ? `, tổng ${money(option.total)}` : "";
-    return `hạng ${first.zone} (${seats}), góc ${viewName(first.view)}, ${money(first.price)}/vé${total}`;
+    const stage = memory.seatPriority ? `hàng ${first.row} gần sân khấu theo sơ đồ, ` : "";
+    return `${stage}hạng ${first.zone} (${seats}), góc ${viewName(first.view)} theo sơ đồ, ${money(first.price)}/vé${total}`;
   }).join("\n");
   return {
-    answer: `Em tìm được ${memory.quantity ? "lựa chọn" : "ghế tham khảo"} đang trống theo sơ đồ:\n${details}.\nTình trạng có thể thay đổi đến khi tạo đơn tại ${mapLink}`,
-    question: !memory.seatView ? seatViewQuestion
+    answer: `${memory.seatPriority ? `Dạ, em ưu tiên các hàng gần sân khấu để mình nhìn ${show.artist} rõ hơn. ` : ""}Em tìm được ${memory.quantity ? "lựa chọn" : "ghế tham khảo"} đang trống theo sơ đồ:\n${details}.\nGóc nhìn được xác định theo sơ đồ, không phải cam kết ca sĩ sẽ đứng ngay trước ghế. Tình trạng có thể thay đổi đến khi tạo đơn tại ${mapLink}`,
+    question: memory.seatPriority ? (!memory.quantity ? "Mình cần mấy vé để em chọn nhóm ghế gần sân khấu cho mình ạ?" : "Mình muốn em hướng dẫn đặt ghế này luôn không ạ?")
+      : !memory.seatView ? seatViewQuestion
       : !memory.quantity ? "Mình đi bao nhiêu người để em kiểm tra ghế phù hợp ạ?"
       : memory.budgetVnd === undefined ? "Mình dự tính ngân sách khoảng bao nhiêu cho mỗi vé ạ?" : undefined,
   };
@@ -208,7 +225,12 @@ function textForReply(input: ReplyInput): string {
     /\b(?:cach|huong dan|lam sao|the nao|nhu the nao)\b/.test(message) &&
     !/\bda\s+(?:thanh toan|chuyen khoan)|\b(?:thanh toan|chuyen khoan)\s+(?:roi|xong|chua)\b/.test(message);
   const answers: string[] = [];
-  if (intents.has("payment") && !askHowToPay) answers.push(paymentReply(memory, show));
+  if (intents.has("payment") && !askHowToPay) {
+    const askingAccount = /\b(?:so tai khoan|stk)\b/.test(message);
+    answers.push(askingAccount && memory.paymentStatus === "paid"
+      ? "Hệ thống đã xác nhận đơn của mình thanh toán thành công, nên mình không cần chuyển khoản lại ạ. Em vẫn hỗ trợ nếu mình cần kiểm tra vé."
+      : paymentReply(memory, show));
+  }
   const interactionAsked = intents.has("interaction");
   const showNeeded = askHowToPay || intents.has("show") || intents.has("price") ||
     intents.has("seat_view") || intents.has("promotion") || intents.has("booking");
@@ -240,7 +262,9 @@ function textForReply(input: ReplyInput): string {
   const hasPreference = Boolean(memory.seatView || memory.zone);
   const adviseSeats = intents.has("seat_view") || (intents.has("price") && hasPreference);
   const mapLink = `${input.checkoutOrigin}/show/${encodeURIComponent(show.id)}#booking`;
-  const seatReply = adviseSeats ? findSeatReply(show, inventory, memory, mapLink) : undefined;
+  const colorAsked = /\b(?:mau|xam|khoa|da mua|da ban)\b/.test(message);
+  if (colorAsked) answers.push(seatColorReply(show, inventory));
+  const seatReply = adviseSeats && !colorAsked ? findSeatReply(show, inventory, memory, mapLink) : undefined;
   if (seatReply) answers.push(seatReply.answer);
   if (showAsked) answers.push(showDetails);
   if (interactionAsked) answers.push(artistInteractionExplanation);
