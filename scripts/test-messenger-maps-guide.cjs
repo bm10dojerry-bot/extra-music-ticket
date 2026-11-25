@@ -37,6 +37,16 @@ test("recognizes Stone Church as a route origin for both Sa Pa venues",()=>{
 const live=process.env.VERCEL_ENV==="preview"&&process.env.VERCEL_GIT_COMMIT_REF==="feature/ai-sale23-maps";
 test("sale23 live Places and Routes smoke test (isolated preview only)",{skip:!live},async()=>{
  assert.ok(process.env.GOOGLE_MAPS_API_KEY,"Google Maps preview key missing");
+ // Investigate public CCC listings, without sending customer data or logging credentials.
+ const queries=["Không gian văn hóa Sa Pa Tinh hoa hội tụ, 001 Phan Xi Păng, Sa Pa, Lào Cai","Không gian văn hóa Sa Pa CCC, 002 Phan Xi Păng, Sa Pa, Lào Cai","Công viên văn hóa Sa Pa, Phan Xi Păng, Sa Pa, Lào Cai"];
+ await Promise.all(queries.map(async query=>{
+  try {
+   const r=await fetch("https://places.googleapis.com/v1/places:searchText",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":process.env.GOOGLE_MAPS_API_KEY,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location"},body:JSON.stringify({textQuery:query,languageCode:"vi",regionCode:"VN",pageSize:5}),signal:AbortSignal.timeout(5000)});
+   const body=await r.json();
+   console.log("SALE23_CCC_CANDIDATES "+JSON.stringify({query,http:r.status,places:(body.places??[]).map(p=>({id:p.id,name:p.displayName?.text,address:p.formattedAddress,location:p.location}))}));
+  }catch{console.log("SALE23_CCC_CANDIDATES lookup failed");}
+ }));
+
  const results=await Promise.all(stoneChurchCases.map(async([q,v])=>{
   const started=Date.now();const reply=await guide.mapDistanceReply(q,v);
   const route=/khoảng .*?(?: km| m), .*?phút theo Google Maps/.test(reply);
