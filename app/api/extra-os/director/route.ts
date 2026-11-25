@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { generateText, Output } from "ai";
 import { AI_SALES_MODEL } from "../../../../lib/ai-sales-policy";
-import { buildRetailRehearsal, rehearsalAnswerSchema, retailRehearsalSchema, scoreRetailRehearsal } from "../../../../lib/extra-os/sale-rehearsal";
+import { buildRetailRehearsal, exerciseRetailSample, rehearsalAnswerSchema, retailRehearsalSchema, retailSampleSchema, scoreRetailRehearsal } from "../../../../lib/extra-os/sale-rehearsal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,13 +53,19 @@ export async function POST(req: Request) {
       liveSales:false,messengerConnected:false,sapoConnected:false,ordersCreated:0
     }},{headers:responseHeaders});
   }
+  const respond = (status: string, report: object) =>
+    Response.json({...envelope,status,report},{headers:responseHeaders});
+  if (job.kind === "retail_sample") {
+    const sample = retailSampleSchema.safeParse(job.input);
+    if (!sample.success) return Response.json({error:"invalid_sample"},{status:400,headers:responseHeaders});
+    const score = exerciseRetailSample(sample.data);
+    return respond(score.passed ? "succeeded" : "revision_needed",score);
+  }
   if (job.kind !== "retail_rehearsal") {
     return Response.json({error:"unsupported"},{status:400,headers:responseHeaders});
   }
   const parsed = retailRehearsalSchema.safeParse(job.input);
   if (!parsed.success) return Response.json({error:"invalid_rehearsal"},{status:400,headers:responseHeaders});
-  const respond = (status: string, report: object) =>
-    Response.json({...envelope,status,report},{headers:responseHeaders});
   if (!process.env.AI_GATEWAY_API_KEY) return respond("blocked",{permission:"sale_model"});
   const input = parsed.data;
   try {

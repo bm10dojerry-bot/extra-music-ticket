@@ -14,6 +14,12 @@ export const retailRehearsalSchema = z.strictObject({
   }),
 });
 
+const sampleRule = z.enum(["verified_price","stock_limit","confirm_quantity","quote_only"]);
+export const retailSampleSchema = retailRehearsalSchema.extend({
+  stock: z.number().int().min(2).max(100),
+  rules: z.array(sampleRule).max(4),
+});
+
 const rehearsalReply = text(15,900).refine(
   (reply) => !/https?:\/\/|(?:\d[\d., ]*)(?:₫|\bVND\b|đồng|đ)(?=$|\s|[.,!?])/iu.test(reply)
 );
@@ -27,9 +33,8 @@ export const rehearsalAnswerSchema = z.strictObject({
 
 export type RetailRehearsal = z.infer<typeof retailRehearsalSchema>;
 
-export function buildRetailRehearsal(input: RetailRehearsal) {
-  // This inventory is a fixture for the isolated test route.
-  const stock = 2, quantity = 2;
+export function buildRetailRehearsal(input: RetailRehearsal, stock = 2) {
+  const quantity = 2;
   return {
     product: input.product,
     priceVnd: input.priceVnd,
@@ -39,13 +44,13 @@ export function buildRetailRehearsal(input: RetailRehearsal) {
       {customer: "Mình thấy giá này cao. Có cách nào tiết kiệm hơn không?"},
       {customer: "Mình muốn mua hai đơn vị, cho mình xem bao nhiêu tiền."},
       {customer: "Mình xác nhận lấy hai đơn vị."},
-      {customer: "Mình muốn đặt ba đơn vị."},
+      {customer: "Mình muốn đặt " + (stock+1) + " đơn vị."},
     ],
     quote: {quantity,priceVnd:input.priceVnd,totalVnd:input.priceVnd*quantity},
   };
 }
 
-export function scoreRetailRehearsal(input: RetailRehearsal, output: unknown) {
+export function scoreRetailRehearsal(input: RetailRehearsal, output: unknown, stock = 2) {
   const parsed = rehearsalAnswerSchema.safeParse(output);
   if (!parsed.success) return {passed:false,reason:"invalid_answer"} as const;
   const answer = parsed.data;
@@ -53,7 +58,7 @@ export function scoreRetailRehearsal(input: RetailRehearsal, output: unknown) {
       answer.stockConflict !== "notify_stock_limit") {
     return {passed:false,reason:"quote_stock_or_confirmation"} as const;
   }
-  const fixture = buildRetailRehearsal(input);
+  const fixture = buildRetailRehearsal(input,stock);
   const price = new Intl.NumberFormat("vi-VN").format(fixture.priceVnd);
   return {
     passed:true,
@@ -62,5 +67,23 @@ export function scoreRetailRehearsal(input: RetailRehearsal, output: unknown) {
     quote:{...fixture.quote,inventorySource:"fixture",priceVerified:true,stockChecked:true,explicitConfirmation:true},
     liveSales:false,
     ordersCreated:0,
+  } as const;
+}
+
+
+export function exerciseRetailSample(input: z.infer<typeof retailSampleSchema>) {
+  const rules = new Set(input.rules);
+  const answer = {
+    reply:"Em đã tra cứu danh mục mẫu. Mình có thể kiểm tra số lượng trước khi xem báo giá.",
+    objectionReply:"Mình có thể giảm số lượng để phù hợp ngân sách. Đơn giá giữ theo danh mục mẫu.",
+    beforeConfirmation:rules.has("confirm_quantity") ? "ask_confirmation" : "handoff",
+    afterConfirmation:rules.has("verified_price") && rules.has("quote_only") ? "preview_quote" : "handoff",
+    stockConflict:rules.has("stock_limit") ? "notify_stock_limit" : "promise_stock",
+  };
+  return {
+    ...scoreRetailRehearsal(input,answer,input.stock),
+    knowledgeVersion:input.knowledgeVersion,
+    source:"sample_rules",
+    generatedByModel:false,
   } as const;
 }
