@@ -2,13 +2,13 @@
 import {useEffect,useMemo,useRef,useState,type FormEvent} from "react";
 import "./support-inbox.css";
 
-type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:"open"|"closed";created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null;assigned_staff_id:string|null;assigned_at:string|null;channel:"website"|"messenger"};
+type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:"open"|"closed";created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null;assigned_staff_id:string|null;assigned_at:string|null;channel:"website"|"messenger";aiManaged?:boolean};
 type Message={id:number;sender:"staff"|"customer";body:string;staff_name:string|null;created_at:string};
 type Sale={id:string;display_name:string;openCount:number};
 type Filter="mine"|"open"|"unread"|"queue"|"all";
 const slugNames:Record<string,string>={"dinh-dung-2811":"Đình Dũng 28/11","minh-vuong-0512":"Minh Vương 05/12","trinh-dinh-quang-1212":"Trịnh Đình Quang 12/12","khanh-phuong-1912":"Khánh Phương 19/12","ho-quang-hieu-2412":"Hồ Quang Hiếu 24/12","khac-viet-2612":"Khắc Việt 26/12","thai-hoc-3112":"Thái Học 31/12"};
 const fmt=(x:string)=>{try{return new Date(x).toLocaleString("vi-VN",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}catch{return ""}};
-const unread=(c:Chat)=>c.status==="open"&&!!c.last_customer_at&&(!c.last_staff_at||new Date(c.last_customer_at).getTime()>new Date(c.last_staff_at).getTime());
+const unread=(c:Chat)=>!c.aiManaged&&c.status==="open"&&!!c.last_customer_at&&(!c.last_staff_at||new Date(c.last_customer_at).getTime()>new Date(c.last_staff_at).getTime());
 const overdue=(c:Chat,now:number)=>unread(c)&&now-new Date(c.last_customer_at!).getTime()>=60000;
 const quickReplies=[
  {label:"Chào khách",text:"Em chào anh/chị! Em là nhân viên tư vấn +1 Extra. Em có thể hỗ trợ mình chọn hạng ghế và vị trí phù hợp ạ."},
@@ -18,19 +18,32 @@ const quickReplies=[
  {label:"Kiểm tra email",text:"Anh/chị vui lòng kiểm tra Hộp thư đến và thư Spam. Nếu vẫn chưa nhận mã QR xác nhận chỗ, cho em biết email hoặc số điện thoại đã dùng khi đặt chỗ để được hỗ trợ."},
  {label:"Địa điểm & giờ",text:"Anh/chị vui lòng đối chiếu ngày giờ và địa điểm ghi trên trang show trước khi di chuyển. Nếu cần xác nhận thêm, em sẽ hướng dẫn ạ."}
 ];
-export default function SupportInbox({embedded=false,active=true}:{embedded?:boolean;active?:boolean}){
- const [chats,setChats]=useState<Chat[]>([]),[selected,setSelected]=useState(""),[current,setCurrent]=useState<Chat|null>(null),[messages,setMessages]=useState<Message[]>([]);
+export default function SupportInbox({embedded=false,active=true,initialChatId=""}:{embedded?:boolean;active?:boolean;initialChatId?:string}){
+ const [chats,setChats]=useState<Chat[]>([]),[selected,setSelected]=useState(initialChatId),[current,setCurrent]=useState<Chat|null>(null),[messages,setMessages]=useState<Message[]>([]);
  const [staff,setStaff]=useState<Sale[]>([]),[actorId,setActorId]=useState(""),[isManager,setIsManager]=useState(false),[myOpen,setMyOpen]=useState(0),[waiting,setWaiting]=useState(0),[messengerConfigured,setMessengerConfigured]=useState(false);
- const [filter,setFilter]=useState<Filter>("mine"),[search,setSearch]=useState(""),[targetStaff,setTargetStaff]=useState("");
+ const [aiEnabled,setAiEnabled]=useState(false);
+ const [filter,setFilter]=useState<Filter>(initialChatId?"all":"mine"),[search,setSearch]=useState(""),[targetStaff,setTargetStaff]=useState("");
  const [drafts,setDrafts]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[loading,setLoading]=useState(true),[now,setNow]=useState(Date.now());
  const selectedRef=useRef(selected);selectedRef.current=selected;
+ const initialChatRef=useRef(initialChatId),pinnedChatRef=useRef<Chat|null>(null);
  const draft=drafts[selected]||"";
  function setDraft(value:string){if(!selected||current?.id!==selected)return;setDrafts(old=>({...old,[selected]:value}));}
  async function refresh(signal?:AbortSignal){
   const r=await fetch("/api/staff/support-chats",{cache:"no-store",signal});
   const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được hộp thư");
   if(signal?.aborted)return;
-  const list=(d.chats||[]) as Chat[];setChats(list);setStaff(d.staff||[]);
+  const list=(d.chats||[]) as Chat[];
+  const requested=initialChatRef.current;
+  if(requested&&d.isManager&&!list.some(c=>c.id===requested)){
+   const detailResponse=await fetch("/api/staff/support-chats?chatId="+encodeURIComponent(requested),{cache:"no-store",signal});
+   const detail=await detailResponse.json();
+   if(!detailResponse.ok)throw Error(detail.error||"Không mở được cuộc trò chuyện đã chọn");
+   if(signal?.aborted)return;
+   if(detail.chat)pinnedChatRef.current=detail.chat as Chat;
+  }
+  initialChatRef.current="";
+  if(pinnedChatRef.current&&!list.some(c=>c.id===pinnedChatRef.current?.id))list.push(pinnedChatRef.current);
+  setChats(list);setStaff(d.staff||[]);setAiEnabled(Boolean(d.aiEnabled));
   setActorId(d.actorId||"");setIsManager(Boolean(d.isManager));setMyOpen(d.myOpenCount||0);setWaiting(d.waitingCount||0);setMessengerConfigured(Boolean(d.messengerConfigured));
   setFilter(v=>v==="mine"&&d.isManager?"open":v);
   setSelected(s=>list.some(c=>c.id===s)?s:list.find(c=>c.assigned_staff_id===d.actorId&&c.status==="open")?.id||list[0]?.id||"");
@@ -53,21 +66,22 @@ export default function SupportInbox({embedded=false,active=true}:{embedded?:boo
    if(!live||loadingMessages)return;loadingMessages=true;
    try{const r=await fetch("/api/staff/support-chats?chatId="+encodeURIComponent(selected),{cache:"no-store",signal:controller.signal});
     const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được nội dung");
-    if(live){setCurrent(d.chat||null);setMessages(d.messages||[])}
+    if(live){setCurrent(d.chat||null);setMessages(d.messages||[]);if(pinnedChatRef.current?.id===selected&&d.chat)pinnedChatRef.current=d.chat;}
    }catch(e){if(live)setError(e instanceof Error?e.message:"Không tải được tin nhắn")}finally{loadingMessages=false}
   }
   void loadMessages();const timer=setInterval(()=>void loadMessages(),6000);return()=>{live=false;controller.abort();clearInterval(timer)};
  },[active,selected,listed?.assigned_staff_id,actorId,isManager]);
  const visible=useMemo(()=>chats.filter(c=>{
   const match=filter==="all"||filter==="mine"&&c.status==="open"&&c.assigned_staff_id===actorId
-   ||filter==="open"&&c.status==="open"||filter==="unread"&&unread(c)||filter==="queue"&&c.status==="open"&&!c.assigned_staff_id;
+   ||filter==="open"&&c.status==="open"||filter==="unread"&&unread(c)||filter==="queue"&&c.status==="open"&&!c.assigned_staff_id&&!c.aiManaged;
   return match&&(c.customer_name+" "+(c.customer_phone||"")+" "+(slugNames[c.show_id||""]||c.show_id||"")).toLowerCase().includes(search.toLowerCase().trim());
  }),[chats,filter,search,actorId]);
  const lateCount=chats.filter(c=>overdue(c,now)&&Boolean(c.assigned_staff_id)).length;
  const needs=chats.filter(unread).length;
  const assignedName=(c:Chat)=>staff.find(s=>s.id===c.assigned_staff_id)?.display_name||"Sale EXTRA";
- const canReply=Boolean(active&&current&&current.id===selected&&current.status==="open"&&(isManager||current.assigned_staff_id===actorId));
- const showQueue=Boolean(current&&current.status==="open"&&!current.assigned_staff_id);
+ const canView=Boolean(active&&current&&current.id===selected&&(isManager||current.assigned_staff_id===actorId));
+ const canReply=Boolean(canView&&current?.status==="open"&&!current.aiManaged);
+ const showQueue=Boolean(current&&current.status==="open"&&!current.assigned_staff_id&&!current.aiManaged);
  const otherStaff=staff.filter(s=>s.id!==current?.assigned_staff_id&&s.openCount<8);
  async function doAction(payload:Record<string,unknown>){
   if(busy)return;setBusy(true);setError("");
@@ -87,9 +101,9 @@ export default function SupportInbox({embedded=false,active=true}:{embedded?:boo
   }catch(e){setError(e instanceof Error?e.message:"Chưa gửi được tin nhắn")}finally{setBusy(false)}
  }
  return <section className={"extra-inbox "+(embedded?"extra-inbox-embedded":"")} aria-label="Hộp thư tư vấn đặt chỗ">
-  <div className="extra-inbox-title"><div><small>+1 EXTRA · SALE SUPPORT</small><h2>Hộp thư tư vấn trực tuyến</h2><p>Khách được tự phân công cho Sale còn chỗ. Mỗi Sale tối đa 8 cuộc chat đang mở.</p></div><div className="extra-inbox-counts"><strong>{needs}</strong><span>Cần phản hồi</span></div></div>
+  <div className="extra-inbox-title"><div><small>+1 EXTRA · SALE SUPPORT</small><h2>Hộp thư tư vấn trực tuyến</h2><p>{aiEnabled?"AI Extra phụ trách các cuộc trò chuyện Fanpage. Khách cần hỗ trợ thủ công được theo dõi riêng.":"Khách được tự phân công cho Sale còn chỗ. Mỗi Sale tối đa 8 cuộc chat đang mở."}</p></div><div className="extra-inbox-counts"><strong>{needs}</strong><span>Cần phản hồi</span></div></div>
   <div className="extra-inbox-kpis">
-   <div><strong>{isManager?chats.filter(c=>c.status==="open"&&Boolean(c.assigned_staff_id)).length:myOpen}<span>/{isManager?staff.length*8:8}</span></strong><small>{isManager?"Đã phân công cho Sale":"Khách của tôi"}</small></div>
+   <div><strong>{isManager?chats.filter(c=>!c.aiManaged&&c.status==="open"&&Boolean(c.assigned_staff_id)).length:myOpen}<span>/{isManager?staff.length*8:8}</span></strong><small>{isManager?"Đã phân công cho Sale":"Khách của tôi"}</small></div>
    <div><strong>{waiting}</strong><small>Khách chờ phân công</small></div>
    <div className={lateCount?"extra-inbox-danger":""}><strong>{lateCount}</strong><small>Chờ quá 60 giây</small></div>
    <div><strong>{staff.length}</strong><small>Sale đang hoạt động</small></div>
@@ -104,16 +118,16 @@ export default function SupportInbox({embedded=false,active=true}:{embedded?:boo
     visible.map(c=><button type="button" key={c.id} onClick={()=>setSelected(c.id)} className={"extra-inbox-person "+(selected===c.id?"active":"")+(overdue(c,now)?" extra-inbox-late":"")}>
      <span className="extra-inbox-person-head"><b>{c.customer_name}</b>{overdue(c,now)?<em className="extra-inbox-late-tag">Quá 60s</em>:unread(c)?<i title="Khách chưa được trả lời" aria-label="Cần phản hồi"/>:null}</span>
      <span className="extra-inbox-person-meta">{c.channel==="messenger"?"Facebook Messenger · ":""}{c.show_id?slugNames[c.show_id]||c.show_id:"Tư vấn chung"}{c.customer_phone?" · "+c.customer_phone:""}</span>
-     <small>{c.assigned_staff_id?c.assigned_staff_id===actorId?"Đang giao cho bạn":"Phụ trách: "+assignedName(c):"⏳ Chờ phân công"} · {fmt(c.updated_at)}</small>
+     <small>{c.aiManaged?"AI Extra đang phụ trách":c.assigned_staff_id?c.assigned_staff_id===actorId?"Đang giao cho bạn":"Phụ trách: "+assignedName(c):"⏳ Chờ phân công"} · {fmt(c.updated_at)}</small>
     </button>)}
    </div>
    <div className="extra-inbox-thread">
     {current&&current.id===selected?<><div className="extra-inbox-thread-head">
      <div><strong>{current.customer_name}</strong><span className="extra-inbox-channel">{current.channel==="messenger"?"Facebook Messenger":"Chat trên iextra.net"}</span><span>{current.show_id?slugNames[current.show_id]||current.show_id:"Tư vấn chung"}</span>{current.customer_phone&&<a href={"tel:"+current.customer_phone}>☎ {current.customer_phone}</a>}
-      <span>{current.assigned_staff_id?"Sale phụ trách: "+assignedName(current):"Khách đang ở hàng chờ"}</span>
+      <span>{current.aiManaged?"AI Extra đang phụ trách":current.assigned_staff_id?"Sale phụ trách: "+assignedName(current):"Khách đang ở hàng chờ"}</span>
      </div>
      <div className="extra-inbox-head-actions">
-      <button type="button" onClick={()=>void doAction({chatId:current.id,status:current.status==="open"?"closed":"open"})} disabled={busy||current.status==="closed"&&!isManager||!isManager&&current.assigned_staff_id!==actorId}>
+      <button type="button" onClick={()=>void doAction({chatId:current.id,status:current.status==="open"?"closed":"open"})} disabled={busy||Boolean(current.aiManaged)||current.status==="closed"&&!isManager||!isManager&&current.assigned_staff_id!==actorId}>
        {current.status==="open"?"Đóng hội thoại":"Mở lại"}
       </button>
      </div>
@@ -122,17 +136,18 @@ export default function SupportInbox({embedded=false,active=true}:{embedded?:boo
      {!isManager&&<button type="button" disabled={busy||myOpen>=8} onClick={()=>void doAction({action:"claim",chatId:current.id})}>{myOpen>=8?"Bạn đã đủ 8 khách":"Nhận khách để tư vấn"}</button>}
     </div>}
     <div className="extra-inbox-messages" role="log" aria-live="polite">
-     {canReply?messages.map(m=><div key={m.id} className={"extra-inbox-msg "+(m.sender==="staff"?"staff":"customer")}><small>{m.sender==="staff"?(m.staff_name||"Sale EXTRA"):"Khách hàng"} · {fmt(m.created_at)}</small><p>{m.body}</p></div>):
+     {canView?messages.map(m=><div key={m.id} className={"extra-inbox-msg "+(m.sender==="staff"?"staff":"customer")}><small>{m.sender==="staff"?(m.staff_name||"Sale EXTRA"):"Khách hàng"} · {fmt(m.created_at)}</small><p>{m.body}</p></div>):
        <p className="extra-inbox-muted">Nhận khách trước khi xem và trả lời nội dung trò chuyện.</p>}
-     {canReply&&messages.length===0&&<p className="extra-inbox-muted">Chưa có tin nhắn.</p>}
+     {canView&&messages.length===0&&<p className="extra-inbox-muted">Chưa có tin nhắn.</p>}
     </div>
-    {current.status==="open"&&(canReply||isManager)&&<div className="extra-inbox-transfer"><span><strong>Chuyển khách cho Sale khác</strong><small>Chỉ chọn nhân viên còn dưới 8 cuộc đang mở</small></span>
+    {current.status==="open"&&!current.aiManaged&&(canReply||isManager)&&<div className="extra-inbox-transfer"><span><strong>Chuyển khách cho Sale khác</strong><small>Chỉ chọn nhân viên còn dưới 8 cuộc đang mở</small></span>
      <select aria-label="Chọn nhân viên nhận bàn giao" value={targetStaff} onChange={e=>setTargetStaff(e.target.value)}>
       <option value="">— Chọn Sale tiếp nhận —</option>{otherStaff.map(s=><option key={s.id} value={s.id}>{s.display_name} · {s.openCount}/8</option>)}
      </select>
      <button type="button" disabled={!targetStaff||busy} onClick={()=>void doAction({action:"transfer",chatId:current.id,targetStaffId:targetStaff})}>Bàn giao</button>
      {current.assigned_staff_id&&<button type="button" disabled={busy} onClick={()=>void doAction({action:"auto",chatId:current.id})}>Chuyển tự động</button>}
     </div>}
+    {current.aiManaged&&<div className="extra-inbox-queue-intro"><p>{current.status==="open"?"AI Extra đang tư vấn và xử lý đơn cho khách.":"Cuộc trò chuyện do AI Extra xử lý."}</p>{isManager&&<a href="/admin?section=ai-sales">Theo dõi kết quả hoặc tiếp quản tại AI bán vé</a>}</div>}
     {canReply&&current.channel==="messenger"&&!messengerConfigured&&<p className="extra-inbox-alert" role="status">Chưa cấp Messenger Page Access Token, App Secret và webhook trong Vercel. Không thể gửi trả lời về Facebook cho tới khi hoàn tất kết nối.</p>}
     {canReply&&<form className="extra-inbox-reply" onSubmit={e=>void send(e)}>
      <label htmlFor="extra-inbox-reply-text">{current.channel==="messenger"?"Trả lời trực tiếp trên Facebook Messenger":"Trả lời khách trên website"}</label>

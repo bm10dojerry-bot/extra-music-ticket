@@ -1,10 +1,13 @@
-import {NextRequest,NextResponse} from "next/server";
+import {after,NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
 import {staffDb} from "../../../../../lib/staff-auth";
 import {deliverTickets,paidOrder} from "../../../../../lib/extra-ticketing";
 import {sendMetaPurchase} from "../../../../../lib/meta-capi";
 import {sendZaloTicket} from "../../../../../lib/zalo-zbs";
+import {enqueueAiPaidOrder,runAiSalesQueue} from "../../../../../lib/ai-sales";
+import {sendAiSalesOwnerNotifications} from "../../../../../lib/ai-sales-notifications";
 export const runtime="nodejs";
+export const maxDuration=300;
 export async function POST(req:NextRequest){
  const secret=process.env.SEPAY_WEBHOOK_KEY;
  if(!secret||secret.length<24)return NextResponse.json({success:false},{status:503});
@@ -30,6 +33,8 @@ export async function POST(req:NextRequest){
  if(matchedCode){
   const order=await paidOrder(matchedCode);
   if(order?.status!=="paid")throw Error("Confirmed order could not be reloaded");
+  try{await enqueueAiPaidOrder(matchedCode)}catch{console.warn("[ai-sales] Paid delivery will be recovered by scheduled reconciliation")}
+  after(async()=>{try{await runAiSalesQueue({maxJobs:3});await sendAiSalesOwnerNotifications()}catch{console.warn("[ai-sales] Paid follow-up deferred to scheduled retry")}});
   if(confirmation.matched_by==="unique_amount_time")console.info("[sepay-webhook] Auto-reconciled transfer without matching memo",id);
   let emailFailure:unknown=null;
   try{await deliverTickets(matchedCode)}catch(e){emailFailure=e;console.error("[sepay-webhook] ticket email issue",e instanceof Error?e.message:"unknown")}

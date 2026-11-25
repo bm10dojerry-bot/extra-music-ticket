@@ -2,7 +2,7 @@ import type {Role} from "../../lib/staff-auth";
 
 export type AdminSection =
  | "overview" | "shows" | "artists" | "stages" | "venues" | "landingpage-ads"
- | "tickets" | "staff-sales" | "live-monitor" | "support-chats" | "seats" | "checkin"
+ | "tickets" | "staff-sales" | "live-monitor" | "support-chats" | "ai-sales" | "ai-marketing" | "seats" | "checkin"
  | "financials" | "show-costs" | "sale-performance" | "sale-commission"
  | "staff-users" | "staff-reports" | "staff-overview" | "gioi-thieu" | "tuyen-dung" | "lien-he";
 export type AdminIcon = "home" | "activity" | "calendar" | "music" | "location" | "image"
@@ -20,6 +20,8 @@ export type AdminNavItem = {
 export const adminGroups = ["Điều hành", "Vé & khách hàng", "Show & nội dung", "Kinh doanh & nhân sự", "Tài chính", "Thông tin website"] as const;
 export const adminSections: readonly AdminNavItem[] = [
  {id:"overview",label:"Home",title:"Tổng quan",description:"Doanh thu, tình hình bán vé và truy cập website.",group:"Điều hành",icon:"home"},
+ {id:"ai-sales",label:"AI bán vé",title:"AI bán vé",description:"Theo dõi kết quả tư vấn, chốt đơn và giao vé tự động từ Fanpage.",group:"Điều hành",icon:"chat",adminOnly:true},
+ {id:"ai-marketing",label:"AI đăng bài & Ads",title:"AI đăng bài & quảng cáo",description:"Theo dõi bài Fanpage, lịch tự động và ngân sách quảng cáo cho show.",group:"Điều hành",icon:"chart",adminOnly:true},
  {id:"live-monitor",label:"Giám sát trực tuyến",title:"Giám sát trực tuyến",description:"Theo dõi khách truy cập và hoạt động tư vấn.",group:"Điều hành",icon:"activity"},
  {id:"tickets",label:"Vé QR & đối soát",title:"Vé QR & đối soát",description:"Tra cứu vé đã thanh toán, đối soát SePay và kiểm tra email vé.",group:"Vé & khách hàng",icon:"ticket"},
  {id:"staff-sales",label:"Đơn vé & khách hàng",title:"Đơn đặt vé & khách hàng",description:"Theo dõi đơn vé, khách hàng và nhân viên phụ trách.",group:"Vé & khách hàng",icon:"users"},

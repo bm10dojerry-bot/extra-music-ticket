@@ -4,21 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/apply-ai-sales-opening.cjs && node scripts/apply-ai-sales-party-size.cjs && node scripts/apply-ai-sales-quick-reply.cjs && node scripts/apply-ai-sales-promotion.cjs && node scripts/apply-ai-sales-payment-image.cjs && node scripts/apply-ai-sales-ticket-address.cjs && node scripts/apply-ai-sales-greeting.cjs && node scripts/apply-ai-sales-v2-first-release.cjs && node --test scripts/test-ai-sales-v2-typing.cjs && node scripts/apply-ai-sales-v2-inbound-image.cjs && node --test scripts/test-ai-sales-v2-inbound-image.cjs && node scripts/apply-ai-sales-seat-map.cjs && node scripts/fix-ai-sales-seat-map.cjs && node --test scripts/test-ai-sales-seat-map.cjs && node --test scripts/test-ai-sales-timeout.cjs && node scripts/apply-ai-sales-consultation.cjs && node --test scripts/test-ai-sales-consultation.cjs && node scripts/apply-ai-sale-2-integration.cjs && node --test scripts/test-ai-sale-2-integration.cjs && next build",
     "start": "next start"
   },
   "dependencies": {
+    "ai": "^7.0.181",
     "next": "^15.5.0",
+    "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "qrcode": "^1.5.4",
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
     "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.9.0"
   }
 }
