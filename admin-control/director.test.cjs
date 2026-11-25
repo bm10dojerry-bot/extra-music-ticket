@@ -349,3 +349,52 @@ test('regular retail intake cannot select sample mode and budget exercise exclud
   assert.deepEqual(details.decisions.map(item=>item.action),['ignore','continue','pause']);
   assert.equal(details.campaignCreated,false);
 });
+
+test('staff assignment preserves old show data, scopes access, and rejects stale reports',usePg,async t=>{
+  const {initStaffWork,issueCode,signIn,listStaffTasks,reportStaffTask,updateShowTask}=require('./staff-work.cjs');
+  const pool=await database(t);
+  await pool.query(`
+    create table os_shows (id uuid primary key,intake jsonb not null);
+    create table os_tasks (show_id uuid references os_shows(id),key text,definition jsonb,status text,note text,primary key(show_id,key));
+    create table os_audit (id bigint generated always as identity, event text,details jsonb);
+  `);
+  const id=randomUUID();
+  await pool.query('insert into os_shows values($1,$2)',[id,{artist:'Show mẫu'}]);
+  await pool.query('insert into os_tasks values($1,$2,$3,$4,$5)',[id,'venue',{title:'Kiểm tra sân khấu'},'pending','Ghi chú cũ']);
+  await initStaffWork(pool);
+  await initStaffWork(pool);
+  const {rows:[original]}=await pool.query('select note,assignee,revision from os_tasks');
+  assert.deepEqual(original,{note:'Ghi chú cũ',assignee:null,revision:0});
+
+  const dieu=await issueCode(pool,'dieu');
+  const trang=await issueCode(pool,'trang');
+  assert.equal(await issueCode(pool,'unknown'),null);
+  const {rows:[stored]}=await pool.query("select code_hash from os_staff_access where staff_id='dieu'");
+  assert.notEqual(stored.code_hash,dieu);
+  const sessions=await Promise.all([signIn(pool,dieu),signIn(pool,dieu)]);
+  assert.equal(sessions.filter(Boolean).length,1);
+  assert.equal(sessions.find(Boolean).staffId,'dieu');
+  assert.equal((await signIn(pool,trang)).staffId,'trang');
+  assert.equal(await signIn(pool,trang),null);
+  const expiring=await issueCode(pool,'hai');
+  await pool.query("update os_staff_access set expires_at=now()-interval '1 minute' where staff_id='hai'");
+  assert.equal(await signIn(pool,expiring),null);
+
+  const key='venue';
+  assert(await updateShowTask(pool,{id,key,status:'pending',assignee:'dieu',note:'Kiểm tra bố cục',revision:0}));
+  const assigned=await listStaffTasks(pool,'dieu');
+  assert.equal(assigned[0].definition.title,'Kiểm tra sân khấu');
+  assert.equal(assigned[0].revision,1);
+  assert.deepEqual(await listStaffTasks(pool,'trang'),[]);
+  assert.equal(await reportStaffTask(pool,'trang',{id,key,action:'submit',note:'Xem việc của người khác',revision:1}),false);
+  assert.equal(await reportStaffTask(pool,'dieu',{id,key,action:'submit',note:'',revision:1}),false);
+  assert(await reportStaffTask(pool,'dieu',{id,key,action:'start',note:'',revision:1}));
+  assert.equal(await reportStaffTask(pool,'dieu',{id,key,action:'submit',note:'Báo cáo cũ',revision:1}),false);
+  assert(await reportStaffTask(pool,'dieu',{id,key,action:'submit',note:'Đã kiểm tra',revision:2}));
+  assert.equal(await updateShowTask(pool,{id,key,status:'accepted',note:'Qua',assignee:'dieu',revision:2}),false);
+  assert(await updateShowTask(pool,{id,key,status:'accepted',note:'Đã duyệt',assignee:'dieu',revision:3}));
+  assert.equal(await reportStaffTask(pool,'dieu',{id,key,action:'submit',note:'Báo cáo sau khi duyệt',revision:4}),false);
+  assert.equal((await listStaffTasks(pool,'dieu'))[0].status,'accepted');
+  const {rows:events}=await pool.query('select event from os_audit order by id');
+  assert.deepEqual(events.map(row=>row.event),['task.updated','staff.task.in_progress','staff.task.submitted','task.updated']);
+});
