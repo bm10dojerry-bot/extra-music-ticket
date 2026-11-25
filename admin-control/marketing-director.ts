@@ -88,3 +88,26 @@ export function planStaffWork(input: ShowIntake, finance: ShowFinancialPlan, now
   }
   return tasks;
 }
+
+/** Read-only analyst of internal plans. No external data or AI claims. */
+export function analyzeInternalPlans(
+  shows: Array<{intake: {artist: string}; finance: Partial<ShowFinancialPlan>}>,
+  retail: Array<{intake: {budget: number}}>
+) {
+  const valid = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+  const risks = [];
+  let missing = 0, showCost = 0, targetRevenue = 0, projectedRevenue = 0, retailBudget = 0, missingRetail = 0;
+  for (const s of shows) {
+    const f = s.finance;
+    if (!valid(f.plannedCostVnd) || !valid(f.targetRevenueVnd) || !valid(f.projectedRevenueVnd)) { missing++; continue; }
+    showCost += f.plannedCostVnd; targetRevenue += f.targetRevenueVnd; projectedRevenue += f.projectedRevenueVnd;
+    const gap = Math.max(0, f.targetRevenueVnd - f.projectedRevenueVnd);
+    if (gap > 0 || !f.layoutMatches) risks.push({
+      artist: s.intake.artist, gap, layoutVerified: f.layoutMatches === true,
+      recommendation: gap > 0 ? "Rà soát giá, chi phí và mục tiêu lấp đầy." : "Xác minh sơ đồ ghế và cơ cấu giá."
+    });
+  }
+  for (const r of retail) { if (valid(r.intake.budget)) retailBudget += r.intake.budget; else missingRetail++; }
+  risks.sort((a,b)=>b.gap-a.gap);
+  return {showCount: shows.length, retailCount: retail.length, missing, missingRetail, showCost, targetRevenue, projectedRevenue, retailBudget, risks, actualRevenue: null, actualCost: null, actualProfit: null};
+}
