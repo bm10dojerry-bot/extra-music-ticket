@@ -6,6 +6,7 @@ import {customerRequestsHuman} from "./messenger-sale-memory";
 import {norm,sensitiveQuestion,explicitStop} from "./ai-sales-timeout-policy";
 import {askedOffer,hasPoster} from "./poster-offers";
 import {venues} from "./venues";
+import {wantsMapDistance,mapDistanceReply,directionUrl} from "./messenger-maps-guide";
 type Turn={sender:string;body:string;staff_name?:string|null};
 const clarify="Mình đang hỏi đêm của ca sĩ nào hoặc ngày diễn nào ạ?";
 const water=/\b(?:nuoc(?: uong| suoi| ngot)?|do uong|thuc uong)\b/;
@@ -16,7 +17,7 @@ const access=/\b(?:xe lan|han che di lai|kho di lai|kho di bo|tranh (?:bac|cau t
 function topics(q:string){
  const s=norm(q);
  return {water:water.test(s)&&!(/\b(?:nuoc ngoai|nuoc mat|nuoc hoa|nuoc nha|ca nuoc|trong nuoc|dat nuoc)\b/.test(s)),
-  route:route.test(s)||(/\bmap\b/.test(s)&&!/\b(?:ghe|cho ngoi|seat)\b/.test(s)),
+  route:wantsMapDistance(q)||route.test(s)||(/\bmap\b/.test(s)&&!/\b(?:ghe|cho ngoi|seat)\b/.test(s)),
   tracks:tracks.test(s),access:access.test(s)};
 }
 const hasTopic=(t:ReturnType<typeof topics>)=>Object.values(t).some(Boolean);
@@ -39,7 +40,7 @@ export async function showServiceReply(body:string,history:readonly Turn[],known
  const memory=salesPreferences(history,shows,known);
  const show=memory.showSelectionUnresolved?undefined:shows.find(x=>x.id===memory.showId);
  const explicitVenue=/\bccc\b/.test(s)?"ccc":/\b(?:san khau lao cai|cam duong|phu thinh)\b/.test(s)?"laocai":undefined;
- const routeVenue=venues.find(v=>v.id===(show?.venueId||explicitVenue));
+ const routeVenue=venues.find(v=>v.id===(show?.venueId||(!memory.showSelectionUnresolved?explicitVenue:undefined)));
  const needsShow=asksIncluded||t.tracks||(t.route&&!routeVenue)||asksPrice;
  const stopSales=/(?:chi tham khao|xem truoc|chua muon dat)/.test(s);
  if(t.water){
@@ -53,8 +54,8 @@ export async function showServiceReply(body:string,history:readonly Turn[],known
  if(t.route && routeVenue){
    const venue=routeVenue;
    if(venue){const destination=venue.name+", "+venue.address;
-     const url="https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(destination);
-     notes.push((show?"Đêm "+show.artist+" diễn tại ":"Địa điểm là ")+destination+".\nGoogle Maps chỉ đường cho mình ở đây "+url);}
+     if(wantsMapDistance(q))notes.push(await mapDistanceReply(q,venue));
+     else notes.push((show?"Đêm "+show.artist+" diễn tại ":"Địa điểm là ")+destination+".\nGoogle Maps chỉ đường cho mình ở đây "+directionUrl(venue));}
  }
  if(t.tracks && show){
    const rows=await staffDb("show_landing_content?show_id=eq."+encodeURIComponent(show.id)+"&select=setlist&limit=1",{signal:AbortSignal.timeout(1800)}).catch(()=>[]) as {setlist:string|null}[];
