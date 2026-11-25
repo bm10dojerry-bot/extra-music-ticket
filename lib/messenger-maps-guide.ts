@@ -16,7 +16,7 @@ export function extractOrigin(q:string):string|undefined{
   return name;
 }
 export function directionUrl(v:MapVenue,origin?:string,mode?:Mode,originId?:string,destId?:string){
-  const p=new URLSearchParams({api:"1",destination:v.name+", "+v.address});
+  const p=new URLSearchParams({api:"1",destination:venueDestination(v)});
   if(origin)p.set("origin",origin);
   if(originId)p.set("origin_place_id",originId);
   if(destId)p.set("destination_place_id",destId);
@@ -26,23 +26,47 @@ export function directionUrl(v:MapVenue,origin?:string,mode?:Mode,originId?:stri
 type Place={id:string;displayName?:{text?:string};formattedAddress?:string};
 const goodId=(id:unknown):id is string=>typeof id==="string"&&/^[A-Za-z0-9_-]{8,300}$/.test(id);
 const clean=(s:unknown)=>typeof s==="string"?s.replace(/[\u0000-\u001f\u007f]/g," ").replace(/https?:\/\/\S+/g,"").trim().slice(0,180):"";
+// Owner-provided compound Plus Code; do not shorten it to just 68P.
+const laoCaiPlusCode="FXGV+68P, Phú Thịnh, Cam Đường, Lào Cai, Việt Nam";
+function venueDestination(v:MapVenue){return v.id==="laocai"?laoCaiPlusCode:v.name+", "+v.address;}
+async function findPlaces(query:string,key:string):Promise<Place[]>{
+ const res=await fetch("https://places.googleapis.com/v1/places:searchText",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress"},body:JSON.stringify({textQuery:query,languageCode:"vi",regionCode:"VN",pageSize:5}),cache:"no-store",signal:AbortSignal.timeout(2500)});
+ if(!res.ok)throw Error("Places lookup unavailable");
+ return ((await res.json()) as {places?:Place[]}).places??[];
+}
+function venuePlaceMatches(v:MapVenue,p:Place){
+ if(!goodId(p.id))return false;
+ const name=norm(clean(p.displayName?.text)),addr=norm(clean(p.formattedAddress));
+ if(!/\bsa pa\b/.test(addr))return false;
+ if(v.id==="moana")return /\bmoana\b/.test(name)&&/\b68\s+violet\b/.test(addr);
+ if(v.id==="ccc")return /\b(?:khong gian van hoa|ccc)\b/.test(name)&&/\b0*2\s+(?:phan xi pang|phan si pang|fansipan)\b/.test(addr);
+ return false;
+}
+async function resolveVenue(v:MapVenue,key:string,configuredId:string|undefined):Promise<{placeId:string}|{address:string}|undefined>{
+ if(goodId(configuredId))return {placeId:configuredId};
+ if(v.id==="laocai")return {address:laoCaiPlusCode};
+ if(v.id!=="moana"&&v.id!=="ccc")return;
+ const matches=(await findPlaces(venueDestination(v)+", Việt Nam",key)).filter(p=>venuePlaceMatches(v,p));
+ if(matches.length===1)return {placeId:matches[0].id};
+ // An absent or ambiguous venue must never silently resolve to a different pin.
+}
 export async function mapDistanceReply(q:string,v:MapVenue):Promise<string>{
   const mode=modeOf(q),origin=extractOrigin(q);
   if(!origin)return "Mình cho em tên cụ thể khách sạn hoặc địa danh và khu vực đang ở để em kiểm tra đường đến "+v.name+" ạ.";
-  const destId=process.env["EXTRA_MAPS_PLACE_"+v.id.toUpperCase()];
+  const configuredId=process.env["EXTRA_MAPS_PLACE_"+v.id.toUpperCase()];
   const key=process.env.GOOGLE_MAPS_API_KEY;
   const originQuery=origin+", "+v.city+", Việt Nam";
-  const fallback="Em chưa xác minh được khoảng cách từ "+origin+" đến "+v.name+" ("+v.address+"), nên chưa thể báo số km hoặc phút chính xác. Mình có thể mở Google Maps và chọn đúng điểm xuất phát tại đây ạ:\n"+directionUrl(v,undefined,mode,undefined,goodId(destId)?destId:undefined);
-  if(!key||!goodId(destId))return fallback;
+  const fallback="Em chưa xác minh được khoảng cách từ "+origin+" đến "+v.name+" ("+v.address+"), nên chưa thể báo số km hoặc phút chính xác. Mình có thể mở Google Maps và chọn đúng điểm xuất phát tại đây ạ:\n"+directionUrl(v,undefined,mode,undefined,goodId(configuredId)?configuredId:undefined);
+  if(!key)return fallback;
   try{
-    const search=await fetch("https://places.googleapis.com/v1/places:searchText",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress"},body:JSON.stringify({textQuery:originQuery,languageCode:"vi",regionCode:"VN",pageSize:5}),cache:"no-store",signal:AbortSignal.timeout(2500)});
-    if(!search.ok)return fallback;
-    const data=await search.json() as {places?:Place[]};
+    const [places,destination]=await Promise.all([findPlaces(originQuery,key),resolveVenue(v,key,configuredId)]);
+    if(!destination)return fallback;
+    const destId="placeId" in destination?destination.placeId:undefined;
     const name=norm(origin).replace(/^(?:khach san|hotel|homestay|resort|nha nghi) /,"");
-    const matches=(data.places??[]).filter(p=>goodId(p.id)&&name.length>=3&&norm(clean(p.displayName?.text)).includes(name)&&norm(clean(p.formattedAddress)).includes(norm(v.city)));
+    const matches=places.filter(p=>goodId(p.id)&&name.length>=3&&norm(clean(p.displayName?.text)).includes(name)&&norm(clean(p.formattedAddress)).includes(norm(v.city)));
     if(matches.length!==1)return "Em chưa xác định được đúng "+origin+". Mình gửi thêm địa chỉ hoặc khu vực của địa điểm đó giúp em nhé, để em không chỉ nhầm đường ạ.";
     const place=matches[0];
-    const res=await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"routes.distanceMeters,routes.duration"},body:JSON.stringify({origin:{placeId:place.id},destination:{placeId:destId},travelMode:mode,languageCode:"vi",units:"METRIC"}),cache:"no-store",signal:AbortSignal.timeout(2500)});
+    const res=await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"routes.distanceMeters,routes.duration"},body:JSON.stringify({origin:{placeId:place.id},destination,travelMode:mode,languageCode:"vi",units:"METRIC"}),cache:"no-store",signal:AbortSignal.timeout(2500)});
     if(!res.ok)return fallback;
     const payload=await res.json() as {routes?:{distanceMeters?:number;duration?:string}[]};
     const route=payload.routes?.[0];
