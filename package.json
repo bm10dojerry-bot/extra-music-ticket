@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:messenger && next build",
+    "build": "npm run test:messenger && npm run test:extra-os && next build",
     "start": "next start",
-    "test:messenger": "node --test scripts/test-ai-sales-v2-typing.cjs scripts/test-ai-sales-v2-inbound-image.cjs scripts/test-ai-sales-seat-map.cjs scripts/test-ai-sales-timeout.cjs scripts/test-ai-sales-consultation.cjs scripts/test-ai-sale-2-integration.cjs scripts/test-seat-advice.cjs scripts/test-show-family.cjs scripts/test-messenger-22.cjs"
+    "test:messenger": "node --test scripts/test-ai-sales-v2-typing.cjs scripts/test-ai-sales-v2-inbound-image.cjs scripts/test-ai-sales-seat-map.cjs scripts/test-ai-sales-timeout.cjs scripts/test-ai-sales-consultation.cjs scripts/test-ai-sale-2-integration.cjs scripts/test-seat-advice.cjs scripts/test-show-family.cjs scripts/test-messenger-22.cjs",
+    "test:extra-os": "node --test tests/extra-os-domain.test.cjs tests/extra-os-media.test.cjs"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "1.1.0",
