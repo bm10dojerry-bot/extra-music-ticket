@@ -22,6 +22,8 @@ export type MessengerSaleMemory = {
   aiDisclosed: boolean;
   bookingStatus?: "held" | "expired" | "cancelled" | "confirmed";
   paymentStatus?: "pending" | "paid" | "expired" | "cancelled";
+  voiceOffered?: boolean;
+  voiceConsent?: "yes" | "no";
   intents: SaleIntent[];
   humanRequested: boolean;
   lastMessageId?: MessageId;
