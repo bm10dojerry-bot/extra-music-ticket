@@ -34,12 +34,26 @@ async function findPlaces(query:string,key:string):Promise<Place[]>{
  if(!res.ok)throw Error("Places lookup unavailable");
  return ((await res.json()) as {places?:Place[]}).places??[];
 }
+const isSaPa=(s:string)=>/\b(?:sa pa|sapa)\b/.test(s);
+const isStoneChurch=(s:string)=>/^(?:nha tho da|nha tho duc me man coi|nha tho giao xu)(?: (?:sa pa|sapa))?$/.test(s);
+function originPlaceMatches(origin:string,city:string,p:Place){
+ if(!goodId(p.id))return false;
+ const name=norm(clean(p.displayName?.text)),addr=norm(clean(p.formattedAddress));
+ const local=isSaPa(norm(city))?isSaPa(addr):addr.includes(norm(city));
+ if(!local)return false;
+ const requested=norm(origin);
+ if(isSaPa(norm(city))&&isStoneChurch(requested)){
+   return /\b(?:nha tho da|nha tho duc me man coi|nha tho giao xu (?:sa pa|sapa)|(?:sa pa|sapa) (?:stone church|church)|stone church|holy rosary church)\b/.test(name);
+ }
+ const needle=requested.replace(/^(?:khach san|hotel|homestay|resort|nha nghi) /,"");
+ return needle.length>=3&&name.includes(needle);
+}
 function venuePlaceMatches(v:MapVenue,p:Place){
  if(!goodId(p.id))return false;
  const name=norm(clean(p.displayName?.text)),addr=norm(clean(p.formattedAddress));
- if(!/\bsa pa\b/.test(addr))return false;
- if(v.id==="moana")return /\bmoana\b/.test(name)&&/\b68\s+violet\b/.test(addr);
- if(v.id==="ccc")return /\b(?:khong gian van hoa|ccc)\b/.test(name)&&/\b0*2\s+(?:phan xi pang|phan si pang|fansipan)\b/.test(addr);
+ if(!isSaPa(addr))return false;
+ if(v.id==="moana")return /\bmoana\b/.test(name)&&/\b68\s+violets?\b/.test(addr);
+ if(v.id==="ccc")return /\b(?:khong gian van hoa|ccc|cong vien van hoa|cultural (?:space|park|center|centre)|tinh hoa hoi tu)\b/.test(name)&&/\b0*2\s+(?:phan xi pang|phan si pang|fansipan)\b/.test(addr);
  return false;
 }
 async function resolveVenue(v:MapVenue,key:string,configuredId:string|undefined):Promise<{placeId:string}|{address:string}|undefined>{
@@ -55,15 +69,14 @@ export async function mapDistanceReply(q:string,v:MapVenue):Promise<string>{
   if(!origin)return "Mình cho em tên cụ thể khách sạn hoặc địa danh và khu vực đang ở để em kiểm tra đường đến "+v.name+" ạ.";
   const configuredId=process.env["EXTRA_MAPS_PLACE_"+v.id.toUpperCase()];
   const key=process.env.GOOGLE_MAPS_API_KEY;
-  const originQuery=origin+", "+v.city+", Việt Nam";
+  const originQuery=isSaPa(norm(v.city))&&isStoneChurch(norm(origin))?"Nhà thờ Đá (Nhà thờ Đức Mẹ Mân Côi), Phạm Xuân Huân, Sa Pa, Lào Cai, Việt Nam":origin+", "+v.city+", Việt Nam";
   const fallback="Em chưa xác minh được khoảng cách từ "+origin+" đến "+v.name+" ("+v.address+"), nên chưa thể báo số km hoặc phút chính xác. Mình có thể mở Google Maps và chọn đúng điểm xuất phát tại đây ạ:\n"+directionUrl(v,undefined,mode,undefined,goodId(configuredId)?configuredId:undefined);
   if(!key)return fallback;
   try{
     const [places,destination]=await Promise.all([findPlaces(originQuery,key),resolveVenue(v,key,configuredId)]);
     if(!destination)return fallback;
     const destId="placeId" in destination?destination.placeId:undefined;
-    const name=norm(origin).replace(/^(?:khach san|hotel|homestay|resort|nha nghi) /,"");
-    const matches=places.filter(p=>goodId(p.id)&&name.length>=3&&norm(clean(p.displayName?.text)).includes(name)&&norm(clean(p.formattedAddress)).includes(norm(v.city)));
+    const matches=places.filter(p=>originPlaceMatches(origin,v.city,p));
     if(matches.length!==1)return "Em chưa xác định được đúng "+origin+". Mình gửi thêm địa chỉ hoặc khu vực của địa điểm đó giúp em nhé, để em không chỉ nhầm đường ạ.";
     const place=matches[0];
     const res=await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"routes.distanceMeters,routes.duration"},body:JSON.stringify({origin:{placeId:place.id},destination,travelMode:mode,languageCode:"vi",units:"METRIC"}),cache:"no-store",signal:AbortSignal.timeout(2500)});
