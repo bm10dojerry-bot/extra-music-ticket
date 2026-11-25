@@ -23,7 +23,7 @@ Hàng đợi giữ thời hạn theo từng lượt chạy, tránh giao trùng v
 | Google Drive | Đăng ký OAuth của tài khoản chuyên dùng được cấp truy cập thư mục kho dữ liệu. Cấp quyền đọc tư liệu và tạo tệp trong các thư mục `04 – AI Marketing`, `05 – In ấn`, `06 – TikTok` và `07 – Báo cáo`. Dùng `EXTRA_OS_DRIVE_*` để cấu hình. Hệ thống đối chiếu cây thư mục, lưu ID và phiên bản, rồi cấp liên kết tải thông qua quyền bộ phận. |
 | Meta Page | Page access token có quyền đăng bài `pages_manage_posts` và quyền đọc trang theo yêu cầu ứng dụng. |
 | Meta Ads | Token `ads_management` và `ads_read`, quyền trên ad account dùng VND, Page, Pixel/Dataset và danh sách mã thành phố Meta. Ghi nhận cấu hình phụ phí phù hợp và kiểm tra sự kiện SePay/CAPI trong tài khoản quảng cáo. |
-| TikTok | Nhân sự vận hành bằng nhiệm vụ có video dọc tám giây. EXTRA OS có thể đọc ảnh hoặc MP4 đã xác minh và đưa đoạn video gốc vào trailer nếu có. Có thể gửi liên kết video trong báo cáo nhiệm vụ. |
+| TikTok | Nhân sự vận hành bằng nhiệm vụ có video dọc tám giây. EXTRA OS có thể đọc ảnh hoặc MP4 đã xác minh và đưa đoạn video gốc vào trailer nếu có. Nhiệm vụ TikTok nhận video và caption khi cả hai đã sẵn sàng. Có thể gửi liên kết video trong báo cáo nhiệm vụ. |
 | SePay và Sale | Dùng AI Sale V2.2 và cơ chế giữ chỗ, thanh toán, phát hành QR và đối soát hiện có. Messenger giải tham chiếu quảng cáo và bài Facebook của EXTRA OS qua ID đã lưu, rồi dùng lịch show chính thức để tư vấn. Lịch show chỉ mở bán sau khi sức chứa khớp sơ đồ và SePay đã được cấu hình. |
 
 Cấu hình bí mật trong Supabase Vault hoặc Environment Variables của Vercel. Cấp đúng môi trường cho từng khóa. Khi thử kết nối nhà cung cấp, kiểm tra nhật ký từng việc và chạy lại các mục báo thiếu quyền sau khi đã cấp quyền.

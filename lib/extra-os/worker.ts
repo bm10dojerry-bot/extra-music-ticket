@@ -118,24 +118,33 @@ async function execute(show: OsShow, job: OsJob): Promise<Result> {
       return done(await postFacebook(show, job));
     case "tiktok": {
       const [video] = await osDb<OsAsset[]>("extra_os_assets?show_id=eq." + show.id + "&key=eq.video&ready=eq.true");
-      const content = (await outputs(show, ["content"])).content?.text;
-      const note = typeof content === "string" ? content.slice(0, 3500) : "";
-      let links = video ? [assetLink(video)] : [];
-      if (video && note) {
-        const folder = await showDriveFolder(show.id, show.artist, "06");
-        const copy = await saveDriveAsset(show.id, "tiktok-copy", "Nội dung TikTok.txt", "text/plain",
-          folder.drive_id, ["tiktok"], Buffer.from(note));
-        links = [...links, assetLink(copy)];
-      }
       await assignTask(show, {
         ...manualHandoff(show.intake, {
           key:"tiktok", department:"tiktok", title:"Đăng video TikTok của show",
           requirements:"Kiểm tra bản quyền, caption và video. Đăng bằng tài khoản TikTok của công ty rồi gửi đường dẫn.",
           acceptance:"Có link video đã đăng và báo cáo thời điểm đăng.", budget_vnd:0,
         }, 3),
-        drive_links: links,
+        drive_links: video ? [assetLink(video)] : [],
       });
-      return done({handoff:"tiktok", videoReady: Boolean(video)});
+      return done({handoff:"tiktok", videoReady:Boolean(video)});
+    }
+    case "tiktok_materials": {
+      const [assets, draft] = await Promise.all([
+        osDb<OsAsset[]>("extra_os_assets?show_id=eq." + show.id + "&key=eq.video&ready=eq.true"),
+        outputs(show, ["content"]),
+      ]);
+      const [video] = assets;
+      const text = draft.content?.text;
+      if (!video || typeof text !== "string" || !text.trim()) {
+        throw new WorkBlocked("Cần video và nội dung chiến dịch để hoàn thiện nhiệm vụ TikTok.");
+      }
+      const folder = await showDriveFolder(show.id, show.artist, "06");
+      const caption = await saveDriveAsset(show.id, "tiktok-copy", "Nội dung TikTok.txt", "text/plain",
+        folder.drive_id, ["tiktok"], Buffer.from(text.slice(0, 3500)));
+      await osDb("extra_os_tasks?show_id=eq." + show.id + "&key=eq.tiktok", {
+        method:"PATCH", body:JSON.stringify({drive_links:[assetLink(video),assetLink(caption)]}),
+      });
+      return done({videoId:video.id, captionId:caption.id});
     }
     case "ads":
       return done(await launchAds(show, job, "initial"));

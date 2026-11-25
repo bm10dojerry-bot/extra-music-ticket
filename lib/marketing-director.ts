@@ -31,6 +31,7 @@ export const jobDefinitions = {
   website: {agent: "Director", title: "Đăng show lên website", dependencies: ["audit"]},
   facebook: {agent: "Social", title: "Đăng Facebook", dependencies: ["website", "content", "audit"]},
   tiktok: {agent: "Social", title: "Điều phối nội dung TikTok", dependencies: []},
+  tiktok_materials: {agent: "Social", title: "Gắn video và caption TikTok", dependencies: ["tiktok", "content", "video"]},
   ads: {agent: "Ads", title: "Khởi chạy quảng cáo", dependencies: ["website", "creative", "audit"]},
   ads_monitor: {agent: "Ads", title: "Đối soát và tối ưu quảng cáo", dependencies: []},
   close_sales: {agent:"Director", title:"Đóng bán khi show bắt đầu", dependencies:["website"]},

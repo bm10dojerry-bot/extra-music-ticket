@@ -219,7 +219,7 @@ export default async function ExtraOsPage({searchParams}: {searchParams: Promise
           staffId={panel.memberships.find(row => row.department === id)?.staff_id ?? null} people={panel.staff}/>)}</div>
       </section>;
       else if (view === "marketing") body = <>
-        <section className={styles.panel}><h2>Chiến dịch</h2><JobList jobs={panel.jobs.filter(job => ["research","plan","content","creative","video","website","facebook","tiktok"].includes(job.kind))}/></section>
+        <section className={styles.panel}><h2>Chiến dịch</h2><JobList jobs={panel.jobs.filter(job => ["research","plan","content","creative","video","website","facebook","tiktok","tiktok_materials"].includes(job.kind))}/></section>
         <section className={styles.panel}><h2>Tư liệu Google Drive</h2>
           {!panel.assets.length && <p className={styles.muted}>Chưa có tệp đã xác minh cho show này.</p>}
           <ul className={styles.items}>{panel.assets.map(asset => <li className={styles.listRow} key={asset.id}>

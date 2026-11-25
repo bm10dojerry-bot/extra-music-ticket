@@ -61,6 +61,12 @@ test("ungranted external actions cannot enter the plan and closure uses the show
   assert.throws(() => parseShowIntake({...intake, permissions: ["ads"]}));
 });
 
+test("TikTok handoff can start early and attaches both assets once their jobs finish", () => {
+  const jobs = planMarketing(parseShowIntake(intake), now);
+  assert.deepEqual(jobs.find(job => job.kind === "tiktok").dependencies, []);
+  assert.deepEqual(jobs.find(job => job.kind === "tiktok_materials").dependencies, ["tiktok", "content", "video"]);
+});
+
 test("invalid dates, values, Drive links and missing rights fail before start", () => {
   for (const patch of [{startsAt:"2030-02-30T19:30"}, {capacity: "100"}, {otherVnd: -1}, {venueId:"unknown"}]) {
     assert.throws(() => parseShowIntake({...intake, ...patch}));
