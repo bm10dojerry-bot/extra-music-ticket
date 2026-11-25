@@ -27,14 +27,21 @@ test("sale23 recognizes public locations and fixes the Lao Cai destination",()=>
  assert.equal(guide.wantsMapDistance("Ghế gần sân khấu không?"),false);
  assert.match(new URL(guide.directionUrl(laocai)).searchParams.get("destination"),/FXGV\+68P/);
 });
+const stoneChurchCases=[
+ ["Nhà thờ Đá Sa Pa cách sân khấu bao xa nếu đi bộ?",moana,"Nhà thờ Đá Sa Pa"],
+ ["Nhà thờ Đá Sa Pa cách sân khấu bao xa nếu đi bộ?",ccc,"Nhà thờ Đá Sa Pa"]
+];
+test("recognizes Stone Church as a route origin for both Sa Pa venues",()=>{
+ for(const [q,v,origin] of stoneChurchCases){assert.equal(guide.wantsMapDistance(q),true);assert.equal(guide.extractOrigin(q),origin);}
+});
 const live=process.env.VERCEL_ENV==="preview"&&process.env.VERCEL_GIT_COMMIT_REF==="feature/ai-sale23-maps";
 test("sale23 live Places and Routes smoke test (isolated preview only)",{skip:!live},async()=>{
  assert.ok(process.env.GOOGLE_MAPS_API_KEY,"Google Maps preview key missing");
- const results=await Promise.all(cases.map(async([q,v])=>{
+ const results=await Promise.all(stoneChurchCases.map(async([q,v])=>{
   const started=Date.now();const reply=await guide.mapDistanceReply(q,v);
   const route=/khoảng .*?(?: km| m), .*?phút theo Google Maps/.test(reply);
   console.log("SALE23_MAP_SMOKE "+JSON.stringify({question:q,venue:v.id,status:route?"ROUTE_OK":reply.includes("chưa xác định được đúng")?"CLARIFY":"FALLBACK",elapsedMs:Date.now()-started,reply}));
   return route;
  }));
- assert.ok(results.some(Boolean),"No live route resolved; verify Maps permissions and venue matching");
+ assert.ok(results.every(Boolean),"Both Sa Pa venues must resolve live routes from Stone Church before release");
 });
