@@ -1,0 +1,55 @@
+import "server-only";
+import {norm} from "./ai-sales-timeout-policy";
+
+export type MapVenue={id:string;name:string;address:string;city:string};
+const geo=/\b(?:khach san|hotel|homestay|resort|nha nghi|nha tho|quang truong|cho dem|ben xe|ga tau|ga cap treo|sun plaza|fansipan|trung tam|ban cat cat|dia danh|cach bao xa|bao nhieu km|khoang cach|di bao lau|may phut|gan cho nao|gan diem nao|gan dau|xa khong)\b/;
+export function wantsMapDistance(q:string){const s=norm(q);return geo.test(s)&&(/\b(?:gan|xa|cach|km|phut|duong|di|o dau|quanh|lan can)\b/.test(s)||/\b(?:khach san|hotel|homestay|resort|nha nghi)\b/.test(s))&&!/\b(?:ghe|cho ngoi|hang ghe)\b/.test(s);}
+const modeOf=(q:string)=>/\bdi bo\b/.test(norm(q))?"WALK":/\b(?:xe may|xe om)\b/.test(norm(q))?"TWO_WHEELER":"DRIVE";
+type Mode=ReturnType<typeof modeOf>;
+export function extractOrigin(q:string):string|undefined{
+  // Only send a short public place name; never send the conversation or contact details.
+  const match=q.match(/(?:khách sạn|khach san|hotel|homestay|resort|nhà nghỉ|nha nghi|nhà thờ|nha tho|quảng trường|quang truong|chợ đêm|cho dem|bến xe|ben xe|ga tàu|ga tau|ga cáp treo|ga cap treo|sun plaza|fansipan|trung tâm|trung tam|bản cát cát|ban cat cat)[\p{L}\p{M}\p{N} .'-]{0,85}/iu);
+  if(!match)return;
+  const name=match[0].split(/(?:\s+(?:có gần|co gan|gần|gan|cách|cach|xa không|xa khong|đến|den|tới|toi|đi|di|không|khong|ko|bao nhiêu|bao nhieu|ạ|nha|nhé|nhe|em|ở đâu|o dau|thì|thi)(?:\s|$))/iu)[0].trim();
+  if(!name||name.length>90||/\d{5,}|@|https?:|www\./i.test(name))return;
+  if(/^(?:khach san|hotel|homestay|resort|nha nghi)$/.test(norm(name)))return;
+  return name;
+}
+export function directionUrl(v:MapVenue,origin?:string,mode?:Mode,originId?:string,destId?:string){
+  const p=new URLSearchParams({api:"1",destination:v.name+", "+v.address});
+  if(origin)p.set("origin",origin);
+  if(originId)p.set("origin_place_id",originId);
+  if(destId)p.set("destination_place_id",destId);
+  if(mode)p.set("travelmode",mode==="WALK"?"walking":mode==="TWO_WHEELER"?"two-wheeler":"driving");
+  return "https://www.google.com/maps/dir/?"+p.toString();
+}
+type Place={id:string;displayName?:{text?:string};formattedAddress?:string};
+const goodId=(id:unknown):id is string=>typeof id==="string"&&/^[A-Za-z0-9_-]{8,300}$/.test(id);
+const clean=(s:unknown)=>typeof s==="string"?s.replace(/[\u0000-\u001f\u007f]/g," ").replace(/https?:\/\/\S+/g,"").trim().slice(0,180):"";
+export async function mapDistanceReply(q:string,v:MapVenue):Promise<string>{
+  const mode=modeOf(q),origin=extractOrigin(q);
+  if(!origin)return "Mình cho em tên cụ thể khách sạn hoặc địa danh và khu vực đang ở để em kiểm tra đường đến "+v.name+" ạ.";
+  const destId=process.env["EXTRA_MAPS_PLACE_"+v.id.toUpperCase()];
+  const key=process.env.GOOGLE_MAPS_API_KEY;
+  const originQuery=origin+", "+v.city+", Việt Nam";
+  const fallback="Em chưa xác minh được khoảng cách từ "+origin+" đến "+v.name+" ("+v.address+"), nên chưa thể báo số km hoặc phút chính xác. Mình có thể mở Google Maps và chọn đúng điểm xuất phát tại đây ạ:\n"+directionUrl(v,undefined,mode,undefined,goodId(destId)?destId:undefined);
+  if(!key||!goodId(destId))return fallback;
+  try{
+    const search=await fetch("https://places.googleapis.com/v1/places:searchText",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress"},body:JSON.stringify({textQuery:originQuery,languageCode:"vi",regionCode:"VN",pageSize:5}),cache:"no-store",signal:AbortSignal.timeout(2500)});
+    if(!search.ok)return fallback;
+    const data=await search.json() as {places?:Place[]};
+    const name=norm(origin).replace(/^(?:khach san|hotel|homestay|resort|nha nghi) /,"");
+    const matches=(data.places??[]).filter(p=>goodId(p.id)&&name.length>=3&&norm(clean(p.displayName?.text)).includes(name)&&norm(clean(p.formattedAddress)).includes(norm(v.city)));
+    if(matches.length!==1)return "Em chưa xác định được đúng "+origin+". Mình gửi thêm địa chỉ hoặc khu vực của địa điểm đó giúp em nhé, để em không chỉ nhầm đường ạ.";
+    const place=matches[0];
+    const res=await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"routes.distanceMeters,routes.duration"},body:JSON.stringify({origin:{placeId:place.id},destination:{placeId:destId},travelMode:mode,languageCode:"vi",units:"METRIC"}),cache:"no-store",signal:AbortSignal.timeout(2500)});
+    if(!res.ok)return fallback;
+    const payload=await res.json() as {routes?:{distanceMeters?:number;duration?:string}[]};
+    const route=payload.routes?.[0];
+    const m=route?.distanceMeters,sec=route?.duration&&/^\d+(?:\.\d+)?s$/.test(route.duration)?Number(route.duration.slice(0,-1)):NaN;
+    if(typeof m!=="number"||!Number.isFinite(m)||m<0||!Number.isFinite(sec)||sec<0)return fallback;
+    const dist=m<1000?Math.round(m)+" m":(m/1000).toLocaleString("vi-VN",{maximumFractionDigits:1})+" km";
+    const label=mode==="WALK"?"đi bộ":mode==="TWO_WHEELER"?"đi xe máy":"đi ô tô";
+    return "Dạ, từ "+clean(place.displayName?.text)+" ("+clean(place.formattedAddress)+") đến "+v.name+" khoảng "+dist+", "+label+" khoảng "+Math.max(1,Math.round(sec/60))+" phút theo Google Maps. Thời gian thực tế có thể thay đổi ạ.\n"+directionUrl(v,clean(place.displayName?.text)+", "+clean(place.formattedAddress),mode,place.id,destId);
+  }catch{return fallback;}
+}
