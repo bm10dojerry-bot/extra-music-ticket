@@ -53,7 +53,10 @@ export async function prepareSeatAdvice(chatId:string, jobId:string|null, body:s
         const ceiling = memory.budgetVnd && memory.budgetBasis === 'total' ? Math.floor(memory.budgetVnd / quantity) : memory.budgetVnd;
         const compareTiers = /rẻ hơn|giá thấp|giá cao|tiết kiệm|thấp hay cao|so sánh|re hon|gia thap|gia cao/i.test(body);
         const options = rankSeatGroups(fresh.show.venueId,fresh.seats,fresh.seats.filter(s => !fresh.taken.has(s.id)),fresh.show.prices,quantity,compareTiers ? undefined : memory.zone,memory.seatView,ceiling);
-        text = describeSeats(options,show.artist);
+        const request=body.normalize('NFD').replace(/\p{M}/gu,'').replace(/[đĐ]/g,'d').toLowerCase();
+        const priority=/so sanh|gan hay xa|thap hay cao/.test(request)?'compare':/\b(?:tiet kiem|re|gia thap|ngan sach)\b/.test(request)?'price':/ngoi xa|hang sau/.test(request)?'far':/gan|hang dau/.test(request)?'near':'compare';
+        text = describeSeats(options,show.artist,priority);
+        if(options.length && !memory.quantity)text+=' Mình đi mấy người để em kiểm tra ghế liền nhau ạ?';
       } catch { text = 'Em chưa kiểm tra được ghế trống và giá hiện tại của đêm ' + show.artist + '. ' + intro; }
     }
   }

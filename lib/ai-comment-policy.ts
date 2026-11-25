@@ -1,3 +1,4 @@
+import {catalogSeatPage,styleSalesReply,wantsBookingPage} from "./messenger-conversation-style";
 import {normalizeCustomerText,safeAiConversationText} from "./ai-sales-policy";
 import type {AiSalesShow} from "./ai-sales-checkout";
 
@@ -77,16 +78,19 @@ export function parseCommentDecision(raw:string,body:string,postText:string,show
  return {intent:intent as CommentDecision["intent"],confidence,show_id:showId,question_type:question as CommentDecision["question_type"]};
 }
 /** Financial facts and links come only from the current catalog, not generated prose. */
-export function renderCommentPrivateReply(decision:CommentDecision,show:AiSalesShow|null):string{
+export function renderCommentPrivateReply(decision:CommentDecision,show:AiSalesShow|null,comment=""):string{
  const greeting="Chào anh/chị, em hỗ trợ tư vấn và đặt vé của +1 Extra Music ạ.";
- if(!show)return greeting+" Em thấy mình hỏi thông tin vé dưới bài viết của Page. Anh/chị muốn xem show của nghệ sĩ nào và đi mấy người ạ?";
+ if(!show)return styleSalesReply(greeting+" Mình đang quan tâm đêm nhạc của nghệ sĩ nào ạ?",comment);
  const date=show.date.split("-").reverse().join("/"),venue=show.venueName;
  let answer="Show "+show.artist+" diễn lúc "+show.time+" ngày "+date+" tại "+venue+".";
  if(decision.question_type==="price"){
   const prices=Object.entries(show.prices).filter(([,v])=>typeof v==="number"&&Number.isSafeInteger(v)&&v>0).map(([zone,v])=>zone+": "+new Intl.NumberFormat("vi-VN").format(v!)+"đ");
   answer+=" Giá niêm yết từng hạng: "+prices.join(" · ")+".";
  }else if(decision.question_type==="location")answer+=" Địa chỉ: "+show.venueAddress+".";
- const result=greeting+" Em thấy mình hỏi vé show "+show.artist+" dưới bài viết của Page.\n"+answer+"\nMình xem sơ đồ và tình trạng ghế hiện tại tại "+show.url+"\nAnh/chị đi mấy người để em hỗ trợ chọn chỗ phù hợp ạ?";
+ const page=wantsBookingPage(comment)?catalogSeatPage(show):undefined;
+ const next=decision.question_type==="availability"||decision.question_type==="booking"?" Mình cần mấy ghế để em kiểm tra chỗ ngồi cùng nhau ạ?":decision.question_type==="price"?" Mình ưu tiên gần sân khấu hay muốn chọn theo ngân sách ạ?":"";
+ const result=styleSalesReply(greeting+"\n"+answer+(page?"":next),comment,[],page);
+
  if(result.length>1000||!safeAiConversationText(result))throw Error("Comment response needs review");
  return result;
 }

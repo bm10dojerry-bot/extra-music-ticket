@@ -19,7 +19,7 @@ test("Moana not swapped to CCC",()=>assert.equal(choose("Sơ đồ Moana"),null)
 test("artist alias",()=>assert.equal(choose("Sơ đồ Duy Khoa").show.id,m.id));
 test("date",()=>assert.equal(choose("Sơ đồ 24/12").show.id,l.id));
 test("plain image no link",()=>assert.ok(!policy.seatMapCaption({venue:"ccc",show:c},false).includes("https://")));
-test("availability gets exact link",()=>{assert.equal(policy.wantsSeatAvailability("Sơ đồ ghế còn trống"),true);assert.ok(policy.seatMapCaption({venue:"laocai",show:l},true).includes(l.url));});
+test("availability stays in chat",()=>{assert.equal(policy.wantsSeatAvailability("Sơ đồ ghế còn trống"),true);assert.ok(!policy.seatMapCaption({venue:"laocai",show:l},true).includes(l.url));});
 test("no specific show no made-up link",()=>assert.ok(!policy.seatMapCaption({venue:"ccc"},true).includes("https://")));
 test("asset links only intended venues",()=>assert.equal(policy.SEAT_MAP_URL("ccc"),"https://iextra.net/api/public/seat-map/ccc"));
 for(const [v,count] of [["ccc",550],["laocai",600]])test(v+" geometry and image decode",async()=>{const svg=renderer.renderSeatMapSvg(v);assert.equal((svg.match(/<circle cx=/g)||[]).length,count+4);assert.match(svg,/Không thể hiện tình trạng ghế trống/);assert.match(svg,v==="ccc"?/rotate\(90 1267 680\)/:/x="320" y="244"/);const png=await sharp(Buffer.from(svg)).png().toBuffer();const meta=await sharp(png).metadata();assert.equal(meta.width,1440);assert.equal(meta.height,1220);});

@@ -20,7 +20,7 @@ export async function runAiSalesFollowup():Promise<{enabled:boolean;sent:number;
   if(dayReminder.length)return {enabled,sent:0,result:"day_before_already_contacted"};
   const claim=await rpc<Claim>("claim",{p_page_id:config.pageId,p_chat_id:item.chat_id,p_customer_message_id:item.customer_message_id,p_anchor_reply_id:item.anchor_reply_id,p_stage:item.stage});
   if(claim.outcome!=="send"||!claim.id||!claim.claim_token||!claim.psid||claim.stage!==item.stage)return {enabled,sent:0,result:claim.outcome};
-  const body=item.stage===10?"Dạ, mình còn cần em hỗ trợ chọn vé hoặc kiểm tra vị trí ghế phù hợp không ạ?":"Dạ, em xin phép hỏi thêm: mình đang phân vân về giá vé, vị trí ngồi hay lịch diễn ạ? Em có thể kiểm tra lại thông tin để mình dễ lựa chọn hơn.";
+  const body=item.stage===10?"Dạ, mình còn cần em hỗ trợ chọn vé hoặc kiểm tra vị trí ghế phù hợp không ạ?":"🎟️ Dạ, em xin phép hỏi thêm: mình đang phân vân về giá vé, vị trí ngồi hay lịch diễn ạ? Em có thể kiểm tra lại thông tin để mình dễ lựa chọn hơn.";
   const finish=(result:string,mid:string|null)=>rpc<{outcome:string}>("finish",{p_id:claim.id,p_claim_token:claim.claim_token,p_result:result,p_body:body,p_external_message_id:mid});
   let checked:Verified;
   try{checked=await rpc<Verified>("verify",{p_id:claim.id,p_claim_token:claim.claim_token,p_page_id:config.pageId});}

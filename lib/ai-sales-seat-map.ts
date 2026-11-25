@@ -60,5 +60,5 @@ export function seatMapVenueName(v:MapVenue){return v==="ccc"?"CCC Sa Pa":"sân 
 export function seatMapCaption(choice:Choice,availability:boolean){
  const intro="Dạ, đây là sơ đồ bố trí ghế "+seatMapVenueName(choice.venue)+" ạ. Ảnh thể hiện các hạng ghế, không thể hiện tình trạng ghế còn trống.";
  if(!availability)return intro;
- return intro+(choice.show?" Mình xem ghế còn trống và chọn vị trí tại "+choice.show.url+" nhé.":" Mình đang quan tâm show ca sĩ nào để em gửi đúng trang xem ghế trống ạ?");
+ return intro+" Mình muốn ngồi gần ca sĩ hay ưu tiên một khoảng giá để em chọn ghế trống phù hợp ạ?";
 }

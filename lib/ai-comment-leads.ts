@@ -68,7 +68,7 @@ async function processLead(lead:Lead,shows:AiSalesShow[]):Promise<string>{
   if(lead.state!=="ready"||!lead.reply_body){
    const decision=await classify(lead,source,shows);
    const show=decision.show_id?shows.find(show=>show.id===decision.show_id)||null:null;
-   const reply=decision.intent==="ticket_question"?renderCommentPrivateReply(decision,show):undefined;
+   const reply=decision.intent==="ticket_question"?renderCommentPrivateReply(decision,show,source.body):undefined;
    const result=await plan(lead,decision,source,reply,show);
    if(result.outcome!=="ready")return result.outcome;
   }

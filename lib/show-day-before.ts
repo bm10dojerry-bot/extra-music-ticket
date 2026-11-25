@@ -26,7 +26,7 @@ export async function showForecast(row:Reminder) {
 export function dayBeforeText(row:Reminder,forecast:ReturnType<typeof forecastAtShow>) {
   const name=[row.artist,row.title].filter((x,i,a)=>x&&a.indexOf(x)===i).join(" · ");
   const opening="Ngày mai ("+row.show_date.split("-").reverse().join("/")+") là đêm nhạc "+name+". ";
-  if(row.kind==="interest")return opening+"Mình có muốn đặt vé để đến nghe nhạc và giao lưu cùng nghệ sĩ không ạ?";
+  if(row.kind==="interest")return "🎵 "+opening+"Mình có muốn đặt vé để đến nghe nhạc và giao lưu cùng nghệ sĩ không ạ?";
   if(row.kind==="pending")return opening+"Em vừa kiểm tra, đơn giữ ghế của mình vẫn đang chờ xác nhận thanh toán. Mình có cần em hỗ trợ kiểm tra giao dịch không ạ?";
   const area=areas[row.venue]?.area;
   let weather="Mình xem lại dự báo thời tiết trước khi đến nhé.";
@@ -36,5 +36,5 @@ export function dayBeforeText(row:Reminder,forecast:ReturnType<typeof forecastAt
     if(forecast.rain)weather+=row.canopy?" Dự báo có mưa. Ban tổ chức đã xác nhận có rạp và căng tăng che mưa, mình yên tâm nhé.":" Dự báo có mưa, mình chuẩn bị áo mưa cho đường đi nhé.";
     weather+=" Mình xem lại dự báo trước khi đi nhé.";
   }
-  return opening+weather+" "+artistPhotoNotice+" Hẹn gặp mình tại đêm nhạc!";
+  return "🗓️ "+opening+weather+" "+artistPhotoNotice+" Hẹn gặp mình tại đêm nhạc!";
 }
