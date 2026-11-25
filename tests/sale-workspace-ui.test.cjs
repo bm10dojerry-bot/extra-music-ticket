@@ -183,7 +183,7 @@ test("actual Sale workspace and signed-ticket copying preserve user state",{
    const booking=tree.root.findByType(SeatBooking);reserveAllowed=true;
    await update(()=>booking.findAllByType("form").find(form=>form.props.onSubmit).props.onSubmit({preventDefault(){}}));
    reserveAllowed=false;assert.equal(count("/api/staff/sale-reserve"),1);
-   assert.deepEqual(JSON.parse(requests.find(request=>request.pathname==="/api/staff/sale-reserve").init.body),{showId:fixtureShow.id,seats:["A01","A02"],promotion:"couple5",giftSeats:[],name:"Synthetic Buyer",phone:"0900000000",email:"buyer@example.invalid"});
+   assert.deepEqual(JSON.parse(requests.find(request=>request.pathname==="/api/staff/sale-reserve").init.body),{showId:fixtureShow.id,seats:["A01","A02"],childSeats:[],promotion:"couple5",giftSeats:[],name:"Synthetic Buyer",phone:"0900000000",email:"buyer@example.invalid"});
    assert.equal(booking.findByType("img").props.src,fixturePayment.qr);assert.match(content(booking),new RegExp(code));
    for(const id of ["home","commission","customers","tickets"])await click(byId("sale-nav-"+id));
    assert.equal(tree.root.findByType(SeatBooking),booking);assert.equal(booking.findByType("img").props.src,fixturePayment.qr);assert.equal(count("/api/staff/sale-reserve"),1);

@@ -176,7 +176,7 @@ begin
   with expired as (
     update public.extra_os_jobs j set status = 'skipped', message = 'Show đã bắt đầu.', updated_at = now()
     from public.extra_os_shows s where j.show_id = s.id and j.status = 'queued' and s.starts_at <= now()
-      and j.kind not in ('analyst','ads_monitor','reminders','crm','close_sales')
+      and j.kind not in ('analyst','archive_report','ads_monitor','reminders','crm','close_sales')
     returning j.id, j.show_id
   )
   insert into public.extra_os_log (show_id, job_id, actor_id, event)

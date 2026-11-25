@@ -380,8 +380,8 @@ test("stage hero preserves navigation while scroll motion remains bounded, gated
    assert.match(content(tree.root.findByProps({id:"artist-detail"})),new RegExp(fixtureShows[1].artist));
    await click(tree.root.findByProps({className:"artist-seat-button"}));
    assert.equal(scrolls.at(-1).id,"so-do");assert.equal(tree.root.findAllByProps({id:"so-do"}).length,1);
-   const seat=tree.root.findByProps({"aria-label":"Chọn ghế ccc-A1, hạng A"});
-   await click(seat);assert.equal(tree.root.findByProps({"aria-label":"Chọn ghế ccc-A1, hạng A"}).props["aria-pressed"],true);
+   const seat=tree.root.findByProps({"aria-label":"Chọn ghế ccc-A1, Hạng A"});
+   await click(seat);assert.equal(tree.root.findByProps({"aria-label":"Chọn ghế ccc-A1, Hạng A"}).props["aria-pressed"],true);
    await returnToHero();
    assert.equal((await click(heroLink("#dia-diem"))).defaultPrevented,true);
    assert.equal(tree.root.findAllByProps({id:"artist-detail"}).length,0);assert.equal(tree.root.findAllByProps({id:"so-do"}).length,0);

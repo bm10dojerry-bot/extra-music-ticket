@@ -18,6 +18,7 @@ export type Agent = keyof typeof agents;
 
 export const jobDefinitions = {
   research: {agent: "Research", title: "Nghiên cứu thị trường", dependencies: []},
+  archive_report: {agent:"Analyst", title:"Lưu ảnh chụp số liệu lên Drive", dependencies:["analyst"]},
   analyst: {agent: "Analyst", title: "Đối soát doanh thu đã thanh toán", dependencies: []},
   plan: {agent: "Planner", title: "Lập concept và kế hoạch marketing", dependencies: ["research", "analyst"]},
   content: {agent: "Content", title: "Soạn nội dung chiến dịch", dependencies: ["plan"]},

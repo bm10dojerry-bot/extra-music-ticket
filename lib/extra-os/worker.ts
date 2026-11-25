@@ -2,7 +2,7 @@ import "server-only";
 import {manualHandoff, type JobKind} from "../marketing-director";
 import {osDb, rpc, WorkBlocked} from "./db";
 import {assetLink, createPosters, produceVideo} from "./creative";
-import {findArtistArtwork, saveDriveAsset, showDriveFolder} from "./drive";
+import {findArtistMedia, saveDriveAsset, showDriveFolder, type ArtistMedia} from "./drive";
 import {askModel} from "./model";
 import {launchAds, monitorAds, postFacebook} from "./meta";
 import {assignTask, getSalesReadiness, publishWebsite, readPaid, reviewBudget} from "./operating";
@@ -53,6 +53,24 @@ async function execute(show: OsShow, job: OsJob): Promise<Result> {
       const snapshot = await readPaid(show);
       return done({...snapshot, checkedAt: new Date().toISOString()}, withinCampaign ? hour : undefined);
     }
+    case "archive_report": {
+      if (!show.website_id && show.intake.permissions.includes("website") && Date.parse(show.starts_at) > Date.now()) {
+        return done({status:"Chờ show có mã bán vé."}, hour);
+      }
+      const now = new Date();
+      const day = new Intl.DateTimeFormat("sv-SE", {timeZone:"Asia/Ho_Chi_Minh"}).format(now);
+      const metrics = await readPaid(show);
+      const folder = await showDriveFolder(show.id, show.artist, "07");
+      const report = await saveDriveAsset(show.id, "report-" + day, "Đối soát " + day + ".json", "application/json",
+        folder.drive_id, ["finance"], Buffer.from(JSON.stringify({
+          artist:show.artist, start:show.starts_at, recordedAt:now.toISOString(),
+          targetRevenueVnd:show.finances.targetRevenueVnd, ...metrics,
+        }, null, 2)));
+      await osDb("extra_os_tasks?show_id=eq." + show.id + "&key=eq.finance", {
+        method:"PATCH", body:JSON.stringify({drive_links:[assetLink(report)]}),
+      });
+      return done({reportId:report.id, version:report.version, day}, withinCampaign ? 24 * hour : undefined);
+    }
     case "plan":
       return done(await askModel(show, "Đề xuất concept đêm nhạc, lịch Marketing theo ngày, phân kênh và KPI doanh thu. Giải thích điểm hòa vốn, mục tiêu lấp đầy và cách xử lý nếu mục tiêu khó đạt.",
         await outputs(show, ["research","analyst"])));
@@ -60,21 +78,22 @@ async function execute(show: OsShow, job: OsJob): Promise<Result> {
       return done(await askModel(show, "Soạn bản giới thiệu đêm nhạc, bài đăng Facebook, caption TikTok, nội dung landing page và FAQ bán vé.",
         await outputs(show, ["plan"])));
     case "drive": {
-      const source = await findArtistArtwork(show.finances.driveId);
+      const sources = await findArtistMedia(show.finances.driveId);
       const folder = await showDriveFolder(show.id, show.artist, "04");
-      return done({sourceId: source.id, sourceVersion: source.version, folderId: folder.id});
+      return done({...sources, folderId: folder.id});
     }
     case "creative": {
-      const source = (await outputs(show, ["drive"])).drive?.sourceId;
-      if (typeof source !== "string") throw new WorkBlocked("Cần ảnh đã xác minh từ Google Drive.");
-      return done(await createPosters(show, source));
+      const media = (await outputs(show, ["drive"])).drive as ArtistMedia | undefined;
+      if (!media?.image && !media?.clip) throw new WorkBlocked("Cần tư liệu đã xác minh từ Google Drive.");
+      return done(await createPosters(show, media));
     }
     case "video": {
-      const video = await produceVideo(show);
+      const media = (await outputs(show, ["drive"])).drive as ArtistMedia | undefined;
+      const video = await produceVideo(show, media?.clip ?? null);
       await osDb("extra_os_tasks?show_id=eq." + show.id + "&key=eq.tiktok", {
         method: "PATCH", body: JSON.stringify({drive_links: [assetLink(video)]}),
       });
-      return done({videoId: video.id, version: video.version});
+      return done({videoId: video.id, version: video.version, originalClipUsed:Boolean(media?.clip)});
     }
     case "sale": {
       const readiness = await getSalesReadiness(show);

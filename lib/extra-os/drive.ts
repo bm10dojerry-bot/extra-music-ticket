@@ -10,6 +10,7 @@ const folder = "application/vnd.google-apps.folder";
 const fields = "id,name,mimeType,parents,webViewLink,version,size,trashed";
 const imageMimes = ["image/jpeg", "image/png", "image/webp"];
 const maxSourceBytes = 12_000_000;
+const maxClipBytes = 24_000_000;
 
 type DriveFile = {
   id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string;
@@ -86,12 +87,17 @@ async function childFiles(id: string) {
   return (await driveJson<{files?: DriveFile[]}>("files?" + params)).files ?? [];
 }
 
-export async function findArtistArtwork(id: string) {
+export async function findArtistMedia(id: string) {
   const source = await scopedDriveFile(id);
   const candidates = source.mimeType === folder ? await childFiles(source.id) : [source];
-  const image = candidates.find(file => imageMimes.includes(file.mimeType) && Number(file.size) > 0 && Number(file.size) <= maxSourceBytes);
-  if (!image) throw new WorkBlocked("Thư mục tư liệu cần ảnh JPEG, PNG hoặc WebP tối đa 12 MB ở cấp đầu tiên.");
-  return image;
+  const accepted = (file: DriveFile, max: number) => Boolean(file.version && Number(file.size) > 0 && Number(file.size) <= max);
+  const image = candidates.find(file => imageMimes.includes(file.mimeType) && accepted(file, maxSourceBytes));
+  const clip = candidates.find(file => file.mimeType === "video/mp4" && accepted(file, maxClipBytes));
+  if (!image && !clip) throw new WorkBlocked("Cần ảnh JPEG, PNG, WebP tối đa 12 MB hoặc MP4 tối đa 24 MB trong thư mục tư liệu.");
+  return {
+    image: image?.version ? {id:image.id, version:image.version} : null,
+    clip: clip?.version ? {id:clip.id, version:clip.version} : null,
+  };
 }
 
 export async function readDriveMedia(id: string) {
@@ -101,14 +107,19 @@ export async function readDriveMedia(id: string) {
   return response;
 }
 
-export async function downloadArtistArtwork(id: string) {
-  const file = await scopedDriveFile(id);
-  if (!imageMimes.includes(file.mimeType) || !(Number(file.size) > 0) || Number(file.size) > maxSourceBytes) {
-    throw new WorkBlocked("Ảnh gốc không còn đúng định dạng hoặc kích thước.");
+export type ArtistMedia = Awaited<ReturnType<typeof findArtistMedia>>;
+type ArtistFile = NonNullable<ArtistMedia["image"]>;
+
+export async function downloadArtistFile(asset: ArtistFile, kind: "image" | "clip") {
+  const file = await scopedDriveFile(asset.id);
+  const accepted = kind === "image" ? imageMimes.includes(file.mimeType) : file.mimeType === "video/mp4";
+  const max = kind === "image" ? maxSourceBytes : maxClipBytes;
+  if (!accepted || file.version !== asset.version || !(Number(file.size) > 0) || Number(file.size) > max) {
+    throw new WorkBlocked("Tư liệu Drive đã đổi phiên bản, định dạng hoặc dung lượng.");
   }
   const response = await readDriveMedia(file.id);
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (!bytes.length || bytes.length > maxSourceBytes) throw new WorkBlocked("Ảnh Drive vượt dung lượng.");
+  if (!bytes.length || bytes.length > max) throw new WorkBlocked("Tư liệu Drive vượt dung lượng.");
   return bytes;
 }
 
@@ -155,7 +166,7 @@ export async function saveDriveAsset(
   return updated;
 }
 
-export async function showDriveFolder(showId: string, artist: string, section: "04" | "06" | "07") {
+export async function showDriveFolder(showId: string, artist: string, section: "04" | "05" | "06" | "07") {
   const root = await scopedDriveFile(process.env.EXTRA_OS_DRIVE_ROOT_ID!);
   const parent = (await childFiles(root.id)).filter(item => item.mimeType === folder && item.name.startsWith(section + " "));
   if (parent.length !== 1) throw new WorkBlocked("Cần đúng một thư mục Google Drive có tiền tố " + section + ".");
