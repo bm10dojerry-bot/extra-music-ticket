@@ -138,3 +138,32 @@ test("combined sales replies fit the inbox limit without cutting checkout links"
   assert.match(text, /https:\/\/store-pilot\.example\.invalid\/show\/show-test#booking/);
   assert.match(text, /20–30 phút/);
 });
+
+
+test("prioritizes the nearest actual available row when a buyer asks to sit close to the singer", () => {
+  const inventory = inventoryWith(show, ["A01", "B01", "K31"]);
+  const text = reply("Chị đặt 1 vé ngồi sát sân khấu, gần ca sĩ nhất nhé.", {}, { inventory });
+  assert.match(text, /ưu tiên các hàng gần sân khấu/);
+  assert.match(text, /hàng A gần sân khấu.*A01.*góc bên trái theo sơ đồ/);
+  assert.doesNotMatch(text, /Em thấy vẫn có ghế đang mở bán/);
+  assert.doesNotMatch(text, /Mình thích góc nhìn bên trái/);
+  assert.match(text, /Tình trạng có thể thay đổi đến khi tạo đơn/);
+});
+
+test("explains grey lock and counts available seats from inventory instead of trusting colours", () => {
+  const inventory = inventoryWith(show, ["A01", "K31"]);
+  const text = reply("Có màu là còn vé ạ? Màu xám khóa có mua được không?", {}, { inventory });
+  assert.match(text, /màu xám có biểu tượng ổ khóa.*không đặt/);
+  assert.match(text, /còn 2 ghế có thể chọn/);
+  assert.match(text, /A: 1 ghế.*D: 1 ghế/);
+  assert.doesNotMatch(text, /chỉ nhìn màu|đang trống theo sơ đồ:/);
+  const uncertain = reply("Màu xám là ghế khóa ạ?", {}, { inventory: null });
+  assert.match(uncertain, /chưa tải được trạng thái ghế mới nhất/);
+  assert.doesNotMatch(uncertain, /còn \d+ ghế/);
+});
+
+test("continues useful service after an authenticated paid booking", () => {
+  const text = reply("Gửi mình STK với", { paymentStatus: "paid", bookingStatus: "confirmed" });
+  assert.match(text, /thanh toán thành công.*không cần chuyển khoản lại/);
+  assert.doesNotMatch(text, /Em chào|chưa xác minh được trạng thái/);
+});
