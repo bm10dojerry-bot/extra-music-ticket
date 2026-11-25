@@ -1,4 +1,5 @@
 import "server-only";
+import {artistPhotoNotice,validChildSeats} from "./show-family-policy";
 import {staffDb} from "./staff-auth";
 import {seatsFor, venues, type VenueId} from "./venues";
 import {hasCompleteIssuedTickets, ticketEmailStatus, type SaleIssuedTicket} from "./sale-order-access";
@@ -12,11 +13,11 @@ export type AiSalesShow={
   venueId:VenueId;venueName:string;venueAddress:string;
   prices:Record<AiSeatZone,number|null>;url:string;
 };
-export type AiQuoteInput={showId:string;seats:string[];giftSeats?:string[];promotion?:AiPromotion;name:string;phone:string;email:string};
+export type AiQuoteInput={showId:string;seats:string[];childSeats?:string[];giftSeats?:string[];promotion?:AiPromotion;name:string;phone:string;email:string};
 export type AiSalesQuote={
   id:string;chatId:string;sourceMessageId:number;createdAt:string;expiresAt:string;sentAt:string|null;
   showId:string;venueId:VenueId;artist:string;title:string;date:string;time:string;
-  venueName:string;venueAddress:string;seats:string[];giftSeats:string[];promotion:AiPromotion;
+  venueName:string;venueAddress:string;seats:string[];childSeats?:string[];giftSeats:string[];promotion:AiPromotion;
   name:string;phone:string;email:string;amount:number;
 };
 export type AiSalesOrder={
@@ -81,8 +82,8 @@ export async function listAiSalesShows():Promise<AiSalesShow[]>{
 }
 
 /** Suggestions are not holds. The reservation RPC checks availability again atomically. */
-export async function getAiSeatOptions(showId:string,quantity:number,zone?:AiSeatZone){
-  if(!SHOW.test(showId)||!Number.isSafeInteger(quantity)||quantity<1||quantity>20||(zone!==undefined&&!["A","B","C","D"].includes(zone)))invalid();
+export async function getAiSeatSnapshot(showId:string){
+  if(!SHOW.test(showId))invalid();
   const show=(await listAiSalesShows()).find(item=>item.id===showId);
   if(!show)throw new AiCheckoutError("SHOW_CLOSED","Show này hiện chưa mở bán hoặc đã qua giờ diễn.");
   const encoded=encodeURIComponent(showId);
@@ -94,7 +95,18 @@ export async function getAiSeatOptions(showId:string,quantity:number,zone?:AiSea
   ]);
   const taken=new Set([...orders.flatMap(row=>row.seats||[]),...sales.flatMap(row=>row.seats||[]),...blocks.map(row=>row.seat_id)]);
   const seats=seatsFor(show.venueId,Object.fromEntries(layout.map(row=>[row.row_code,row.seat_count])));
-  const free=seats.filter(seat=>!taken.has(seat.id)&&show.prices[seat.zone as AiSeatZone]!==null);
+  return {show,seats,taken};
+}
+
+export async function getAiSeatOptions(showId:string,quantity:number,zone?:AiSeatZone,view?:"left"|"right"|"center",maxPerTicket?:number){
+  if(!SHOW.test(showId)||!Number.isSafeInteger(quantity)||quantity<1||quantity>20||(zone!==undefined&&!["A","B","C","D"].includes(zone)))invalid();
+  const {show,seats,taken}=await getAiSeatSnapshot(showId);
+  const free=seats.filter(seat=>{
+  const price=show.prices[seat.zone as AiSeatZone];
+  const lateral=show.venueId==="ccc"?seat.y:seat.x;
+  const direction=lateral<38?"left":lateral>62?"right":"center";
+  return !taken.has(seat.id)&&price!==null&&(!view||view===direction)&&(maxPerTicket===undefined||price<=maxPerTicket);
+});
   const groups=new Map<string,typeof free>();
   for(const seat of free){if(zone&&seat.zone!==zone)continue;const group=groups.get(seat.row)||[];group.push(seat);groups.set(seat.row,group);}
   const options:{zone:AiSeatZone;seats:string[];amount:number}[]=[];
@@ -129,11 +141,13 @@ function quoteFrom(row:AiQuoteRow):AiSalesQuote{
 export async function buildAiQuote(context:AiCheckoutContext,input:AiQuoteInput):Promise<AiSalesQuote>{
   contextValid(context);bankConfig();
   if(!input||!SHOW.test(input.showId)||!Array.isArray(input.seats)||!input.seats.length||input.seats.length>20||input.seats.some(seat=>typeof seat!=="string"||!SEAT.test(seat))||new Set(input.seats).size!==input.seats.length)invalid();
+  const childSeats=input.childSeats===undefined?[]:input.childSeats;
+  if(!validChildSeats(childSeats,input.seats))invalid();
   const giftSeats=input.giftSeats||[],promotion=input.promotion||"none";
   if(!Array.isArray(giftSeats)||giftSeats.length>3||giftSeats.some(seat=>typeof seat!=="string"||!SEAT.test(seat))||new Set([...input.seats,...giftSeats]).size!==input.seats.length+giftSeats.length||!["none","couple5","buy5","buy10","buy20"].includes(promotion))invalid();
   const name=typeof input.name==="string"?input.name.trim():"",phone=typeof input.phone==="string"?input.phone.trim():"",email=typeof input.email==="string"?input.email.trim():"";
   if(name.length<2||name.length>120||/[\r\n]/.test(name)||!/^[0-9+(). -]{9,20}$/.test(phone)||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))invalid("Cần tên khách, số điện thoại và email hợp lệ để gửi vé.");
-  const row=await staffDb("rpc/extra_messenger_ai_create_quote",{method:"POST",body:JSON.stringify({p_job_id:context.jobId,p_lease_token:context.leaseToken,p_input:{showId:input.showId,seats:input.seats,giftSeats,promotion,name,phone,email}})}) as AiQuoteRow;
+  const row=await staffDb("rpc/extra_messenger_ai_create_quote",{method:"POST",body:JSON.stringify({p_job_id:context.jobId,p_lease_token:context.leaseToken,p_input:{showId:input.showId,seats:input.seats,childSeats,giftSeats,promotion,name,phone,email}})}) as AiQuoteRow;
   if(row?.chat_id!==context.chatId||row?.source_message_id!==context.sourceMessageId)throw new AiCheckoutError("STALE_CONVERSATION","Cuộc trò chuyện đã thay đổi. Cần đọc tin nhắn mới nhất.");
   return quoteFrom(row);
 }
@@ -171,7 +185,7 @@ export async function reserveAiQuote(context:AiCheckoutContext,quoteId:string):P
 }
 
 /** Read-only paid capability. Never marks paid, issues tickets, or mutates Sale attribution. */
-export async function getAiPaidTicketDelivery(chatId:string,code:string):Promise<{code:string;url:string;message:string;emailStatus?:"queued"|"sending"|"sent"}|null>{
+export async function getAiPaidTicketDelivery(chatId:string,code:string,address:"anh"|"chị"|"mình"="mình"):Promise<{code:string;url:string;message:string;emailStatus?:"queued"|"sending"|"sent"}|null>{
   const order=await ownedOrder(chatId,code);if(!order||order.status!=="paid")return null;
   const tickets=await readAll<SaleIssuedTicket>("extra_tickets?order_id=eq."+order.id+"&order_code=eq."+code+"&select=order_id,order_code,show_id,venue_id,seat_id,issued_at&order=seat_id.asc");
   if(!hasCompleteIssuedTickets(order,tickets))return null;
@@ -181,23 +195,24 @@ export async function getAiPaidTicketDelivery(chatId:string,code:string):Promise
   const tokens=await staffDb("extra_payment_orders?code=eq."+code+"&status=eq.paid&select=access_token&limit=1") as {access_token:string}[];
   const token=tokens[0]?.access_token;if(typeof token!=="string"||!/^[a-f0-9]{48}$/.test(token))return null;
   const url=ticketLinkUrl(code,token),emailStatus=ticketEmailStatus(current.email_status);
-  const message="EXTRA đã xác nhận thanh toán "+money(current.amount_vnd)+" cho đơn "+code+".\nGhế: "+current.seats.join(", ")+".\nVé điện tử của bạn: "+url+"\nMỗi ghế có một mã QR riêng. Bạn giữ kín liên kết vé và mở mã QR khi đến check-in nhé."+(emailStatus==="sent"?"\nVé cũng đã được gửi qua email đã đăng ký.":"\nBạn có thể mở vé ngay từ liên kết trên.");
-  return {code,url,message,emailStatus};
+  const message="EXTRA đã xác nhận thanh toán "+money(current.amount_vnd)+" cho đơn "+code+".\nGhế: "+current.seats.join(", ")+(".\n"+"Vé điện tử của "+address+": ")+url+("\nMỗi ghế có một mã QR riêng. "+(address.charAt(0).toUpperCase()+address.slice(1))+" "+"giữ kín liên kết vé"+" và mở mã QR khi đến check-in nhé.")+(emailStatus==="sent"?"\nVé cũng đã được gửi qua email đã đăng ký.":("\n"+(address.charAt(0).toUpperCase()+address.slice(1))+" "+"có thể mở vé"+" ngay từ liên kết trên."));
+  return {code,url,message:message+"\n"+artistPhotoNotice,emailStatus};
 }
-export function renderAiQuoteMessage(quote:AiSalesQuote):string{
+export function renderAiQuoteMessage(quote:AiSalesQuote,address:"anh"|"chị"|"mình"="mình"):string{
   const promotion:Record<AiPromotion,string>={none:"",couple5:"Ưu đãi cặp đôi: giảm 5%.",buy5:"Mua 5 vé, tặng 1 vé.",buy10:"Mua 10 vé, tặng 2 vé.",buy20:"Mua 20 vé, tặng 3 vé."};
   return [
-    "Em gửi bạn thông tin đặt vé để xác nhận:",
+    ("Em gửi "+address+" thông tin đặt vé để xác nhận:"),
     quote.artist+" · "+dateLabel(quote.date)+" · "+quote.time,
     quote.venueName+" — "+quote.venueAddress,
     "Ghế mua: "+quote.seats.join(", "),
+    quote.childSeats?.length?"Ghế vé trẻ em (70%): "+quote.childSeats.join(", "):"",
     quote.giftSeats.length?"Ghế tặng: "+quote.giftSeats.join(", "):"",
     promotion[quote.promotion],"Tổng thanh toán: "+money(quote.amount),
     "Người nhận: "+quote.name+" · "+quote.phone+"\nEmail nhận vé: "+quote.email,
-    "Nếu đúng thông tin, bạn trả lời “ĐỒNG Ý” để em giữ ghế trong 15 phút và gửi mã thanh toán nhé. Ghế chỉ được giữ sau khi bạn xác nhận; báo giá này có hiệu lực đến "+timeLabel(quote.expiresAt)+".",
+    ("Nếu đúng thông tin, "+address+" trả lời “ĐỒNG Ý” để em giữ ghế trong 15 phút và gửi mã thanh toán nhé. Ghế chỉ được giữ sau khi "+address+" xác nhận; báo giá này có hiệu lực đến ")+timeLabel(quote.expiresAt)+".",
   ].filter(Boolean).join("\n");
 }
-export function renderAiPaymentMessage(order:AiSalesOrder):string{
+export function renderAiPaymentMessage(order:AiSalesOrder,address:"anh"|"chị"|"mình"="mình"):string{
   if(order.status!=="pending"||!order.payment)throw new AiCheckoutError("NOT_PENDING","Đơn không còn trong thời gian chờ thanh toán.");
-  return "Em đã giữ ghế "+order.seats.join(", ")+" cho bạn đến "+timeLabel(order.expiresAt)+".\nMã đơn: "+order.code+"\nSố tiền: "+money(order.amount)+"\nNgân hàng: "+order.payment.bank+"\nSố tài khoản: "+order.payment.account+"\nChủ tài khoản: "+order.payment.holder+"\nNội dung chuyển khoản: "+order.code+"\nMã QR thanh toán: "+order.payment.qr+"\nBạn chuyển đúng số tiền và nội dung giúp em nhé. Khi hệ thống xác nhận nhận tiền, EXTRA sẽ tự gửi vé điện tử tại đây và qua email; bạn không cần gửi ảnh chuyển khoản.";
+  return "Em đã giữ ghế "+order.seats.join(", ")+(" cho "+address+" đến ")+timeLabel(order.expiresAt)+".\nMã đơn: "+order.code+"\nSố tiền: "+money(order.amount)+"\nNgân hàng: "+order.payment.bank+"\nSố tài khoản: "+order.payment.account+"\nChủ tài khoản: "+order.payment.holder+"\nNội dung chuyển khoản: "+order.code+("\nMã QR dự phòng (nếu ảnh không hiển thị): ")+order.payment.qr+("\n"+(address.charAt(0).toUpperCase()+address.slice(1))+" chuyển đúng số tiền và nội dung giúp em nhé. Khi hệ thống xác nhận nhận tiền, EXTRA sẽ tự gửi vé điện tử tại đây và qua email; "+address+" không cần gửi ảnh chuyển khoản.");
 }

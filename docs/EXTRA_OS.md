@@ -5,13 +5,13 @@ Mở `/admin/ai-marketing` từ Admin. Super Admin tạo show, cấp quyền the
 ## Môi trường kiểm thử
 
 1. Tạo cơ sở dữ liệu Supabase riêng cho preview. Đặt `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` và `EXTRA_OS_PREVIEW_DATABASE_URL` của nhánh về cơ sở dữ liệu đó.
-2. Chạy các migration hiện có theo thứ tự tên tệp, gồm hai migration `extra_os_*`. Database đã chạy các migration cũ chỉ cần áp dụng hai migration EXTRA OS sau khi kiểm tra bảng và quyền hiện tại.
+2. Chạy các migration hiện có theo thứ tự tên tệp, gồm các migration `extra_os_*`. Database đã chạy các migration cũ chỉ cần áp dụng các migration EXTRA OS sau khi kiểm tra bảng và quyền hiện tại.
 3. Dùng dữ liệu thử. Cấp khóa đăng nhập Admin, tài khoản nhân sự và khóa cron dành riêng cho preview. Các hành động Facebook và quảng cáo bị tắt trên Vercel Preview. Khi thử Drive, dùng thư mục riêng và đặt `EXTRA_OS_PREVIEW_DRIVE_ROOT_ID` bằng ID thư mục kiểm thử.
 4. Chạy `npm ci`, `npm run build`, `node --test tests/extra-os-domain.test.cjs` và `psql -f tests/extra-os-workspace.pg.sql` trên cơ sở dữ liệu dùng một lần. Bài SQL dùng giao dịch rollback.
 
 ## Bộ thực thi 24/7
 
-Tạo hai mục Supabase Vault `extra_os_scheduler_origin` và `extra_os_scheduler_secret`. Origin là HTTPS tới cổng bán vé của môi trường. Secret là khóa `EXTRA_OS_CRON_SECRET` của Vercel. Chạy `supabase/extra-os-schedule.sql` trong cơ sở dữ liệu tương ứng để gọi worker mỗi hai phút. Với Vercel Preview có SSO, chỉ chạy lập lịch khi endpoint kiểm thử có đường truy cập xác thực phù hợp. Nút ONE CLICK tự chạy một lượt đầu, còn cron xử lý việc định kỳ và khôi phục các lượt bị ngắt. Xem `cron.job_run_details`, phản hồi `net._http_response` và **AI Director → Nhật ký hoạt động** để đối chiếu.
+Vercel Cron gọi `/api/cron/extra-os` mỗi hai phút trên môi trường Production bằng `CRON_SECRET`. Nút ONE CLICK tự chạy một lượt đầu, lịch chạy tiếp tục xử lý việc định kỳ và khôi phục các lượt bị ngắt. Với Preview, gọi endpoint bằng khóa `EXTRA_OS_CRON_SECRET` của riêng môi trường thử. Xem trạng thái Vercel Cron và **AI Director → Nhật ký hoạt động** để đối chiếu.
 
 Hàng đợi giữ thời hạn theo từng lượt chạy, tránh giao trùng và thử lại có giãn cách. **Cấu hình** hỗ trợ tạm dừng từng AI hoặc toàn bộ hệ thống. Khi tạm dừng, quảng cáo và đóng bán có lượt xử lý an toàn riêng để dừng tiêu tiền và giữ đúng giờ bán.
 
@@ -24,7 +24,7 @@ Hàng đợi giữ thời hạn theo từng lượt chạy, tránh giao trùng v
 | Meta Page | Page access token có quyền đăng bài `pages_manage_posts` và quyền đọc trang theo yêu cầu ứng dụng. |
 | Meta Ads | Token `ads_management` và `ads_read`, quyền trên ad account dùng VND, Page, Pixel/Dataset và danh sách mã thành phố Meta. Ghi nhận cấu hình phụ phí phù hợp và kiểm tra sự kiện SePay/CAPI trong tài khoản quảng cáo. |
 | TikTok | Nhân sự vận hành bằng nhiệm vụ có video và tư liệu. Có thể gửi liên kết video trong báo cáo nhiệm vụ. |
-| SePay và Sale | Dùng cơ chế giữ chỗ, thanh toán, phát hành QR và đối soát đang có. Lịch show chỉ mở bán sau khi sức chứa khớp sơ đồ và SePay đã được cấu hình. |
+| SePay và Sale | Dùng AI Sale V2.2 và cơ chế giữ chỗ, thanh toán, phát hành QR và đối soát hiện có. Messenger giải tham chiếu quảng cáo và bài Facebook của EXTRA OS qua ID đã lưu, rồi dùng lịch show chính thức để tư vấn. Lịch show chỉ mở bán sau khi sức chứa khớp sơ đồ và SePay đã được cấu hình. |
 
 Cấu hình bí mật trong Supabase Vault hoặc Environment Variables của Vercel. Cấp đúng môi trường cho từng khóa. Khi thử kết nối nhà cung cấp, kiểm tra nhật ký từng việc và chạy lại các mục báo thiếu quyền sau khi đã cấp quyền.
 

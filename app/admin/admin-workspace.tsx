@@ -59,6 +59,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
  const current=adminSectionDetails(section);
  const visibleItems=items.filter(item=>matchesAdminSection(item,search));
  const menuItems=items.filter(item=>matchesAdminSection(item,menuSearch));
+ const showExtraOs=(value:string)=>actor.role==="admin"&&"extra os".includes(value.trim().toLowerCase());
  const primary:ReadonlyArray<{id:AdminSection;label:string}>=[
   {id:"overview",label:"Home"},{id:"tickets",label:"Vé"},
   actor.role==="admin"?{id:"sale-performance",label:"Sale"}:{id:"shows",label:"Show"},
@@ -115,8 +116,8 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
     <a href="https://iextra.net/" className={styles.brand}><span className={styles.brandMark}>+1</span><span><strong>EXTRA</strong><small>ADMIN WORKSPACE</small></span></a>
     <label className={styles.search}><MenuIcon name="search"/><span className={styles.srOnly}>Tìm mục quản trị</span><input type="search" placeholder="Tìm mục quản trị…" value={search} onChange={event=>setSearch(event.target.value)}/></label>
     <nav className={styles.navigation} aria-label="Menu Admin">
-     <NavigationList items={visibleItems} section={section} onSelect={select} prefix="admin-nav-" extraOs={actor.role==="admin"&&"extra os".includes(search.trim().toLowerCase())}/>
-     {!visibleItems.length?<p className={styles.noResults} role="status">Không tìm thấy mục phù hợp.</p>:null}
+     <NavigationList items={visibleItems} section={section} onSelect={select} prefix="admin-nav-" extraOs={showExtraOs(search)}/>
+     {!visibleItems.length&&!showExtraOs(search)?<p className={styles.noResults} role="status">Không tìm thấy mục phù hợp.</p>:null}
     </nav>
     <div className={styles.sidebarBottom}>
      <div className={styles.account}><span className={styles.avatar}>{initials}</span><div><strong>{displayName}</strong><small>{roleLabel}</small></div></div>
@@ -144,8 +145,8 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
     <header className={styles.menuHeading}><div><p>+1 EXTRA · ADMIN</p><h2 id="admin-menu-title">Tất cả chức năng</h2></div><button type="button" ref={closeButton} className={styles.closeButton} aria-label="Đóng menu quản trị" onClick={closeMenu}><MenuIcon name="close"/></button></header>
     <label className={styles.search}><MenuIcon name="search"/><span className={styles.srOnly}>Tìm chức năng quản trị</span><input type="search" placeholder="Tìm show, khách hàng, hoa hồng…" value={menuSearch} onChange={event=>setMenuSearch(event.target.value)}/></label>
     <nav className={styles.menuList} aria-label="Tất cả mục Admin">
-     <NavigationList items={menuItems} section={section} onSelect={select} prefix="admin-menu-" extraOs={actor.role==="admin"&&"extra os".includes(menuSearch.trim().toLowerCase())}/>
-     {!menuItems.length?<p className={styles.noResults} role="status">Không tìm thấy mục phù hợp. Thử từ khóa khác để tìm lại.</p>:null}
+     <NavigationList items={menuItems} section={section} onSelect={select} prefix="admin-menu-" extraOs={showExtraOs(menuSearch)}/>
+     {!menuItems.length&&!showExtraOs(menuSearch)?<p className={styles.noResults} role="status">Không tìm thấy mục phù hợp. Thử từ khóa khác để tìm lại.</p>:null}
     </nav>
     <a href="https://iextra.net/" target="_blank" rel="noopener noreferrer" className={styles.websiteLink}>Xem website Extra <span aria-hidden="true">↗</span></a>
    </div>

@@ -50,7 +50,7 @@ export async function onceAtMeta(show: OsShow, job: OsJob, key: string, send: ()
   const query = "extra_os_effects?show_id=eq." + show.id + "&key=eq." + encodeURIComponent(key);
   const fresh = await osDb<{key: string}[]>("extra_os_effects?on_conflict=show_id,key", {
     method: "POST", headers: {Prefer: "resolution=ignore-duplicates,return=representation"},
-    body: JSON.stringify({show_id: show.id, key}),
+    body: JSON.stringify({show_id: show.id, key, detail:{pageId:process.env.EXTRA_OS_META_PAGE_ID}}),
   });
   if (!fresh.length) {
     const [previous] = await osDb<{provider_id: string | null}[]>(query + "&select=provider_id");

@@ -63,6 +63,16 @@ export async function signedSignals(page:string,value:unknown,catalog:()=>Promis
   if(found.id)ids.add(found.id);
   const ref=typeof r.ref==="string"?r.ref.match(/^(?:show[:=]|(?:https:\/\/(?:www\.)?iextra\.net)?\/show\/)?([a-z0-9-]+)$/i)?.[1]:"";
   if(catalogShows.some(s=>s.id===ref))ids.add(ref!);
+  if (page === process.env.EXTRA_OS_META_PAGE_ID) {
+   const rawPost = String(data.post_id ?? "").replace(new RegExp("^" + page + "_"), "");
+   const extraOs = await staffDb("rpc/extra_os_messenger_show", {
+    method:"POST", signal:AbortSignal.timeout(1600),
+    body:JSON.stringify({p_page:page,p_ad:digits(r.ad_id)?r.ad_id:"",p_post:digits(rawPost)?rawPost:""}),
+   }).catch(()=>[]);
+   if (Array.isArray(extraOs)) for (const mapped of extraOs) {
+    if (catalogShows.some(show => show.id === mapped)) ids.add(mapped);
+   }
+  }
   if(page==="1223940670813189"){
    const post=String(data.post_id??"").replace(/^1223940670813189_/,"");
    const adId=digits(r.ad_id)?r.ad_id:"",postId=digits(post)?post:"";

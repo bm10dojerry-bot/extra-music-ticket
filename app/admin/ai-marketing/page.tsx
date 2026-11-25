@@ -156,7 +156,7 @@ function Finances({show, panel, admin = true}: {show: FinanceShow; panel: Financ
 function Settings({panel}: {panel: DirectorPanel}) {
   const status = [
     ["OpenAI", hasModel()], ["OAuth và thư mục Google Drive", hasDrive()], ["SePay", ticketingReady()],
-    ["Cho phép tác động Meta",metaLive()], ["Khóa gọi bộ lập lịch",Boolean(process.env.EXTRA_OS_CRON_SECRET)],
+    ["Cho phép tác động Meta",metaLive()], ["Khóa gọi bộ lập lịch",Boolean(process.env.EXTRA_OS_CRON_SECRET || process.env.CRON_SECRET)],
   ] as const;
   return <>
     <section className={styles.panel}><h2>Cấu hình môi trường</h2>

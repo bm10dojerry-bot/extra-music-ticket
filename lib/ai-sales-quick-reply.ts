@@ -1,3 +1,4 @@
+import {tierName} from "./poster-offers";
 /** Read-only fast path for clearly identified simple sales inquiries.
  * The caller retains the existing conversation, send, payment, and order guards.
  */
@@ -30,7 +31,7 @@ function render(i:Intent,show:QuickShow,customer:QuickMessage[],p:string){
   if(Object.keys(show.prices).some(z=>!zones.includes(z)))return null;
   const prices=zones.filter(z=>typeof show.prices[z]==="number"&&Number.isFinite(show.prices[z])&&Number(show.prices[z])>0);
   if(!prices.length||zones.some(z=>show.prices[z]!=null&&(!Number.isFinite(show.prices[z])||Number(show.prices[z])<=0)))return null;
-  const lines=prices.map(z=>"Hạng "+z+": "+Number(show.prices[z]).toLocaleString("vi-VN")+"đ").join("\n");
+  const lines=prices.map(z=>tierName(show.id,z)+": "+Number(show.prices[z]).toLocaleString("vi-VN")+"đ").join("\n");
   return "Dạ "+p+", giá vé mỗi người đêm "+show.artist+" ngày "+date+" là:\n"+lines+(knownParty(customer)?"":"\n\n"+cap(p)+" dự định đi mấy người để em tư vấn chỗ ngồi phù hợp cho mình ạ?");
  }
  if(i==="time")return "Dạ "+p+", đêm nhạc "+show.artist+" diễn ra ngày "+date+"/"+show.date.slice(0,4)+", lúc "+time+" ạ.";
@@ -38,6 +39,8 @@ function render(i:Intent,show:QuickShow,customer:QuickMessage[],p:string){
  return "Dạ "+p+", đêm nhạc "+show.artist+" diễn tại "+show.venueName+", "+show.venueAddress+" ạ.";
 }
 export async function quickSalesReply(messages:QuickMessage[],hasCommentContext:boolean,loadShows:()=>Promise<QuickShow[]>,now=Date.now()):Promise<string|null>{
+ if (extraNeedsPromotionConsultation(messages)) return null;
+
  const customer=messages.filter(m=>m.sender==="customer"),latest=customer.at(-1);
  if(!latest||latest.body.length>120)return null;
  const s=clean(latest.body),previous=customer.at(-2),previousText=previous?clean(previous.body):"",generic=intent(s),prior=intent(previousText),p=pronoun(customer);
@@ -59,4 +62,14 @@ export async function quickSalesReply(messages:QuickMessage[],hasCommentContext:
   if(old.length===1){const {show,alias}=old[0],rest=residual(previousText,alias);if(!rest||intent(rest))return render(generic,show,customer,p);}
  }
  return null;
+}
+
+// Route promotion contexts to the existing trusted quote and seating tools.
+function extraNeedsPromotionConsultation(messages: readonly {sender:string;body:string}[]):boolean{
+ return messages.filter(m=>m.sender==="customer").slice(-12).some(m=>{
+  const s=m.body.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[đĐ]/g,"d").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+  return /\b(khuyen mai|uu dai|giam gia|giam them|voucher|tang ve|tang them|mien phi|combo|gia nhom|gia doi|cap doi|hai vo chong|vo chong|mua \d+ tang \d+)\b/.test(s)
+    || /\b(?:[2-9]|[12][0-9]|hai|ba|bon|tu|nam|sau|bay|tam|chin|muoi|muoi [a-z]+|hai muoi(?: [a-z]+)?)\s+(?:nguoi|ve|ghe|cho|khach)\b/.test(s)
+    || /\b(?:di|dat|mua|lay)\s+(?:[2-9]|[12][0-9]|hai|ba|bon|nam|sau|bay|tam|chin|muoi)\s*$/.test(s);
+ });
 }

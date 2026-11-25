@@ -18,7 +18,7 @@ const rendererPath=path.join(runtime,"node_modules/react-test-renderer");
 const rendererAvailable=fs.existsSync(path.join(rendererPath,"package.json"));
 const content=node=>node===null||node===undefined?"":typeof node==="string"||typeof node==="number"?String(node):Array.isArray(node)?node.map(content).join(""):(node.children||[]).map(content).join("");
 const json=value=>Response.json(structuredClone(value));
-const expectedSections=["overview","shows","artists","stages","venues","landingpage-ads","tickets","staff-sales","live-monitor","support-chats","seats","checkin","financials","show-costs","sale-performance","sale-commission","staff-users","staff-reports","staff-overview","gioi-thieu","tuyen-dung","lien-he"];
+const expectedSections=["overview","shows","artists","stages","venues","landingpage-ads","tickets","staff-sales","live-monitor","support-chats","ai-sales","ai-marketing","seats","checkin","financials","show-costs","sale-performance","sale-commission","staff-users","staff-reports","staff-overview","gioi-thieu","tuyen-dung","lien-he"];
 const owner={id:"owner",username:"owner",display_name:"Synthetic Owner",role:"admin",active:true};
 const manager={id:"synthetic-manager",username:"manager",display_name:"Synthetic Show Manager",role:"show_manager",active:true};
 
@@ -49,7 +49,7 @@ test("Admin navigation preserves editing context and verifies artist and poster 
   "app/staff/workspace","app/admin/tickets/ticket-dashboard","app/admin/financial-breakdown",
   "app/admin/sale-commission-manager","app/admin/detailed-charts","app/admin/show-landing-editor",
   "app/admin/landing-analytics","app/admin/live-monitor","app/admin/zalo-delivery-admin",
-  "app/admin/seat-row-manager","app/admin/site-page-editor","app/support-inbox","app/checkin/scanner-client",
+  "app/admin/seat-row-manager","app/admin/site-page-editor","app/admin/ai-sales-dashboard","app/admin/ai-marketing-dashboard","app/support-inbox","app/checkin/scanner-client",
  ]);
  function loadSource(filename) {
   filename=path.resolve(filename);
@@ -153,7 +153,7 @@ test("Admin navigation preserves editing context and verifies artist and poster 
    assert.equal(target.value,"","clearing the picker permits selecting the same file again after an error");
   }
 
-  await t.test("all 22 sections resolve correctly, including content deep links, and restricted IDs fall back safely",async()=>{
+  await t.test("all Admin sections resolve correctly, including content deep links, and restricted IDs fall back safely",async()=>{
    assert.deepEqual([...navigation.adminSections.map(item=>item.id)].sort(),[...expectedSections].sort());
    for(const id of expectedSections)assert.equal(navigation.resolveAdminSection(id,"admin"),id);
    for(const bad of [undefined,null,"","unknown","__proto__","constructor",["shows"]])assert.equal(navigation.resolveAdminSection(bad,"admin"),"overview");

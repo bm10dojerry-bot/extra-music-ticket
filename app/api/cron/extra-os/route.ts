@@ -8,10 +8,13 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function GET(request: NextRequest) {
-  const token = process.env.EXTRA_OS_CRON_SECRET;
   const received = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from("Bearer " + token);
-  if (!token || token.length < 24 || received.length !== expected.length || !timingSafeEqual(received, expected)) {
+  const accepted = [process.env.EXTRA_OS_CRON_SECRET, process.env.CRON_SECRET].some(token => {
+    if (!token || token.length < 24) return false;
+    const expected = Buffer.from("Bearer " + token);
+    return received.length === expected.length && timingSafeEqual(received, expected);
+  });
+  if (!accepted) {
     return NextResponse.json({error: "Unauthorized"}, {status: 401});
   }
   if (!deploymentAllowsExtraOs()) return NextResponse.json({error: "Preview database required"}, {status: 503});

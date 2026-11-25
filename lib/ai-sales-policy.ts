@@ -31,7 +31,11 @@ export function safeAiConversationText(value:string):boolean {
 }
 
 export function incomingMessengerText(message:{text?:string;attachments?:{type?:string}[]}):string {
-  if(typeof message.text==="string"&&message.text.trim())return message.text.trim().slice(0,1200);
+  const caption=typeof message.text==="string"?message.text.trim():"";
+  if(process.env.EXTRA_AI_SALE_INBOUND_IMAGE!=="0"&&(message.attachments||[]).some(item=>item.type==="image")){
+    return ("[Khách gửi ảnh; chưa đọc nội dung ảnh.]"+(caption?" "+caption:"")).slice(0,1200);
+  }
+  if(caption)return caption.slice(0,1200);
   const types=(message.attachments||[]).map(item=>item.type).filter(Boolean);
   if(!types.length)return "";
   const kind=types.includes("audio")?"tin nhắn thoại":types.includes("image")?"ảnh":types.includes("video")?"video":"tệp đính kèm";

@@ -11,7 +11,7 @@ export function isSeatMapRequest(body:string){
  return /(?:^| )(?:so do ghe|so do cho ngoi|so do san khau|so do|map ghe|seat map|mat bang ghe|anh ghe|hinh ghe)(?: |$)/.test(s);
 }
 export function wantsSeatAvailability(body:string){
- return /(?:^| )(?:ghe trong|cho trong|ghe nao trong|con ghe|con cho|con ve|dat ve|dat ghe|mua ve|link|duong dan)(?: |$)/.test(norm(body));
+ return /(?:^| )(?:ghe trong|ghe con trong|cho trong|cho con trong|ghe nao trong|ghe nao con trong|con ghe|con cho|con ve|dat ve|dat ghe|mua ve|link|duong dan)(?: |$)/.test(norm(body));
 }
 function find(text:string,shows:readonly Show[]):Choice|null|"ambiguous"{
  const s=norm(text);

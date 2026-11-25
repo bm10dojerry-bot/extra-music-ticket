@@ -25,19 +25,25 @@ async function artwork(source: Buffer, show: OsShow, wide: boolean) {
   const picture = await sharp(source, {limitInputPixels: 35_000_000}).rotate()
     .resize(width, illustrationHeight, {fit: "cover", position: sharp.strategy.attention}).toBuffer();
   const lines = [
-    {value: "+1 EXTRA MUSIC SHOW", color: "#e12a37", font: wide ? "Sans Bold 33" : "Sans Bold 46", top: illustrationHeight + 30},
-    {value: show.artist, color: "white", font: wide ? "Sans Bold 55" : "Sans Bold 88", top: illustrationHeight + 90},
-    {value: displayDate(show.starts_at) + " · " + show.venue, color: "#dddddd",
-      font: wide ? "Sans 25" : "Sans 41", top: wide ? height - 113 : height - 255},
-    {value: "Vé từ " + show.intake.startingPriceVnd.toLocaleString("vi-VN") + " đ", color: "white",
-      font: wide ? "Sans Bold 27" : "Sans Bold 45", top: wide ? height - 57 : height - 110},
+    {value: "+1 EXTRA MUSIC SHOW", color: "#e12a37", font:  wide ? 36 : 48, bold:true,
+      top: wide ? 590 : 1680, box: wide ? 44 : 62},
+    {value: show.artist, color: "#ffffff", font: wide ? 75 : 120, bold:true,
+      top: wide ? 643 : 1770, box: wide ? 89 : 232},
+    {value: displayDate(show.starts_at) + " · " + show.venue, color: "#dddddd", font: wide ? 32 : 53, bold:false,
+      top: wide ? 744 : 2046, box: wide ? 79 : 145},
+    {value: "Vé từ " + show.intake.startingPriceVnd.toLocaleString("vi-VN") + " đ", color: "#ffffff",
+      font: wide ? 31 : 58, bold:true, top: wide ? 837 : 2240, box: wide ? 42 : 85},
   ];
+  const fontfile = join(process.cwd(), "lib", "extra-os", "fonts", "NotoSans.ttf");
+  const innerWidth = width - 120;
   const layers: OverlayOptions[] = [{input: picture, top: 0, left: 0}];
   for (const line of lines) {
-    const input = await sharp({text: {
+    const text = await sharp({text: {
       text: '<span foreground="' + line.color + '">' + escapeText(line.value) + "</span>",
-      font: line.font, width: width - 120, height: height - line.top, rgba: true,
+      font: "Noto Sans " + (line.bold ? "Bold " : "") + line.font,
+      fontfile, width: innerWidth, rgba: true, dpi: 72,
     }}).png().toBuffer();
+    const input = await sharp(text).resize({width: innerWidth, height: line.box, fit: "inside", withoutEnlargement: true}).png().toBuffer();
     layers.push({input, top: line.top, left: 58});
   }
   return sharp({create: {width, height, channels: 3, background: "#101012"}})

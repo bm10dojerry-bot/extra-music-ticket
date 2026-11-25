@@ -85,7 +85,9 @@ async function execute(show: OsShow, job: OsJob): Promise<Result> {
           acceptance:"Sức chứa khớp sơ đồ ghế, cấu hình thanh toán được kiểm tra.", budget_vnd:0,
         }, 5));
       }
-      return done(readiness);
+      const {aiSalesConfigurationReady, getAiSalesSettings} = await import("../ai-sales");
+      const messengerAiReady = aiSalesConfigurationReady() && (await getAiSalesSettings().catch(() => null))?.enabled === true;
+      return done({...readiness, messengerAiReady});
     }
     case "crm":
       return crm(show);

@@ -79,4 +79,35 @@ begin
   if public.extra_os_lease_valid(runner.id,runner.lease_token) then raise exception 'System pause did not invalidate normal work'; end if;
   if not public.extra_os_lease_valid(monitor.id,monitor.lease_token) then raise exception 'Pause disabled the ad shutdown monitor'; end if;
 end $$;
+
+do $$
+declare
+  campaign uuid;
+  worker public.extra_os_jobs;
+  public_id text;
+  starts timestamptz := now() + interval '23 days';
+  prices jsonb := '{"A":400000,"B":350000,"C":300000,"D":250000}';
+begin
+  perform public.extra_os_control('owner','system',false,null);
+  campaign := (public.extra_os_start('owner',gen_random_uuid(),jsonb_build_object(
+    'artist','Published fixture','venue','CCC','venueId','ccc','capacity',550,'adsVnd',0,
+    'startsAt',starts,'setlist','Sample song','permissions',jsonb_build_array('website','facebook')),
+    jsonb_build_object('layoutMatches',true,'feasibility','feasible','prices',prices),
+    '[{"kind":"website","agent":"Director","priority":200,"dependencies":[]}]','[]')->>'id')::uuid;
+  select * into worker from public.extra_os_claim(1) where show_id=campaign;
+  public_id := 'extra-os-' || campaign::text;
+  if public.extra_os_publish_site(worker.id,worker.lease_token,public_id,prices) <> public_id
+    or public.extra_os_publish_site(worker.id,worker.lease_token,public_id,prices) <> public_id then
+    raise exception 'Website publication was not idempotent';
+  end if;
+  if (select setlist from public.show_landing_content where show_id=public_id) is distinct from 'Sample song' then
+    raise exception 'Published show lost its set list';
+  end if;
+  insert into public.extra_os_effects (show_id,key,provider_id,detail)
+    values (campaign,'facebook-feed','12345_67890','{"pageId":"12345"}');
+  if public.extra_os_messenger_show('12345','','67890') <> array[public_id]
+    or public.extra_os_messenger_show('54321','','67890') <> '{}'::text[] then
+    raise exception 'Messenger did not resolve the id under its own Page';
+  end if;
+end $$;
 rollback;
