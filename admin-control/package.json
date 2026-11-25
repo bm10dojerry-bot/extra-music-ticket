@@ -1,0 +1,16 @@
+{
+  "name": "extra-os-admin",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.18.0 <23"
+  },
+  "scripts": {
+    "start": "node server.cjs",
+    "test": "node --test test.cjs",
+    "build": "npm test && node --check server.cjs"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  }
+}
