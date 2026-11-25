@@ -4,7 +4,7 @@
  * Production integration must independently recheck consent, paid status and dedupe.
  */
 export type TicketState = "not_purchased" | "pending" | "paid" | "cancelled";
-export type Scenario = "after_purchase" | "three_min" | "day_before" | "show_day" | "after_show" | "weather" | "complaint" | "images" | "voice";
+export type Scenario = "after_purchase" | "photo_reminder" | "three_min" | "day_before" | "show_day" | "after_show" | "weather" | "complaint" | "images" | "voice";
 export type LastSpeaker = "ai" | "customer" | "staff";
 
 export type Extra21Input = {
@@ -26,9 +26,10 @@ export type Extra21Input = {
   mayBeCold: boolean;
   rainForecast: boolean;
   canopyConfirmed: boolean;
-  artistPhotoConfirmed: boolean;
+  photoNoticeAlreadySent: boolean;
   verifiedHotline: string;
-  seatMapUrls: string[];
+  requestedMap: "ccc" | "laocai" | "both";
+  availableMaps: SeatMapVenue[];
   voiceConsent: boolean;
   audioChannelReady: boolean;
 };
@@ -62,22 +63,16 @@ export const initial21: Extra21Input = {
   mayBeCold: true,
   rainForecast: false,
   canopyConfirmed: true,
-  artistPhotoConfirmed: false,
+  photoNoticeAlreadySent: false,
   verifiedHotline: "",
-  seatMapUrls: [],
+  requestedMap: "ccc",
+  availableMaps: [],
   voiceConsent: false,
   audioChannelReady: false,
 };
 
 const trim = (s: string) => (s || "").trim();
 const validPhone = (s: string) => /^\+?[0-9][0-9 .-]{7,17}$/.test(trim(s));
-const verifiedImage = (s: string) => {
-  try {
-    const u = new URL(s);
-    return u.protocol === "https:" && Boolean(u.hostname) && !u.username && !u.password && !u.hash &&
-      u.hostname !== "localhost" && !u.hostname.endsWith(".invalid");
-  } catch { return false; }
-};
 const dateDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + "T00:00:00Z"))
   ? Date.parse(v + "T00:00:00Z") / 86400000 : NaN;
 export const daysToShow = (today: string, showDate: string) => {
@@ -102,9 +97,11 @@ const weatherText = (input: Extra21Input): string[] => {
   }
   return result;
 };
-const photoText = (input: Extra21Input) => input.artistPhotoConfirmed
-  ? "Sau đêm nhạc dự kiến có phần giao lưu, chụp ảnh với nghệ sĩ bắt đầu khoảng 15 phút sau khi kết thúc và kéo dài khoảng 30 phút, theo lịch ban tổ chức đã xác nhận."
-  : "Lịch giao lưu và chụp ảnh cùng nghệ sĩ sẽ được bên em thông báo khi ban tổ chức xác nhận chính thức.";
+export const artistPhotoNotice = "Sau khi đêm nhạc kết thúc, mình sẽ có 15 phút để chụp ảnh cùng ca sĩ. Anh/chị muốn chụp ảnh kỷ niệm thì đăng ký với Ban Tổ chức giúp em nhé!";
+export const seatMapNames = { ccc: "CCC Sa Pa · 550 ghế", laocai: "Lào Cai · 600 ghế" } as const;
+export type SeatMapVenue = keyof typeof seatMapNames;
+const withPhotoNotice = (message: string, x: Extra21Input) =>
+  x.photoNoticeAlreadySent ? message : message + " " + artistPhotoNotice;
 const show = (x: Extra21Input) => trim(x.showName) || "chương trình";
 const special = (x: Extra21Input) => x.optedOut
   ? "Khách đã từ chối nhận tin."
@@ -129,6 +126,14 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
       ["Chỉ một lần mỗi lượt tư vấn.", "Hủy lịch nếu khách trả lời, đặt vé, nhân viên tiếp quản hoặc từ chối."]);
   }
 
+  if (x.scenario === "photo_reminder") {
+    const days = daysToShow(x.today, x.showDate);
+    if (x.ticketState !== "paid" || !x.paymentVerified || !canService(x) || days === null || days < 1 || x.photoNoticeAlreadySent) {
+      return block("Chưa gửi lời nhắc chụp ảnh", "Chỉ nhắc trước ngày diễn cho khách đã thanh toán, có quyền liên hệ và chưa nhận thông tin này.");
+    }
+    return done("Nhắc khách đã mua vé đăng ký chụp ảnh", "Extra nhắn mình một lưu ý cho đêm nhạc " + name + " ạ. " + artistPhotoNotice);
+  }
+
   if (x.scenario === "day_before") {
     if (daysToShow(x.today, x.showDate) !== 1) return block("Chưa đúng ngày D-1", "Chỉ nhắc trước ngày diễn đúng một ngày theo giờ Việt Nam.");
     if (x.ticketState === "cancelled") return block("Không gửi", "Đơn đã hủy; không gửi lời mời mua theo đơn cũ.");
@@ -136,7 +141,7 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
       if (!x.paymentVerified) return block("Chưa đủ dữ liệu", "Chưa đối soát thanh toán, không nhận định khách đã mua.");
       if (!canService(x)) return block("Không gửi tự động", "Thiếu quyền thông báo dịch vụ hoặc cửa sổ phản hồi Messenger hợp lệ.");
       return done("Nhắc khách đã mua vé",
-        "Dạ anh/chị ơi, chỉ còn một ngày nữa là đến đêm nhạc " + name + " rồi ạ! Anh/chị có cần bên em hỗ trợ gì về đường đi, giờ check-in hay chỗ ngồi không ạ? Nếu muốn rủ thêm người thân hoặc bạn bè, em cũng có thể hỗ trợ mình đặt thêm vé nhé! ❤️",
+        withPhotoNotice("Dạ anh/chị ơi, chỉ còn một ngày nữa là đến đêm nhạc " + name + " rồi ạ! Anh/chị có cần bên em hỗ trợ gì về đường đi, giờ check-in hay chỗ ngồi không ạ? Nếu muốn rủ thêm người thân hoặc bạn bè, em cũng có thể hỗ trợ mình đặt thêm vé nhé! ❤️", x),
         ["Ưu tiên hỗ trợ, không tạo đơn hay giữ ghế khi khách chưa yêu cầu."]);
     }
     if (x.ticketState === "pending") {
@@ -147,7 +152,7 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
     }
     if (!canMarketing(x)) return block("Không gửi lời mời đặt vé", "Tin mời mua vé cần nằm trong cửa sổ Messenger hoặc có quyền nhận tiếp thị phù hợp.");
     return done("Nhắc khách chưa mua vé",
-      "Dạ anh/chị ơi, chỉ còn một ngày nữa là diễn ra đêm nhạc " + name + " rồi ạ! Không biết mình đã sắp xếp được thời gian chưa? Nếu anh/chị muốn tham dự, em có thể tư vấn vị trí ngồi và hỗ trợ đặt vé nhé! ❤️",
+      withPhotoNotice("Dạ anh/chị ơi, chỉ còn một ngày nữa là diễn ra đêm nhạc " + name + " rồi ạ! Không biết mình đã sắp xếp được thời gian chưa? Nếu anh/chị muốn tham dự, em có thể tư vấn vị trí ngồi và hỗ trợ đặt vé nhé! ❤️", x),
       ["Không khẳng định còn vé nếu chưa kiểm tra tồn ghế trực tiếp."]);
   }
 
@@ -155,7 +160,7 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
     if (x.ticketState !== "paid" || !x.paymentVerified) return block("Chưa gửi lời cảm ơn sau mua", "Chỉ kích hoạt khi hệ thống xác nhận thanh toán thành công.");
     if (!canService(x)) return block("Không gửi tự động", "Thiếu quyền thông báo giao dịch hoặc cửa sổ Messenger hợp lệ.");
     return done("Chăm sóc sau thanh toán",
-      "Dạ, em cảm ơn anh/chị đã chọn đêm nhạc " + name + " của +1 Extra Music Show ạ! ❤️ Vé của mình đã được hệ thống xác nhận thanh toán. Anh/chị nhớ giữ mã QR để check-in, và nên đến sớm một chút để tránh giờ cao điểm, thoải mái chụp ảnh kỷ niệm nhé. " + photoText(x),
+      withPhotoNotice("Dạ, em cảm ơn anh/chị đã chọn đêm nhạc " + name + " của +1 Extra Music Show ạ! ❤️ Vé của mình đã được hệ thống xác nhận thanh toán. Anh/chị nhớ giữ mã QR để check-in, và nên đến sớm một chút để tránh giờ cao điểm, thoải mái tìm chỗ ngồi nhé.", x),
       ["Không gửi QR giả; vé điện tử vẫn lấy từ hệ thống phát hành chính thức."]);
   }
 
@@ -164,7 +169,7 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
     if (daysToShow(x.today, x.showDate) !== 0) return block("Chưa đúng ngày diễn", "Đây là kịch bản trong chính ngày biểu diễn.");
     if (!canService(x)) return block("Không gửi tự động", "Thiếu quyền thông báo dịch vụ hoặc cửa sổ Messenger hợp lệ.");
     return done("Lưu ý ngày biểu diễn",
-      "Dạ anh/chị ơi, hôm nay mình gặp nhau tại đêm nhạc " + name + " rồi ạ! Mình có thể đến sớm để check-in, tránh tập trung đông người và có thêm thời gian chụp ảnh nhé. " + weatherText(x).join(" "),
+      withPhotoNotice("Dạ anh/chị ơi, hôm nay mình gặp nhau tại đêm nhạc " + name + " rồi ạ! Mình có thể đến sớm để check-in, tránh tập trung đông người và có thêm thời gian chụp ảnh nhé. " + weatherText(x).join(" "), x),
       ["Lời khuyên thời tiết mô phỏng, chỉ gửi dữ liệu dự báo đã xác minh."]);
   }
 
@@ -196,10 +201,15 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
   }
 
   if (x.scenario === "images") {
-    if (x.seatMapUrls.length !== 2 || !x.seatMapUrls.every(verifiedImage)) return block("Chưa gửi hai ảnh", "Cần đúng hai URL HTTPS của hai ảnh sơ đồ chính thức, có thể tải được và khớp đúng địa điểm.", ["Không sử dụng ảnh minh họa thay ảnh anh đã duyệt."]);
-    return done("Hai ảnh sơ đồ ghế",
-      "Dạ em gửi anh/chị hai ảnh sơ đồ bố cục của địa điểm để mình tham khảo nhé. Trạng thái ghế còn bán vẫn phải kiểm tra trực tiếp trên website đặt vé.",
-      ["Mô phỏng hai tệp đính kèm; chưa gửi qua Facebook.", "Không lấy màu trên ảnh làm tồn ghế trực tiếp."], x.seatMapUrls);
+    if (!x.withinMessengerWindow) return block("Chưa gửi ảnh", "Cần có yêu cầu trong cửa sổ trả lời Messenger.");
+    const venues: SeatMapVenue[] = x.requestedMap === "both" ? ["ccc", "laocai"] : [x.requestedMap];
+    const available = venues.filter(v => x.availableMaps.includes(v));
+    const missing = venues.filter(v => !x.availableMaps.includes(v));
+    if (!available.length) return block("Chưa có ảnh sẵn sàng", "Chưa đọc được ảnh gốc đã duyệt cho " + missing.map(v => seatMapNames[v]).join(" và ") + ".");
+    return done("Sơ đồ theo địa điểm khách hỏi",
+      "Mình tham khảo sơ đồ bố trí ghế nhé. Em sẽ kiểm tra ghế còn trống theo show khi mình chọn chỗ ạ.",
+      missing.length ? ["Chưa có ảnh sẵn sàng cho " + missing.map(v => seatMapNames[v]).join(" và ")] : [],
+      available.map(v => seatMapNames[v]));
   }
 
   if (x.scenario === "voice") {

@@ -1,3 +1,4 @@
+import { artistPhotoNotice } from "./ai-sale-extra-2-1";
 import {
   applicablePromotions, artistInteractionExplanation, openingMessage, promotionMessage,
   seatViewQuestion, type Promotion, type SeatView,
@@ -191,7 +192,7 @@ function findSeatReply(show: ManagedShow, inventory: MessengerSaleInventory | nu
 
 function paymentReply(memory: MessengerSaleMemory, show?: ManagedShow | null): string {
   if (memory.paymentStatus === "paid") {
-    return `Hệ thống đã xác nhận thanh toán thành công. Cảm ơn mình đã đặt vé${show ? ` đêm ${show.artist}` : " của Extra"} ạ!`;
+    return `Hệ thống đã xác nhận thanh toán thành công. Cảm ơn mình đã đặt vé${show ? ` đêm ${show.artist}` : " của Extra"} ạ! ${artistPhotoNotice}`;
   }
   if (memory.paymentStatus === "pending" && memory.bookingStatus === "held") {
     return "Hệ thống ghi nhận đơn đang giữ chỗ và chờ thanh toán. Mình kiểm tra hạn giữ chỗ và quét mã QR của chính đơn trên trang đặt vé ạ.";
@@ -220,11 +221,13 @@ function textForReply(input: ReplyInput): string {
   if (onlyGeneral && /^(?:da\s+)?(?:cam on(?:\s+(?:em|ban|a))?|khong can(?:\s+nua)?|de\s+(?:minh|em|anh|chi)\s+xem)(?:\s|[.!])*$/.test(message.trim())) {
     return "Dạ vâng, khi cần thêm thông tin mình cứ nhắn Extra ạ.";
   }
+  const asksArtistPhoto = /\bchup (?:anh|hinh)\b/.test(message) && /\b(?:ca si|nghe si|sau (?:show|dem nhac|buoi dien)|dang ky|giao luu)\b/.test(message);
+  if (asksArtistPhoto && (onlyGeneral || [...intents].every(intent => ["show", "interaction", "general"].includes(intent)))) return artistPhotoNotice;
   const open = Boolean(show && messengerShowOpen(show, now));
   const askHowToPay = intents.has("payment") && !memory.paymentStatus &&
     /\b(?:cach|huong dan|lam sao|the nao|nhu the nao)\b/.test(message) &&
     !/\bda\s+(?:thanh toan|chuyen khoan)|\b(?:thanh toan|chuyen khoan)\s+(?:roi|xong|chua)\b/.test(message);
-  const answers: string[] = [];
+  const answers: string[] = asksArtistPhoto && !(intents.has("payment") && memory.paymentStatus === "paid") ? [artistPhotoNotice] : [];
   if (intents.has("payment") && !askHowToPay) {
     const askingAccount = /\b(?:so tai khoan|stk)\b/.test(message);
     answers.push(askingAccount && memory.paymentStatus === "paid"

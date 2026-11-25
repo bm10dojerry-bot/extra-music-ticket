@@ -9,6 +9,7 @@
     "test:ai-sale-2-1": "node --experimental-strip-types --test tests/ai-sale-extra-2-1.test.mjs"
   },
   "dependencies": {
+    "@vercel/blob": "2.9.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

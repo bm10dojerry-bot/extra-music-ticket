@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { requestedSeatMaps } from "../lib/messenger-sale-media.ts";
 import { initial21, daysToShow, simulateExtra21 } from "../lib/ai-sale-extra-2-1.ts";
 
 const check = (scenario, changes = {}) => simulateExtra21({ ...initial21, scenario, ...changes });
@@ -38,7 +39,7 @@ test("three-minute follow-up only occurs once for an unanswered AI sales reply",
 test("after purchase requires verified paid status", () => {
   assert.equal(check("after_purchase", { paymentVerified: false }).eligible, false);
   assert.match(check("after_purchase").message, /mã QR/);
-  assert.match(check("after_purchase").message, /khi ban tổ chức xác nhận/);
+  assert.match(check("after_purchase").message, /15 phút.*đăng ký với Ban Tổ chức/u);
 });
 test("show-day weather never claims current conditions without verification", () => {
   assert.match(check("show_day", { today: "2026-11-28" }).message, /có thể lạnh/);
@@ -59,12 +60,37 @@ test("voice requires consent and configured channel", () => {
   assert.equal(check("voice", { voiceConsent: true }).eligible, false);
   assert.equal(check("voice", { voiceConsent: true, audioChannelReady: true }).eligible, true);
 });
-test("seat-map attachments require exactly two authorized HTTPS urls", () => {
-  assert.equal(check("images").eligible, false);
-  assert.equal(check("images", { seatMapUrls: ["http://example.com/a.png", "https://example.com/b.png"] }).eligible, false);
-  const value = check("images", { seatMapUrls: ["https://example.com/a.png", "https://example.com/b.png"] });
-  assert.equal(value.attachments.length, 2);
-  assert.equal(value.eligible, true);
+test("artist photos are a 15 minute session after the show and registration is through the organizer", () => {
+  for (const [scenario,changes] of [["after_purchase",{}],["day_before",{}],["show_day",{today:initial21.showDate}],["photo_reminder",{}],["day_before",{ticketState:"not_purchased"}]]) {
+    const value = check(scenario, changes);
+    assert.match(value.message, /Sau khi đêm nhạc kết thúc.*15 phút.*chụp ảnh cùng ca sĩ.*đăng ký với Ban Tổ chức/u);
+    assert.doesNotMatch(check(scenario,{...changes,photoNoticeAlreadySent:true}).message,/15 phút/);
+  }
+  for (const change of [{paymentVerified:false},{ticketState:"pending"},{ticketState:"cancelled"},{today:"2026-11-29"},{optedOut:true},{reminderAlreadySent:true},{withinMessengerWindow:false}]) {
+    assert.equal(check("photo_reminder",change).eligible,false);
+  }
+});
+test("image preview selects verified originals for exactly the requested venue", () => {
+  assert.equal(check("images").eligible,false);
+  const availableMaps = ["ccc","laocai"];
+  for (const [requestedMap,expected] of [["ccc",["CCC Sa Pa · 550 ghế"]],["laocai",["Lào Cai · 600 ghế"]],["both",["CCC Sa Pa · 550 ghế","Lào Cai · 600 ghế"]]]) {
+    assert.deepEqual(check("images",{requestedMap,availableMaps}).attachments,expected);
+  }
+  assert.deepEqual(check("images",{requestedMap:"both",availableMaps:["laocai"]}).attachments,["Lào Cai · 600 ghế"]);
+  assert.equal(check("images",{availableMaps,withinMessengerWindow:false}).eligible,false);
+});
+test("Messenger distinguishes the venue, artist photos and the pronoun anh", () => {
+  assert.deepEqual(requestedSeatMaps("Cho anh xin sơ đồ CCC Sa Pa, Lào Cai","laocai"),["ccc"]);
+  assert.deepEqual(requestedSeatMaps("Cho xem sơ đồ Lào Cai","ccc"),["laocai"]);
+  assert.deepEqual(requestedSeatMaps("Cho xem sơ đồ CCC và Lào Cai"),["ccc","laocai"]);
+  assert.deepEqual(requestedSeatMaps("Gửi em cả hai sơ đồ"),["ccc","laocai"]);
+  assert.deepEqual(requestedSeatMaps("Cho em xin sơ đồ","moana"),[]);
+  assert.deepEqual(requestedSeatMaps("Cho mình xin sơ đồ","ccc"),["ccc"]);
+  assert.deepEqual(requestedSeatMaps("Gửi sơ đồ Moana Sa Pa, Lào Cai","ccc"),[]);
+  assert.deepEqual(requestedSeatMaps("Gửi sơ đồ Sa Pa","laocai"),[]);
+  assert.deepEqual(requestedSeatMaps("Cho anh hỏi giá vé","ccc"),[]);
+  assert.deepEqual(requestedSeatMaps("Em muốn đăng ký chụp ảnh cùng ca sĩ","ccc"),[]);
+  assert.deepEqual(requestedSeatMaps("Cho xem ảnh ca sĩ","ccc"),[]);
 });
 test("no outreach after opt-out or staff handover", () => {
   for (const scenario of ["three_min", "day_before", "after_purchase", "after_show"]) {

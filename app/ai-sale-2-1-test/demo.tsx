@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { initial21, simulateExtra21, type Extra21Input, type Scenario, type TicketState } from "../../lib/ai-sale-extra-2-1";
+import { initial21, simulateExtra21, seatMapNames, type SeatMapVenue, type Extra21Input, type Scenario, type TicketState } from "../../lib/ai-sale-extra-2-1";
 import styles from "./demo.module.css";
 
 const scenarios: { id: Scenario; name: string; hint: string }[] = [
   { id: "after_purchase", name: "Sau mua vé", hint: "Cảm ơn, check-in, giao lưu" },
+  { id: "photo_reminder", name: "Đăng ký chụp ảnh", hint: "Nhắc khách đã mua vé" },
   { id: "three_min", name: "Im lặng 3 phút", hint: "Nhắc khách chưa mua" },
   { id: "day_before", name: "Trước show 1 ngày", hint: "Nhắc theo trạng thái vé" },
   { id: "show_day", name: "Ngày biểu diễn", hint: "Đến sớm, mặc áo ấm" },
@@ -29,21 +30,21 @@ function clampMinutes(value: string) {
   return Number.isFinite(numeric) ? Math.min(1440, Math.max(0, numeric)) : 0;
 }
 
-export default function Extra21Demo() {
-  const [data, setData] = useState<Extra21Input>(initial21);
+export default function Extra21Demo({availableMaps}: {availableMaps: SeatMapVenue[]}) {
+  const [data, setData] = useState<Extra21Input>({...initial21, availableMaps});
   const result = useMemo(() => simulateExtra21(data), [data]);
   const change = (patch: Partial<Extra21Input>) => setData(previous => ({ ...previous, ...patch }));
   const choose = (scenario: Scenario) => setData(previous => ({
     ...previous, scenario, reminderAlreadySent: false, optedOut: false, humanHandling: false,
     today: scenario === "show_day" ? previous.showDate : scenario === "after_show" ? "2026-11-29" : "2026-11-27",
     ticketState: scenario === "three_min" ? "not_purchased" :
-      ["after_purchase", "show_day", "after_show"].includes(scenario) ? "paid" : previous.ticketState,
+      ["photo_reminder", "after_purchase", "show_day", "after_show"].includes(scenario) ? "paid" : previous.ticketState,
     paymentVerified: scenario === "three_min" ? false :
-      ["after_purchase", "show_day", "after_show"].includes(scenario) ? true : previous.paymentVerified,
+      ["photo_reminder", "after_purchase", "show_day", "after_show"].includes(scenario) ? true : previous.paymentVerified,
   }));
   const isReminder = data.scenario === "three_min" || data.scenario === "day_before";
   const isWeather = data.scenario === "weather" || data.scenario === "show_day";
-  const relevantStatus = ["after_purchase", "three_min", "day_before", "show_day", "after_show"].includes(data.scenario);
+  const relevantStatus = ["photo_reminder", "after_purchase", "three_min", "day_before", "show_day", "after_show"].includes(data.scenario);
 
   return <main className={styles.main}>
     <div className={styles.shell}>
@@ -55,7 +56,7 @@ export default function Extra21Demo() {
         <span className={styles.eyebrow}>AI SALE EXTRA 2.1 / TEST LAB</span>
         <h1>Mô phỏng chăm sóc khách hàng <em>trọn hành trình</em></h1>
         <p>Chọn một tình huống và thay đổi điều kiện bên dưới. Hệ thống sẽ mô phỏng lời nhắn hoặc chặn gửi khi chưa đủ quyền. Không sử dụng Fanpage, tiền thật, ghế thật hay dữ liệu khách hàng.</p>
-        <div className={styles.markers}><span>9 kịch bản</span><span>Chặn gửi trùng</span><span>Kiểm tra quyền nhắn</span><span>Bảo vệ luồng bán vé</span></div>
+        <div className={styles.markers}><span>{scenarios.length} kịch bản</span><span>Chặn gửi trùng</span><span>Kiểm tra quyền nhắn</span><span>Bảo vệ luồng bán vé</span></div>
       </section>
 
       <div className={styles.columns}>
@@ -106,19 +107,22 @@ export default function Extra21Demo() {
               <Toggle label="Có rạp và căng tăng che mưa, đã xác nhận tại địa điểm" checked={data.canopyConfirmed} onChange={v => change({canopyConfirmed:v})} />
             </div>}
 
-            {data.scenario === "after_purchase" && <Toggle label="BTC xác nhận lịch giao lưu chụp ảnh với ca sĩ" checked={data.artistPhotoConfirmed} onChange={v => change({artistPhotoConfirmed:v})} />}
+            {["photo_reminder", "after_purchase", "day_before", "show_day"].includes(data.scenario) && <Toggle label="Khách đã được nhắc đăng ký chụp ảnh cho show này" checked={data.photoNoticeAlreadySent} onChange={v => change({photoNoticeAlreadySent:v})} />}
 
             {data.scenario === "complaint" && <label className={styles.field}>Số hotline chính thức (chỉ nhập khi đã xác minh)
               <input value={data.verifiedHotline} onChange={e => change({verifiedHotline:e.target.value})} placeholder="Chưa có số hotline xác minh" />
             </label>}
 
             {data.scenario === "images" && <div className={styles.group}>
-              <h3>Hai ảnh sơ đồ chính thức</h3>
-              <p className={styles.hint}>Chỉ điền URL HTTPS của ảnh đã được duyệt. Bản demo không tải lên hoặc gửi ảnh.</p>
-              {[0,1].map(i => <label className={styles.field} key={i}>Ảnh sơ đồ {i+1}
-                <input value={data.seatMapUrls[i] || ""} placeholder={"https://.../so-do-"+(i+1)+".png"}
-                  onChange={e => change({seatMapUrls:[i===0?e.target.value:data.seatMapUrls[0]||"", i===1?e.target.value:data.seatMapUrls[1]||""]})} />
-              </label>)}
+              <h3>Sơ đồ khách yêu cầu qua Messenger</h3>
+              <div className={styles.statuses}>
+                {(["ccc","laocai","both"] as const).map(v => <button key={v} type="button"
+                  className={data.requestedMap === v ? styles.statusActive : styles.status}
+                  aria-pressed={data.requestedMap === v} onClick={() => change({requestedMap:v})}>
+                  {v === "both" ? "Cả hai địa điểm" : seatMapNames[v]}
+                </button>)}
+              </div>
+              {(["ccc","laocai"] as const).map(v => <p key={v} className={styles.hint}>{seatMapNames[v]} · {availableMaps.includes(v) ? "Đã kiểm tra đúng ảnh gốc" : "Chưa đọc được ảnh gốc"}</p>)}
             </div>}
 
             {data.scenario === "voice" && <div className={styles.group}>
@@ -131,7 +135,7 @@ export default function Extra21Demo() {
               <Toggle label="Trong cửa sổ phản hồi Messenger hợp lệ" checked={data.withinMessengerWindow} onChange={v => change({withinMessengerWindow:v})} />
               {(data.scenario === "day_before" || data.scenario === "three_min") &&
                 <Toggle label="Khách đồng ý nhận tin marketing phù hợp" checked={data.marketingOptIn} onChange={v => change({marketingOptIn:v})} />}
-              {["day_before", "show_day", "after_purchase", "after_show"].includes(data.scenario) &&
+              {["photo_reminder", "day_before", "show_day", "after_purchase", "after_show"].includes(data.scenario) &&
                 <Toggle label="Khách đồng ý thông báo dịch vụ phù hợp" checked={data.serviceNotificationOptIn} onChange={v => change({serviceNotificationOptIn:v})} />}
               <Toggle label="Khách từ chối nhận tin" checked={data.optedOut} onChange={v => change({optedOut:v})} />
               <Toggle label="Nhân viên đang xử lý" checked={data.humanHandling} onChange={v => change({humanHandling:v})} />
@@ -150,13 +154,13 @@ export default function Extra21Demo() {
               {result.message ? <p>{result.message}</p> : <p className={styles.empty}>Không tạo lời nhắn cho tình huống hiện tại. Hãy thay đổi điều kiện bên trái để kiểm tra.</p>}
             </div>
             {result.attachments.length > 0 && <div className={styles.attachments}>
-              <strong>Hai tệp đính kèm dự kiến</strong>
-              {result.attachments.map((url,i)=><div key={i}>Ảnh {i+1}: {url}</div>)}
+              <strong>Tệp đính kèm dự kiến</strong>
+              {result.attachments.map(name => <div key={name}>{name}</div>)}
             </div>}
             <h3>Kiểm soát</h3>
             <ul>{result.notes.length ? result.notes.map((note,i)=><li key={i}>{note}</li>) :
               <li>Không phát sinh API Messenger, không tạo đơn, không thay đổi trạng thái thanh toán.</li>}</ul>
-            <button className={styles.reset} onClick={() => setData(initial21)}>Đặt lại tất cả tình huống</button>
+            <button className={styles.reset} onClick={() => setData({...initial21, availableMaps})}>Đặt lại tất cả tình huống</button>
           </section>
           <div className={styles.footnote}>Dữ liệu trên trang này chỉ nhằm kiểm thử kịch bản. Tốc độ Messenger, quyền nhắn ngoài 24 giờ, ảnh thật và voice thật phải được xác minh riêng trước khi sử dụng với khách hàng.</div>
         </aside>

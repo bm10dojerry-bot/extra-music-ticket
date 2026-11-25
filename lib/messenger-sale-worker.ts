@@ -1,6 +1,8 @@
 import "server-only";
 import { getMessengerDisplayName, MessengerSendError, messengerOutboundMetadata, sendMessengerPageMessage, sendMessengerPageImage, sendMessengerPageAudio, sendMessengerTypingAction } from "./facebook-messenger";
-import { checkedMediaUrl, configuredSeatMaps, requestedSeatMaps, requestedVoiceChoice, shouldOfferVoice, voiceOfferEnabled, voiceOfferMessage } from "./messenger-sale-media";
+import { checkedMediaUrl, requestedSeatMaps, requestedVoiceChoice, shouldOfferVoice, voiceOfferEnabled, voiceOfferMessage } from "./messenger-sale-media";
+import { readMessengerSeatMap } from "./messenger-seatmap-files";
+import { seatMapNames } from "./ai-sale-extra-2-1";
 import { voiceReplyAllowed } from "./messenger-voice";
 import { loadMessengerSaleInventory, loadMessengerSalePromotions, loadMessengerSaleShows } from "./messenger-sale-data";
 import { deriveMessengerSaleMemory, type MessengerSaleMemory } from "./messenger-sale-memory";
@@ -84,19 +86,17 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   // This whole worker is restricted to the configured pilot testers.
   // Never infer that a static venue poster represents live availability or pricing.
   const wantedMaps = requestedSeatMaps(message.body, show?.venue);
-  const urls = configuredSeatMaps();
-  const images = wantedMaps.flatMap(venue => urls[venue] ? [{ venue, url: urls[venue]! }] : []);
+  const images = await Promise.all(wantedMaps.map(async venue => ({venue, file: await readMessengerSeatMap(venue)})));
   const voiceReady = voiceOfferEnabled();
   const voiceChoice = requestedVoiceChoice(message.body, Boolean(context.voiceOffered));
   const voiceAccepted = voiceChoice === "yes" && voiceReady;
   const voiceUrl = checkedMediaUrl(process.env.MESSENGER_SALE_VOICE_AUDIO_URL);
   const extras: string[] = [];
   if (wantedMaps.length) {
-    const missing = wantedMaps.filter(venue => !urls[venue]);
-    if (images.length) extras.push("Em gửi kèm ảnh sơ đồ bố cục để mình tham khảo, còn vị trí và số ghế có thể mua phải kiểm tra trên trang đặt vé trực tiếp ạ. "
-      + images.map(item => item.url).join(" "));
-    if (missing.length) extras.push("Ảnh sơ đồ " + missing.map(v => v === "ccc" ? "CCC Sa Pa" : "Lào Cai").join(" và ")
-      + " chưa sẵn sàng gửi trên Messenger. Mình có thể xem sơ đồ ghế cập nhật trên trang đặt vé ạ.");
+    const missing = images.filter(item => !item.file);
+    if (images.some(item => item.file)) extras.push("Sơ đồ minh họa bố trí ghế. Khi mình chọn chỗ, em sẽ kiểm tra ghế còn trống theo đúng show ạ.");
+    if (missing.length) extras.push("Ảnh sơ đồ " + missing.map(item => seatMapNames[item.venue]).join(" và ")
+      + " hiện chưa sẵn sàng. Mình có thể xem ghế trên trang đặt vé ạ.");
   }
   if (voiceChoice === "no") {
     context.voiceConsent = "no";
@@ -126,7 +126,7 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   prepared = true;
   let delivery: { messageId: string };
   try {
-   delivery = await sendMessengerPageMessage(psid, result.text!, messengerOutboundMetadata("ai", claim.token));
+   delivery = await sendMessengerPageMessage(psid, replyText, messengerOutboundMetadata("ai", claim.token));
   } catch (error) {
    await finish(error instanceof MessengerSendError && !error.deliveryUncertain ? "rejected" : "unknown");
    if (!(error instanceof MessengerSendError)) console.warn("[messenger-ai] Outbound delivery could not be verified");
@@ -137,9 +137,10 @@ export async function processMessengerSaleChat(chatId: string, psid: string, pil
   // secondary attachment failed; that would duplicate a sale conversation.
   await finish("sent", delivery.messageId);
   for (const item of images) {
+    if (!item.file) continue;
     try {
-      await sendMessengerPageImage(psid, item.url, messengerOutboundMetadata("ai", claim.token));
-      console.info("[messenger-ai-media] Seat-map delivery accepted", item.venue);
+      const accepted = await sendMessengerPageImage(psid, item.file, messengerOutboundMetadata("ai", claim.token));
+      console.info("[messenger-ai-media] Seat-map delivery accepted", item.venue, accepted.messageId);
     } catch {
       console.warn("[messenger-ai-media] Seat-map delivery not confirmed", item.venue);
     }

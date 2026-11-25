@@ -46,17 +46,18 @@ export async function sendMessengerPageMessage(psid:string,message:string,metada
 }
 
 /** Send an approved CCC/Lao Cai image to a permitted pilot tester, not a random PSID. */
-export async function sendMessengerPageImage(psid:string,imageUrl:string,metadata?:string):Promise<{messageId:string}>{
+export async function sendMessengerPageImage(psid:string,image:File,metadata?:string):Promise<{messageId:string}>{
  const config=getMessengerConfig();
  if(!config)throw Error("Messenger Page chưa được cấu hình");
  if(!/^\d{5,80}$/.test(psid))throw Error("Mã khách Messenger không hợp lệ");
  if(!canContactMessenger(config.pageId,psid))throw new MessengerSendError(false);
- const url=checkedMediaUrl(imageUrl);
- if(!url)throw new MessengerSendError(false);
+ const body = new FormData();
+ body.set("recipient", JSON.stringify({id:psid}));
+ body.set("messaging_type", "RESPONSE");
+ body.set("message", JSON.stringify({attachment:{type:"image",payload:{}}, ...(metadata ? {metadata} : {})}));
+ body.set("filedata", image, image.name);
  const res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
-  method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
-  body:JSON.stringify({recipient:{id:psid},messaging_type:"RESPONSE",
-   message:{attachment:{type:"image",payload:{url,is_reusable:false}},...(metadata?{metadata}:{})}}),
+  method:"POST",headers:{Authorization:"Bearer "+config.pageToken},body,
   cache:"no-store",signal:AbortSignal.timeout(9500)
  }).catch(()=>{throw new MessengerSendError(true)});
  const data=await res.json().catch(()=>({})) as SendResponse;

@@ -11,14 +11,22 @@ const normalize = (raw: string) => raw.normalize("NFD").replace(/\p{M}/gu, "").r
 export function requestedSeatMaps(message: string, currentVenue?: string | null): SeatMapVenue[] {
   const text = normalize(message);
   // Do not throw a poster at a person who merely mentions a seat or a stage.
-  const requestsVisual = /\b(?:so do|hinh|anh|ban do|hinh ve|nhin so do|xem vi tri)\b/.test(text);
-  const asksToShow = /\b(?:xem|gui|cho|xin|show|co|dua|can|muon)\b/.test(text);
-  if (!requestsVisual || !asksToShow) return [];
+  const asksToShow = /\b(?:xem|gui|cho|xin|dua|can|muon|co)\b/.test(text);
+  const map = /\b(?:so do|ban do|xem vi tri|khu ghe)\b/.test(text);
+  // Preserve the accent: the Vietnamese pronoun “anh” is not a request for an image.
+  const asksImage = /(?:ảnh|hình)/iu.test(message) || /\b(?:gui|xem|xin) (?:anh|hinh)\b/.test(text);
+  const photoSession = /\bchup (?:anh|hinh)\b/.test(text);
+  const otherImage = /\b(?:ca si|nghe si|poster|hoa don|chuyen khoan|ma qr|ve dien tu)\b/.test(text);
+  if ((!map && (!asksImage || photoSession || otherImage)) || (!asksToShow && !map)) return [];
   const wantsBoth = /\b(?:ca hai|hai so do|2 so do|ca 2|hai anh|2 anh|hai hinh|2 hinh)\b/.test(text);
   const ccc = /\bccc\b/.test(text);
+  // Lào Cai can be the province in the full address of CCC Sa Pa.
+  const separateLaoCai = /\b(?:va|voi|cung|them) (?:o |tai |so do )*lao cai\b/.test(text);
   const laocai = /\b(?:lao cai|laocai)\b/.test(text);
-  if (wantsBoth || (ccc && laocai)) return ["ccc", "laocai"];
+  if (wantsBoth || (ccc && laocai && (separateLaoCai || /lao cai.*(?:va|voi).*ccc|ccc[^,]*\s[&+/]\s*lao cai/.test(text)))) return ["ccc", "laocai"];
   if (ccc) return ["ccc"];
+  if (/\bmoana\b/.test(text)) return [];
+  if (/\bsa pa\b/.test(text)) return currentVenue === "ccc" ? ["ccc"] : [];
   if (laocai) return ["laocai"];
   return currentVenue === "ccc" || currentVenue === "laocai" ? [currentVenue] : [];
 }
@@ -32,13 +40,6 @@ export function checkedMediaUrl(value: string | undefined): string | null {
         || url.hostname === "127.0.0.1" || url.hostname.endsWith(".invalid")) return null;
     return url.toString();
   } catch { return null; }
-}
-
-export function configuredSeatMaps(env: NodeJS.ProcessEnv = process.env) {
-  return {
-    ccc: checkedMediaUrl(env.MESSENGER_SALE_CCC_SEAT_MAP_URL),
-    laocai: checkedMediaUrl(env.MESSENGER_SALE_LAOCAI_SEAT_MAP_URL),
-  };
 }
 
 export function voiceOfferEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
