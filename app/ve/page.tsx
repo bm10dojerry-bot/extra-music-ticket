@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useState} from "react";
+import {artistPhotoNotice} from "../../lib/show-family-policy";
 import QRCode from "qrcode";
 type Ticket={id:string;seat:string;zone:string|null;checkedIn:boolean;qrValue:string};
 type Data={code:string;showId:string;showTitle:string;artist:string|null;showDate:string|null;showTime:string|null;venueName:string|null;venueAddress:string|null;buyerName:string;isVipInvitation?:boolean;amount:number;tickets:Ticket[]};
@@ -13,7 +14,7 @@ export default function TicketsPage(){
  <div style={{textAlign:"center",marginBottom:26}}><div style={{color:"#ff6878",fontSize:12,letterSpacing:3}}>CHÀO MỪNG BẠN ĐẾN VỚI EXTRA</div><h1 style={{fontSize:"clamp(26px,6vw,38px)",margin:"12px 0"}}>{data?.isVipInvitation?"THƯ MỜI VIP · +1 EXTRA":"Tấm vé cho một đêm đáng nhớ"}</h1><p style={{color:"#c6c0b5",lineHeight:1.7}}>{data?.isVipInvitation?"Trân trọng kính mời bạn tham dự +1 EXTRA MUSIC SHOW.":"Cảm ơn bạn đã chọn đồng hành cùng +1 EXTRA MUSIC SHOW."}</p></div>
  {error&&<div role="alert" style={{padding:20,background:"#382024",borderRadius:12}}>{error}</div>}
  {!data&&!error&&<p style={{textAlign:"center"}}>Đang chuẩn bị vé của bạn...</p>}
- {data&&<><div style={{textAlign:"center",marginBottom:22,color:"#d4c4c7"}}>Mã đơn <strong style={{color:"#fff"}}>{data.code}</strong></div>
+ {data&&<><p style={{lineHeight:1.6}}>{artistPhotoNotice}</p><div style={{textAlign:"center",marginBottom:22,color:"#d4c4c7"}}>Mã đơn <strong style={{color:"#fff"}}>{data.code}</strong></div>
  <div style={{display:"grid",gap:24}}>{data.tickets.map((t,i)=><section key={t.id} style={{border:"1px solid #65343d",borderRadius:22,overflow:"hidden",background:"#161719",boxShadow:"0 20px 50px #0007"}}>
  <div style={{textAlign:"center",padding:"18px 20px 0",color:"#d4c4c7",fontSize:14}}>{data.isVipInvitation?"Khách mời VIP":t.zone==="A"||t.zone==="B"?"The VIP":"Khách hàng"}: <strong style={{color:"#fff"}}>{data.buyerName}</strong></div>
  <div style={{background:"linear-gradient(135deg,#481b27,#161719 70%)",padding:"30px 24px 25px",textAlign:"center",borderBottom:"1px dashed #806b4c"}}>

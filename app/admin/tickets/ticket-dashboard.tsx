@@ -4,9 +4,9 @@ type Order={code:string;show_id:string;seats:string[];amount_vnd:number;buyer_na
 type Data={totals:{orders:number;revenue:number;tickets:number;checkedIn:number};orders:Order[]};
 const money=(n:number)=>new Intl.NumberFormat("vi-VN").format(n)+"đ";
 const csvCell=(v:unknown)=>'"'+String(v??"").replace(/"/g,'""')+'"';
-export default function TicketAdmin({embedded=false}:{embedded?:boolean}){
+export default function TicketAdmin({embedded=false,initialOrderCode=""}:{embedded?:boolean;initialOrderCode?:string}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(""),[sending,setSending]=useState("");
- const [show,setShow]=useState("all"),[query,setQuery]=useState(""),[emailFilter,setEmailFilter]=useState("all");
+ const [show,setShow]=useState("all"),[query,setQuery]=useState(initialOrderCode),[emailFilter,setEmailFilter]=useState("all");
  async function load(){try{const r=await fetch("/api/admin/tickets",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Không tải được");setData(d)}catch(e){setError(e instanceof Error?e.message:"Lỗi tải dữ liệu")}}
  useEffect(()=>{void load()},[]);
  async function sendEmail(code:string){setSending(code);setError("");try{const r=await fetch("/api/admin/tickets/send-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});const d=await r.json();if(!r.ok)throw Error(d.error||"Không gửi được");await load()}catch(e){setError(e instanceof Error?e.message:"Không gửi được email")}finally{setSending("")}}

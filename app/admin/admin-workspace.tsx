@@ -62,7 +62,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
  const primary:ReadonlyArray<{id:AdminSection;label:string}>=[
   {id:"overview",label:"Home"},{id:"tickets",label:"Vé"},
   actor.role==="admin"?{id:"sale-performance",label:"Sale"}:{id:"shows",label:"Show"},
-  {id:"support-chats",label:"Chat"},
+  actor.role==="admin"?{id:"ai-sales",label:"AI"}:{id:"support-chats",label:"Chat"},
  ];
  const extraActive=!primary.some(item=>item.id===section);
  const displayName=actor.display_name||actor.username;

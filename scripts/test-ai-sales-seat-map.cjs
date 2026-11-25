@@ -1,0 +1,27 @@
+"use strict";
+const fs=require("node:fs"),assert=require("node:assert/strict"),test=require("node:test"),ts=require("typescript"),sharp=require("sharp");
+function load(path,mocks={}){const result=ts.transpileModule(fs.readFileSync(path,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});const mod={exports:{}};new Function("require","module","exports",result.outputText)(n=>Object.hasOwn(mocks,n)?mocks[n]:require(n),mod,mod.exports);return mod.exports;}
+const venues=load("lib/venues.ts"),policy=load("lib/ai-sales-seat-map.ts"),renderer=load("lib/seat-map-image.ts",{"./venues":venues});
+const mk=(id,artist,date,venueId)=>({id,artist,date,venueId,url:"https://iextra.net/show/"+id});
+const c=mk("dinh-dung-2811","Đình Dũng","2026-11-28","ccc"),l=mk("ho-quang-hieu-2412","Hồ Quang Hiếu","2026-12-24","laocai"),m=mk("minh-vuong-0512","Minh Vương + Duy Khoa","2026-12-05","ccc"),shows=[c,l,m];
+const msg=(body,sender="customer")=>({body,sender,staff_name:sender==="staff"?"EXTRA AI":null});
+const choose=(latest,history=[],context=null,known=null)=>policy.selectSeatMap(latest,[...history,msg(latest)],shows,context,known);
+for(const [q,v] of [["Em ơi có sơ đồ ghế để xem không",true],["Gửi mình sơ đồ CCC",true],["cho xem hình ghế",true],["Không cần sơ đồ ghế",false],["cho xin mã chuyển khoản",false],["giá vé bao nhiêu",false]])test("intent "+q,()=>assert.equal(policy.isSeatMapRequest(q),v));
+test("latest named show wins",()=>assert.deepEqual(choose("Sơ đồ Hồ Quang Hiếu",[msg("Đình Dũng")]),{venue:"laocai",show:l}));
+test("history context",()=>assert.deepEqual(choose("Cho xem sơ đồ ghế",[msg("Đình Dũng")]),{venue:"ccc",show:c}));
+test("known order context",()=>assert.deepEqual(choose("Cho xem sơ đồ ghế",[],null,l.id),{venue:"laocai",show:l}));
+test("ad context",()=>assert.deepEqual(choose("Cho xem sơ đồ ghế",[],{artist:"Hồ Quang Hiếu"}),{venue:"laocai",show:l}));
+test("explicit venue",()=>assert.deepEqual(choose("Sơ đồ CCC"),{venue:"ccc"}));
+test("explicit venue overrides old one",()=>assert.deepEqual(choose("Sơ đồ Lào Cai",[msg("Đình Dũng")]),{venue:"laocai"}));
+test("multiple shows different venues require clarification",()=>assert.equal(choose("Sơ đồ Đình Dũng và Hồ Quang Hiếu"),null));
+test("no context no guess",()=>assert.equal(choose("Sơ đồ ghế"),null));
+test("Moana not swapped to CCC",()=>assert.equal(choose("Sơ đồ Moana"),null));
+test("artist alias",()=>assert.equal(choose("Sơ đồ Duy Khoa").show.id,m.id));
+test("date",()=>assert.equal(choose("Sơ đồ 24/12").show.id,l.id));
+test("plain image no link",()=>assert.ok(!policy.seatMapCaption({venue:"ccc",show:c},false).includes("https://")));
+test("availability stays in chat",()=>{assert.equal(policy.wantsSeatAvailability("Sơ đồ ghế còn trống"),true);assert.ok(!policy.seatMapCaption({venue:"laocai",show:l},true).includes(l.url));});
+test("no specific show no made-up link",()=>assert.ok(!policy.seatMapCaption({venue:"ccc"},true).includes("https://")));
+test("asset links only intended venues",()=>assert.equal(policy.SEAT_MAP_URL("ccc"),"https://iextra.net/api/public/seat-map/ccc"));
+for(const [v,count] of [["ccc",550],["laocai",600]])test(v+" geometry and image decode",async()=>{const svg=renderer.renderSeatMapSvg(v);assert.equal((svg.match(/<circle cx=/g)||[]).length,count+4);assert.match(svg,/Không thể hiện tình trạng ghế trống/);assert.match(svg,v==="ccc"?/rotate\(90 1267 680\)/:/x="320" y="244"/);const png=await sharp(Buffer.from(svg)).png().toBuffer();const meta=await sharp(png).metadata();assert.equal(meta.width,1440);assert.equal(meta.height,1220);});
+test("layout overrides applied",()=>assert.equal((renderer.renderSeatMapSvg("ccc",{A:40}).match(/<circle cx=/g)||[]).length,544));
+test("worker uses guarded outbox before quick reply",()=>{const w=fs.readFileSync("lib/ai-sales.ts","utf8");assert.match(w,/seatMapUrl\?"seat-map":action\.purpose/);assert.match(w,/seatMapUrl\?await sendMessengerPageImage/);assert.ok(w.indexOf("isSeatMapRequest(latest.body)")<w.indexOf("const quickReply="));assert.match(w,/error\.ambiguous\)throw error/);assert.match(w,/await extraSendPaymentQr/);});
