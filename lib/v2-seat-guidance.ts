@@ -50,14 +50,14 @@ export function rankSeatGroups(venue: VenueId, layout: Seat[], free: Seat[], pri
   return [...new Set([near,ranked[0]].filter((o): o is SeatOption => Boolean(o)))];
 }
 
-export function describeSeats(options: ReturnType<typeof rankSeatGroups>, artist: string, preference: 'price'|'near'|'far'|'compare'='compare') {
+export function describeSeats(options: ReturnType<typeof rankSeatGroups>, artist: string, preference: 'price'|'near'|'far'|'compare'='compare', label:(zone:string)=>string=z=>'hạng '+z) {
   if (!options.length) return 'Em chưa tìm được ghế trống phù hợp với các điều kiện của mình trong đêm ' + artist + '. Mình muốn em kiểm tra góc khác hay mức giá khác ạ?';
   const views = {left:'chếch trái',center:'chính diện',right:'chếch phải'};
   const sorted=[...options];
   if(preference==='price')sorted.sort((a,b)=>a.price-b.price);
   if(preference==='far')sorted.sort((a,b)=>b.position-a.position);
   const first=sorted[0];
-  const location=(o:typeof first)=>o.ids.join(', ')+' (hạng '+o.tier+'), '+o.depth+', góc '+views[o.view]+', '+o.price.toLocaleString('vi-VN')+'đ/vé';
+  const location=(o:typeof first)=>o.ids.join(', ')+' ('+label(o.tier)+'), '+o.depth+', góc '+views[o.view]+', '+o.price.toLocaleString('vi-VN')+'đ/vé';
   const intro=preference==='price'?'Để tiết kiệm, mình có thể chọn ':preference==='near'?'Nếu muốn nhìn ca sĩ gần hơn, em gợi ý ':preference==='far'?'Nếu thích ngồi phía sau, mình tham khảo ':'Em vừa kiểm tra đêm '+artist+', hiện còn ';
   let answer=intro+location(first)+'.';
   const second=sorted[1];

@@ -1,3 +1,4 @@
+import {tierName} from "./poster-offers";
 import 'server-only';
 import {seatAdvicePage} from './show-family-policy';
 import {getAiSeatSnapshot, listAiSalesShows} from './ai-sales-checkout';
@@ -36,7 +37,7 @@ export async function prepareSeatAdvice(chatId:string, jobId:string|null, body:s
   // If a send is still unresolved, continue advising by text until the customer explicitly requests a resend.
   const sendImage = intent.requestImage && (intent.repeat || !await previousAttachment(chatId,jobId,marker).catch(() => true));
   if (sendImage && !intent.advice) return {sendImage,selected};
-  const intro = selected.venue === 'ccc' ? 'Ở CCC Sa Pa, ghế xếp vòng cung hướng về sân khấu bên phải sơ đồ. Khu Premium sát sân khấu, kế đến là VIP rồi tới các khu Standard phía sau.' : 'Ở Lào Cai, sân khấu ở phía trước hai dãy ghế. Khu VIP gần ca sĩ nhất, Standard 1 ở giữa và Standard 2 ở xa hơn.';
+  const intro = selected.venue === 'ccc' ? 'Ở CCC Sa Pa, ghế xếp vòng cung hướng về sân khấu bên phải sơ đồ. Các hàng ghế trải từ sát sân khấu ra phía sau.' : 'Ở Lào Cai, sân khấu ở phía trước hai dãy ghế. Các hàng phía trước gần sân khấu hơn.';
   let text = intro + ' Mình muốn xem đêm nhạc của ca sĩ nào để em so giá vé và chọn ghế phù hợp ạ?';
   const show = shows.find(s => s.id === selected.show?.id && s.venueId === selected.venue);
   if (show) {
@@ -55,7 +56,7 @@ export async function prepareSeatAdvice(chatId:string, jobId:string|null, body:s
         const options = rankSeatGroups(fresh.show.venueId,fresh.seats,fresh.seats.filter(s => !fresh.taken.has(s.id)),fresh.show.prices,quantity,compareTiers ? undefined : memory.zone,memory.seatView,ceiling);
         const request=body.normalize('NFD').replace(/\p{M}/gu,'').replace(/[đĐ]/g,'d').toLowerCase();
         const priority=/so sanh|gan hay xa|thap hay cao/.test(request)?'compare':/\b(?:tiet kiem|re|gia thap|ngan sach)\b/.test(request)?'price':/ngoi xa|hang sau/.test(request)?'far':/gan|hang dau/.test(request)?'near':'compare';
-        text = describeSeats(options,show.artist,priority);
+        text = describeSeats(options,show.artist,priority,z=>tierName(show.id,z));
         if(options.length && !memory.quantity)text+=' Mình đi mấy người để em kiểm tra ghế liền nhau ạ?';
       } catch { text = 'Em chưa kiểm tra được ghế trống và giá hiện tại của đêm ' + show.artist + '. ' + intro; }
     }

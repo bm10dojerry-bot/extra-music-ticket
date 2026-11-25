@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useState} from "react";
+import {hasPoster,posterChildren} from "../lib/poster-offers";
 import {childFareNotice} from "../lib/show-family-policy";
 
 export function useChildSeats(show:string, seats:string[]) {
@@ -16,7 +17,7 @@ export function useChildSeats(show:string, seats:string[]) {
   }
   return {children,toggle};
 }
-export function ChildFareFields({seats,childrenIds,toggle}:{seats:string[];childrenIds:string[];toggle:(seat:string)=>void}) {
-  return <details><summary>Vé trẻ em{childrenIds.length ? " · "+childrenIds.length+" ghế" : ""}</summary><p>{childFareNotice}</p>
-    {seats.length>0 && <fieldset><legend>Chọn ghế riêng cho trẻ dưới 11 tuổi</legend>{seats.map(id=><label key={id} style={{display:"inline-flex",alignItems:"center",marginRight:12}}><input type="checkbox" style={{width:"auto"}} checked={childrenIds.includes(id)} onChange={()=>toggle(id)}/> Ghế {id}</label>)}</fieldset>}</details>;
+export function ChildFareFields({seats,childrenIds,toggle,showId}:{showId:string;seats:string[];childrenIds:string[];toggle:(seat:string)=>void}) {
+  return <details><summary>Vé trẻ em{childrenIds.length ? " · "+childrenIds.length+" ghế" : ""}</summary><p>{hasPoster(showId)?posterChildren:childFareNotice}</p>
+    {seats.length>0 && <fieldset><legend>Chọn ghế riêng cho trẻ dưới {hasPoster(showId)?10:11} tuổi</legend>{seats.map(id=><label key={id} style={{display:"inline-flex",alignItems:"center",marginRight:12}}><input type="checkbox" style={{width:"auto"}} checked={childrenIds.includes(id)} onChange={()=>toggle(id)}/> Ghế {id}</label>)}</fieldset>}</details>;
 }

@@ -39,3 +39,8 @@ change('body:selected.show?"Dạ, ảnh sơ đồ chưa gửi được. Mình xe
  'body:"Em chưa gửi được ảnh sơ đồ. Mình muốn ưu tiên ghế gần ca sĩ, góc chính diện hay mức giá nào để em tư vấn ngay ở đây ạ?"');
 change('const quickReply=(!familyTopic','const quickReply=(!pageWanted&&!familyTopic');
 fs.writeFileSync(file,worker);
+const quickFile="lib/ai-sales-quick-reply.ts";
+const quick=fs.readFileSync(quickFile,"utf8");
+const oldLabel='prices.map(z=>"Hạng "+z+';
+assert.equal(quick.split(oldLabel).length,2);
+fs.writeFileSync(quickFile,'import {tierName} from "./poster-offers";\n'+quick.replace(oldLabel,'prices.map(z=>tierName(show.id,z)+'));

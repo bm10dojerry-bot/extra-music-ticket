@@ -1,3 +1,4 @@
+import {askedOffer,hasPoster,posterChildren} from "./poster-offers";
 import "server-only";
 import {alsoNeedsAdvice,catalogSeatPage,chatFirstPolicy,clarifyBookingPage,requestsImageAndPage,styleSalesReply,wantsBookingPage} from "./messenger-conversation-style";
 import {consultationPolicy, salesPreferences, priceLines, tierPriceQuestion} from "./ai-sales-consultation";
@@ -45,12 +46,6 @@ async function plan(item:Due):Promise<Plan|null>{
  const known=order?.showId||quote?.showId||chatRows[0]?.show_id||comment?.showId;
  const logical=[...history.filter(m=>m.id<item.first_waiting_id),{id:item.customer_message_id,sender:"customer",body:question}];
  const family=question.normalize("NFD").replace(/\p{M}/gu,"").replace(/[đĐ]/g,"d").toLowerCase();
- if(/\b(chup (anh|hinh)|tre em|em be|duoi [0-9]+ tuoi)\b/.test(family)){
-  const notes=[];
-  if(/chup (anh|hinh)/.test(family))notes.push(artistPhotoNotice);
-  if(/tre em|em be|tuoi/.test(family))notes.push(childFareNotice);
-  return reply(notes.join(" "));
- }
  const choice=selectSeatMap(question,logical,shows,comment,known);
  const memory=salesPreferences(history,shows,known);
  const scoped=!memory.showSelectionUnresolved?shows.find(x=>x.id===memory.showId):undefined;
@@ -59,6 +54,16 @@ async function plan(item:Due):Promise<Plan|null>{
  if(askedPage){
    page=catalogSeatPage(show);
    if(!page||!alsoNeedsAdvice(question))return reply(page&&show?"Em gửi mình trang chọn ghế của đêm "+show.artist+" nhé.":clarifyBookingPage);
+ }
+ const offer=askedOffer(question);
+ if(offer||/chup (anh|hinh)/.test(family)){
+   if(!show && offer)return reply("Mình quan tâm đêm nhạc của ca sĩ nào để em kiểm tra đúng chính sách vé ạ?");
+   const notes=[];
+   if(/chup (anh|hinh)/.test(family))notes.push(artistPhotoNotice);
+   if(show && hasPoster(show.id)) {
+     if(offer)notes.push(offer);
+   } else if(offer===posterChildren)notes.push(childFareNotice);
+   if(notes.length)return reply(notes.join(" "));
  }
  if((!askedPage||requestsImageAndPage(question))&&getMessengerConfig()?.pageId==="1223940670813189"){
   const advice=await prepareSeatAdvice(item.chat_id,null,question,logical,comment,known);

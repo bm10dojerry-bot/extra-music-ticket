@@ -1,3 +1,4 @@
+import {askedOffer,normalizePosterTiers,posterAdvice,tierName} from "./poster-offers";
 import type {AiSalesShow} from "./ai-sales-checkout";
 import {artistInteractionExplanation, seatViewQuestion} from "./extra-sale-text-script";
 import {customerRequestsHuman, deriveMessengerSaleMemory} from "./messenger-sale-memory";
@@ -7,6 +8,7 @@ type Message = {sender:string; body:string; staff_name?:string|null};
 type Tier = keyof AiSalesShow["prices"];
 const tiers: Tier[] = ["A","B","C","D"];
 export const consultationPolicy = [
+  posterAdvice,
   "Tư vấn đúng show đang mở bán. Nếu khách đến từ quảng cáo hoặc bình luận có show đã đối chiếu, nhắc đúng tên show trong câu mở đầu. Nếu khách hỏi cụ thể, trả lời ngay.",
   "Khách hỏi giá một hạng thì báo riêng hạng đó theo giá hiện hành của show. Chỉ đưa cả bảng khi khách hỏi chung hoặc yêu cầu tất cả. Khách chỉ tham khảo thì dừng sau khi trả lời.",
   "Nhớ show, số người, hạng, ngân sách và hướng nhìn. Khi khách muốn chọn ghế mà chưa biết hướng, hỏi: "+seatViewQuestion,
@@ -24,7 +26,7 @@ export function salesPreferences(messages:readonly Message[], shows:AiSalesShow[
 
 export function askedTiers(question:string):Tier[] {
   const text=question.normalize("NFC").toLowerCase().replace(/hàng\s+(?:ghế\s+)?[a-d]\b/gu,"dãy ghế");
-  const normalized=norm(text.replace(/[,/;&+]/g," và "));
+  const normalized=norm(normalizePosterTiers(text).replace(/[,/;&+]/g," và "));
   const groups=[...normalized.matchAll(/\b(?:hang(?: ve)?|khu(?: vuc)?|zone|loai ve)\s+([a-d](?:\s+(?:va|hay|hoac|voi)\s+[a-d])*)\b/g)];
   return [...new Set(groups.flatMap(m=>m[1].split(/\s+(?:va|hay|hoac|voi)\s+/).map(z=>z.toUpperCase() as Tier)))];
 }
@@ -40,14 +42,14 @@ export function priceLines(show:AiSalesShow,text:string, previousTier?:Tier) {
   return requested.map(tier=>{
     const price=show.prices[tier];
     return Number.isSafeInteger(price) && price!==null && price>0
-      ? "Hạng "+tier+": "+price.toLocaleString("vi-VN")+"đ/vé."
+      ? tierName(show.id,tier)+": "+price.toLocaleString("vi-VN")+"đ/vé."
       : "Em chưa xác minh được giá hạng "+tier+" của suất này ạ.";
   }).join("\n");
 }
 
 export async function directTierReply(messages:readonly Message[], referral:string|null|undefined, loadShows:()=>Promise<AiSalesShow[]>) {
   const question=messages.at(-1)?.body??"";
-  if(!tierPriceQuestion(question) || sensitiveQuestion(question) || customerRequestsHuman(question))return null;
+  if(askedOffer(question) || !tierPriceQuestion(question) || sensitiveQuestion(question) || customerRequestsHuman(question))return null;
   const text=norm(question);
   if(/\b(?:dat|giu|mua|con ghe|con ve|so do|goi|giao luu|uu dai|khuyen mai|giam|thanh toan|khong nhan|hoan|cho ngoi|loi di|vi tri|vi sao|tai sao|so sanh|khac nhau|bao gom|kem|goc|tam nhin|ngan sach|tong|bao nhieu ve|xa|gan|gia tre em|tre nho)\b/.test(text))return null;
   const shows=await loadShows();

@@ -4,6 +4,7 @@ import {loadShows} from "../../../../../lib/show-data";
 import {seatsFor,venues,type VenueId} from "../../../../../lib/venues";
 import {requireRole,staffDb} from "../../../../../lib/staff-auth";
 import {allocateSaleCommissionLines} from "../../../../../lib/sale-commission";
+import {hasPoster} from "../../../../../lib/poster-offers";
 import {seatFare,validChildSeats} from "../../../../../lib/show-family-policy";
 export const runtime="nodejs";
 export async function POST(req:NextRequest){
@@ -21,7 +22,7 @@ export async function POST(req:NextRequest){
  const giftCounts:Record<string,number>={none:0,couple5:0,buy5:1,buy10:2,buy20:3};
  if(!Object.prototype.hasOwnProperty.call(giftCounts,promotion)||!Array.isArray(giftSeats)||giftSeats.some((x:unknown)=>typeof x!=="string")||new Set(giftSeats).size!==giftSeats.length||giftSeats.some((x:string)=>seats.includes(x)))return NextResponse.json({error:"Ghế tặng hoặc chương trình khuyến mại không hợp lệ."},{status:400});
  if(giftSeats.length!==giftCounts[promotion]||promotion==="buy5"&&seats.length!==5||promotion==="buy10"&&seats.length!==10||promotion==="buy20"&&seats.length!==20||promotion==="none"&&giftSeats.length>0||promotion==="couple5"&&seats.length!==2)return NextResponse.json({error:"Số ghế mua và ghế tặng không đúng chương trình."},{status:400});
- if(promotion!=="none"&&!(await requireRole(["sale"])))return NextResponse.json({error:"Ưu đãi ghế tặng chỉ áp dụng qua tài khoản Sale."},{status:403});
+ if(promotion!=="none"&&!hasPoster(showId)&&!(await requireRole(["sale"])))return NextResponse.json({error:"Ưu đãi ghế tặng chỉ áp dụng qua tài khoản Sale."},{status:403});
  const show=(await loadShows()).find(x=>x.id===showId);
  if(!show||!venues.some(v=>v.id===show.venue)||["sold_out","ended","live","pending"].includes(show.status))return NextResponse.json({error:"Show không mở bán."},{status:400});
  const layoutRows=await staffDb("venue_seat_rows?venue_id=eq."+encodeURIComponent(show.venue)+"&select=row_code,seat_count") as {row_code:string;seat_count:number}[];

@@ -35,7 +35,7 @@ test('use an appropriate emoji sparingly and adapt to the previous reply',()=>{
  assert.equal((style.styleSalesReply('🎵 Dạ, em có hai lựa chọn 🎉😊','giá vé').match(/\p{Extended_Pictographic}/gu)||[]).length,1);
 });
 test('private comment replies keep prices in Messenger by default',()=>{
- const p=load('ai-comment-policy',{'./ai-sales-policy':load('ai-sales-policy'),'./messenger-conversation-style':style});
+ const p=load('ai-comment-policy',{'./poster-offers':load('poster-offers'),'./ai-sales-policy':load('ai-sales-policy'),'./messenger-conversation-style':style});
  const show={id:'dinh-dung-2811',url:page,artist:'Đình Dũng',date:'2026-11-28',time:'19:30',venueName:'CCC Sa Pa',prices:{A:399000}};
  const d={question_type:'price'};
  assert.doesNotMatch(p.renderCommentPrivateReply(d,show,'Giá vé thế nào?'),/https/);
@@ -45,7 +45,7 @@ test('private comment replies keep prices in Messenger by default',()=>{
 async function inbox(body,prior=[],paid=false){
  const rows=['Show Đình Dũng',...prior,body].map((text,i,all)=>({id:i+1,body:text,sender:i===0?'staff':'customer',staff_name:i===0?'EXTRA AI':null,created_at:new Date().toISOString()})).reverse();
  const posted=[];
- const show={id:'dinh-dung-2811',url:page,artist:'Đình Dũng',title:'Đêm Đình Dũng',date:'2026-11-28',time:'19:30',venueId:'ccc',venueName:'CCC Sa Pa',prices:{A:599000,B:499000,C:399000,D:299000}};
+ const show={id:'dinh-dung-2811',url:page,artist:'Đình Dũng',title:'Đêm Đình Dũng',date:'2026-11-28',time:'19:30',venueId:'ccc',venueName:'CCC Sa Pa',prices:load("poster-offers").posterPrices["dinh-dung-2811"]};
  const modules={'server-only':{},'./staff-auth':{staffDb:async(path,options)=>{
    if(path.startsWith('extra_support_messages?'))return path.includes('body=eq.')?[]:rows;
    if(path.startsWith('extra_messenger_ai_state?'))return paid?[{current_order_code:'EX0000000000000000',status:'paid'}]:[];
@@ -83,4 +83,10 @@ test('real worker entry paths: choices in chat, requested page, attachment and t
  assert.match(mixed,/399.000đ/);assert.deepEqual(mixed.match(/https:\/\/\S+/g),[page]);
  const photo=await inbox('Gửi ảnh sơ đồ ghế CCC cho mình');assert.ok(photo.includes('[image]'));assert.doesNotMatch(photo.join('\n'),/https/);
  assert.deepEqual(await inbox('Mình đã chuyển khoản',[],true),['Vé QR: https://iextra.net/ve?code=FIXTURE']);
+});
+test('poster ticket names and prices use the catalog selected for the conversation',async()=>{
+ const reply=(await inbox('Giá vé VIP Đình Dũng bao nhiêu?')).join(' ');
+ assert.match(reply,/VIP: 349\.000đ/);
+ const standard=(await inbox('Giá Standard 2 Đình Dũng?')).join(' ');
+ assert.match(standard,/Standard 2: 199\.000đ/);
 });

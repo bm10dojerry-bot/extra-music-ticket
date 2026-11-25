@@ -1,3 +1,4 @@
+import {normalizePosterTiers} from "./poster-offers";
 import type {SeatView} from "./extra-sale-text-script";
 
 export type SaleIntent = "price" | "seat_view" | "interaction" | "promotion" | "booking" | "payment" | "show" | "general";
@@ -142,7 +143,7 @@ function seatPreference(text: string): SeatView | undefined {
 
 function seatZone(body: string, clarification?: Clarification): SeatZone | undefined {
   // The accent distinguishes price rank "hạng A" from seat row "hàng A".
-  const text = normalized(body.normalize("NFC").replace(/\bhạng(?=\s+[a-d](?![\p{L}\p{N}]))/giu, "hạng vé"));
+  const text = normalized(normalizePosterTiers(body.normalize("NFC")).replace(/\bhạng(?=\s+[a-d](?![\p{L}\p{N}]))/giu, "hạng vé"));
   const explicit = [...text.matchAll(/\b(?:khu(?: vuc)?|hang ve|zone) ([abcd])\b/g)].pop()?.[1];
   const answer = clarification === "zone" ? text.match(/^([abcd])(?: (?:a|nhe|nha))?[.!]?$/)?.[1] : undefined;
   return (explicit ?? answer)?.toUpperCase() as SeatZone | undefined;

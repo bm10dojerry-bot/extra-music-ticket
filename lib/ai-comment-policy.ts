@@ -1,3 +1,4 @@
+import {askedOffer,hasPoster,tierName} from "./poster-offers";
 import {catalogSeatPage,styleSalesReply,wantsBookingPage} from "./messenger-conversation-style";
 import {normalizeCustomerText,safeAiConversationText} from "./ai-sales-policy";
 import type {AiSalesShow} from "./ai-sales-checkout";
@@ -84,9 +85,10 @@ export function renderCommentPrivateReply(decision:CommentDecision,show:AiSalesS
  const date=show.date.split("-").reverse().join("/"),venue=show.venueName;
  let answer="Show "+show.artist+" diễn lúc "+show.time+" ngày "+date+" tại "+venue+".";
  if(decision.question_type==="price"){
-  const prices=Object.entries(show.prices).filter(([,v])=>typeof v==="number"&&Number.isSafeInteger(v)&&v>0).map(([zone,v])=>zone+": "+new Intl.NumberFormat("vi-VN").format(v!)+"đ");
+  const prices=Object.entries(show.prices).filter(([,v])=>typeof v==="number"&&Number.isSafeInteger(v)&&v>0).map(([zone,v])=>tierName(show.id,zone)+": "+new Intl.NumberFormat("vi-VN").format(v!)+"đ");
   answer+=" Giá niêm yết từng hạng: "+prices.join(" · ")+".";
  }else if(decision.question_type==="location")answer+=" Địa chỉ: "+show.venueAddress+".";
+ if(hasPoster(show.id) && askedOffer(comment))answer+=" "+askedOffer(comment);
  const page=wantsBookingPage(comment)?catalogSeatPage(show):undefined;
  const next=decision.question_type==="availability"||decision.question_type==="booking"?" Mình cần mấy ghế để em kiểm tra chỗ ngồi cùng nhau ạ?":decision.question_type==="price"?" Mình ưu tiên gần sân khấu hay muốn chọn theo ngân sách ạ?":"";
  const result=styleSalesReply(greeting+"\n"+answer+(page?"":next),comment,[],page);

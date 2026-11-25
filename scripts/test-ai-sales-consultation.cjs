@@ -30,7 +30,7 @@ test("requests all or several tiers; does not confuse row and rank",()=>{
  assert.deepEqual(c.askedTiers("Hàng B xem thế nào?"),[]);
  assert.deepEqual(c.askedTiers("Giá hạng A, B và D?"),["A","B","D"]);
  assert.doesNotMatch(c.priceLines(show,"Giá hạng A và B?"),/Hạng [CD]/);
- assert.match(c.priceLines(show,"gửi bảng giá tất cả các hạng","B"),/Hạng D/);
+ assert.match(c.priceLines(show,"gửi bảng giá tất cả các hạng","B"),/Standard 2/);
  assert.doesNotMatch(c.priceLines({...show,prices:{...show.prices,B:null}},"giá hạng B?"),/499|599/);
 });
 test("declines shortcuts for sales actions, refunds, support or compound questions",async()=>{

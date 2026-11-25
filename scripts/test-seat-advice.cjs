@@ -20,7 +20,7 @@ test('questions about the picture or a seat get advice without triggering media'
 const show={id:'sample',artist:'Nghệ sĩ',title:'Nghệ sĩ',venueId:'ccc',date:'2099-01-01',url:'https://iextra.net/show/sample',prices:{A:800000,B:600000,C:450000,D:250000}};
 function advisor(state,unavailable=false){
   return load('ai-sales-seat-advisor',{
-    'server-only':{},'./show-family-policy':load('show-family-policy'),'./ai-sales-checkout':{listAiSalesShows:async()=>[show],getAiSeatSnapshot:async()=>({show,seats:venues.seatsFor('ccc'),taken:new Set(['A25'])})},
+    'server-only':{},'./poster-offers':load('poster-offers'),'./show-family-policy':load('show-family-policy'),'./ai-sales-checkout':{listAiSalesShows:async()=>[show],getAiSeatSnapshot:async()=>({show,seats:venues.seatsFor('ccc'),taken:new Set(['A25'])})},
     './ai-sales-consultation':{salesPreferences:()=>({})},'./ai-sales-seat-map':selection,'./v2-seat-guidance':policy,
     './staff-auth':{staffDb:async path=>{if(unavailable)throw Error();if(!path.startsWith('extra_messenger_ai_outbox?'))return [];const q=new URLSearchParams(path.split('?')[1]);assert.equal(q.get('chat_id'),'eq.chat');assert.equal(q.get('job_id'),'neq.job');assert.equal(q.get('body'),'eq.[Ảnh sơ đồ ghế CCC Sa Pa]');assert.equal(q.get('state'),'in.(sent,uncertain,sending)');return state?[{state}]:[];}}
   });
