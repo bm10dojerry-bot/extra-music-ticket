@@ -38,5 +38,6 @@ export type AiSalesAdminResponse = {
 };
 
 export type AiSalesAdminAction =
+  | { action: "connect_ad_referrals" }
   | { action: "set_enabled"; enabled: boolean }
   | { action: "set_mode"; chatId: string; mode: AiSalesMode };

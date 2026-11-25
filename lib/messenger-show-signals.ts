@@ -27,6 +27,18 @@ export function metaImageURL(v:unknown):URL|null{
  try{const u=new URL(v);return u.protocol==="https:" && !u.username&&!u.password&&!u.port&&!u.hash && /(^|\.)(fbcdn\.net|fbsbx\.com)$/.test(u.hostname)?u:null;}catch{return null;}
 }
 type Signal={actor_key:string;event_key:string;kind:"ad"|"image";occurred_at:string;expires_at:string;show_id:string|null;media_url:string|null};
+async function publishedShows(page:string,adId:string,postId:string){
+ const lookups:Promise<string[]>[]=[];
+ if(adId && !verifiedAds[adId]){
+  const path="extra_marketing_allocations?page_id=eq."+page+"&ad_id=eq."+adId+"&select=extra_marketing_posts!inner(show_id)&limit=2";
+  lookups.push(staffDb(path,{signal:AbortSignal.timeout(1600)}).then((rows:{extra_marketing_posts:{show_id:string}}[])=>rows.map(row=>row.extra_marketing_posts.show_id)));
+ }
+ if(postId && !verifiedAds[postId]){
+  const path="extra_marketing_posts?facebook_post_id=eq."+page+"_"+postId+"&select=show_id&limit=2";
+  lookups.push(staffDb(path,{signal:AbortSignal.timeout(1600)}).then((rows:{show_id:string}[])=>rows.map(row=>row.show_id)));
+ }
+ return (await Promise.all(lookups)).flat();
+}
 export async function signedSignals(page:string,value:unknown,catalog:()=>Promise<Catalog>,now=Date.now()):Promise<Signal[]>{
  const e=obj(value),m=obj(e.message),p=obj(e.postback),sender=obj(e.sender).id,t=e.timestamp;
  if(!digits(page)||!digits(sender)||sender===page||obj(e.recipient).id!==page||m.is_echo||typeof t!=="number"||!Number.isSafeInteger(t)||t<now-day||t>now+60000)return [];
@@ -39,10 +51,10 @@ export async function signedSignals(page:string,value:unknown,catalog:()=>Promis
    if(url)rows.push({actor_key,event_key:hash(mid),kind:"image",occurred_at,expires_at:new Date(t+day).toISOString(),media_url:url.href,show_id:null});
   }
  }
- const refs=[e.referral,m.referral,p.referral].map(obj).filter(r=>r.source==="ADS" && digits(r.ad_id));
+ const refs=[e.referral,m.referral,p.referral].map(obj).filter(r=>r.source==="ADS");
  if(!refs.length)return rows;
  const ids=new Set<string>(),catalogShows=await catalog();
- let ambiguous=new Set(refs.map(r=>r.ad_id)).size!==1;
+ let ambiguous=new Set(refs.map(r=>r.ad_id).filter(digits)).size>1;
  for(const r of refs){
   const data=obj(r.ads_context_data);
   const title=typeof data.ad_title==="string"?data.ad_title.slice(0,500):"";
@@ -52,13 +64,15 @@ export async function signedSignals(page:string,value:unknown,catalog:()=>Promis
   const ref=typeof r.ref==="string"?r.ref.match(/^(?:show[:=]|(?:https:\/\/(?:www\.)?iextra\.net)?\/show\/)?([a-z0-9-]+)$/i)?.[1]:"";
   if(catalogShows.some(s=>s.id===ref))ids.add(ref!);
   if(page==="1223940670813189"){
-   for(const key of [r.ad_id,String(data.post_id??"").replace(/^1223940670813189_/,"")]){
-    const mapped=digits(key)?verifiedAds[key]:null;
+   const post=String(data.post_id??"").replace(/^1223940670813189_/,"");
+   const adId=digits(r.ad_id)?r.ad_id:"",postId=digits(post)?post:"";
+   const saved=await publishedShows(page,adId,postId).catch(()=>[]);
+   for(const mapped of [verifiedAds[adId],verifiedAds[postId],...saved]){
     if(mapped && catalogShows.some(s=>s.id===mapped))ids.add(mapped);
    }
   }
  }
- rows.push({actor_key,event_key:hash(mid||String(t),...refs.map(r=>String(r.ad_id)).sort()),kind:"ad",occurred_at,expires_at:new Date(t+day).toISOString(),show_id:!ambiguous&&ids.size===1?[...ids][0]:null,media_url:null});
+ rows.push({actor_key,event_key:hash(mid||String(t),...refs.map(r=>String(r.ad_id??obj(r.ads_context_data).post_id??r.ref??"")).sort()),kind:"ad",occurred_at,expires_at:new Date(t+day).toISOString(),show_id:!ambiguous&&ids.size===1?[...ids][0]:null,media_url:null});
  return rows;
 }
 export async function recordSignedBatch(page:string,events:unknown[]){

@@ -125,6 +125,16 @@ test('signed ad sources are scoped to the same Page and sender; conflicting date
   assert.equal((await sig.signedSignals(page,{...evt,...e},async()=>shows,now))[0].show_id,shows[0].id);
  }
  assert.equal((await sig.signedSignals(page,{...evt,referral:{...r,ads_context_data:{ad_title:'Khắc Việt 26/12'}}},async()=>shows,now))[0].show_id,null);
+ const postOnly={source:'ADS',ads_context_data:{post_id:page+'_122134309485473141'}};
+ assert.equal((await sig.signedSignals(page,{...evt,referral:postOnly},async()=>shows,now))[0].show_id,shows[0].id);
+ const fresh=load('messenger-show-signals',{'server-only':{},'./ai-sales-checkout':{},'./messenger-extra-ad-shows':map,
+  './staff-auth':{staffDb:async path=>{
+    assert.ok(path.includes('page_id=eq.'+page)&&path.includes('ad_id=eq.12345678901'));
+    return [{extra_marketing_posts:{show_id:shows[1].id}}];
+  }}});
+ const fromNewAd={source:'ADS',ad_id:'12345678901'};
+ assert.equal((await fresh.signedSignals(page,{...evt,referral:fromNewAd},async()=>shows,now))[0].show_id,shows[1].id);
+ assert.equal((await fresh.signedSignals(page,{...evt,referral:{...fromNewAd,ads_context_data:{ad_title:'Đình Dũng 28/11'}}},async()=>shows,now))[0].show_id,null);
  for(const e of [{...evt,recipient:{id:'987654321'},referral:r},{...evt,message:{is_echo:true,referral:r}},{...evt,message:{text:JSON.stringify(r)}}])assert.equal((await sig.signedSignals(page,e,async()=>shows,now)).length,0);
  assert.equal(sig.matchShowEvidence('Đình Dũng 26/12',shows).id,null);assert.equal(sig.matchShowEvidence('Đình Dũng 28/11, Khắc Việt 26/12',shows).id,null);
  assert.equal(sig.matchShowEvidence('chỉ có ảnh ca sĩ',shows).id,null);
@@ -132,6 +142,33 @@ test('signed ad sources are scoped to the same Page and sender; conflicting date
  assert.equal(sig.matchShowEvidence('Khac Viet 26/12',shows).id,shows[1].id);
 });
 
+test('referral subscription preserves unrelated fields, verifies both ends, and is idempotent',async()=>{
+ const connection=load('facebook-page-connection',{'server-only':{},'./staff-auth':{}});
+ const {verifySaleSubscriptions}=load('facebook-page-oauth',{'server-only':{},'next/server':{},'./admin-session':{},'./staff-auth':{},'./facebook-page-connection':connection});
+ let callback=connection.FACEBOOK_MESSENGER_WEBHOOK;
+ const fields={app:['feed','messages'],page:['feed','messaging_postbacks']},writes=[];
+ const fetchOriginal=global.fetch;
+ global.fetch=async(url,opts)=>{
+  const side=new URL(url).pathname.endsWith('/subscribed_apps')?'page':'app';
+  if(opts.method==='POST'){
+   writes.push(side);const body=new URLSearchParams(opts.body);
+   fields[side]=body.get(side==='page'?'subscribed_fields':'fields').split(',');
+   return Response.json({success:true});
+  }
+  return Response.json({data:[side==='page'?{id:connection.FACEBOOK_APP_ID,subscribed_fields:fields.page}:
+   {object:'page',active:true,callback_url:callback,fields:fields.app.map(name=>({name}))}]});
+ };
+ const config={appSecret:'fixture',verifyToken:'fixture-test-token',apiVersion:'v24.0'};
+ try{
+  await verifySaleSubscriptions(config,'fixture-page',Date.now()+10000);
+  for(const names of Object.values(fields))assert.deepEqual([...names].sort(),['feed','messages','messaging_postbacks','messaging_referrals']);
+  assert.deepEqual(writes,['app','page']);
+  assert.deepEqual(await verifySaleSubscriptions(config,'fixture-page',Date.now()+10000),{addedToApp:[],addedToPage:[]});
+  callback='https://example.com/unrelated';
+  await assert.rejects(verifySaleSubscriptions(config,'fixture-page',Date.now()+10000));
+  assert.equal(writes.length,2);
+ }finally{global.fetch=fetchOriginal;}
+});
 test('drinks, directions, published program and seat preferences via Messenger worker',async()=>{
  const ask=async(q,prior=[],options={})=>(await inbox(q,prior,false,options)).join(' ');
  assert.match(await ask('Vé Đình Dũng có kèm nước không?'),/không kèm nước uống[\s\S]+gọi nước/);

@@ -70,7 +70,7 @@ export default function AiSalesDashboard(){
   async function change(action:AiSalesAdminAction){
     if(mutationPending.current)return;
     mutationPending.current=true;
-    setBusy(action.action==="set_enabled"?"global":action.chatId);setActionError("");setNotice("");
+    setBusy(action.action==="set_mode"?action.chatId:action.action);setActionError("");setNotice("");
     // Invalidate an older poll so it cannot overwrite the state after this change.
     requestId.current++;
     try{
@@ -78,7 +78,8 @@ export default function AiSalesDashboard(){
       const result=await response.json().catch(()=>null) as {error?:string}|null;
       if(!response.ok)throw Error(result?.error||"Chưa cập nhật được chế độ AI. Vui lòng thử lại.");
       if(mounted.current){
-        setNotice(action.action==="set_enabled"?(action.enabled?"Đã bật AI tiếp nhận khách từ Fanpage.":"Đã tạm dừng AI trả lời tự động."):(action.mode==="manual"?"Đã chuyển cuộc trò chuyện sang tư vấn thủ công.":"Đã giao lại cuộc trò chuyện cho AI."));
+        if(action.action==="connect_ad_referrals")setNotice("Meta đã xác nhận kết nối nguồn quảng cáo cho ứng dụng và fanpage 1 EXTRA.");
+        else setNotice(action.action==="set_enabled"?(action.enabled?"Đã bật AI tiếp nhận khách từ Fanpage.":"Đã tạm dừng AI trả lời tự động."):(action.mode==="manual"?"Đã chuyển cuộc trò chuyện sang tư vấn thủ công.":"Đã giao lại cuộc trò chuyện cho AI."));
         await refresh();
       }
     }catch(cause){
@@ -153,8 +154,9 @@ export default function AiSalesDashboard(){
       </div>
       <div className={styles.controlActions}>
         <button type="button" className={data?.enabled?styles.secondary:styles.primary} disabled={!data||Boolean(busy)||(!data.ready&&!data.enabled)} onClick={()=>data&&void change({action:"set_enabled",enabled:!data.enabled})}>
-          {busy==="global"?"Đang cập nhật…":data?.enabled?"Tạm dừng AI":"Bật AI bán vé"}
+          {busy==="set_enabled"?"Đang cập nhật…":data?.enabled?"Tạm dừng AI":"Bật AI bán vé"}
         </button>
+        <button type="button" className={styles.secondary} disabled={!data||Boolean(busy)} onClick={()=>void change({action:"connect_ad_referrals"})}>{busy==="connect_ad_referrals"?"Đang kết nối…":"Kết nối nguồn quảng cáo"}</button>
         <button type="button" className={styles.quiet} disabled={loading||Boolean(busy)} onClick={()=>{setLoading(true);void refresh();}}>Cập nhật</button>
       </div>
     </div>

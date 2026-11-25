@@ -199,7 +199,10 @@ function appSubscription(rows:Json[]):{exists:boolean;active:boolean;fields:stri
  if(page[0].callback_url!==FACEBOOK_MESSENGER_WEBHOOK||typeof page[0].active!=="boolean")throw tokenError("subscription_failed");
  return {exists:true,active:page[0].active,fields:fields(page[0].fields,true)};
 }
-async function verifyFeedSubscription(config:FacebookOAuthConfig,pageToken:string,deadline:number):Promise<void>{
+const saleFields=["messages","messaging_postbacks","messaging_referrals"] as const;
+export async function verifySaleSubscriptions(config:FacebookOAuthConfig,pageToken:string,deadline:number,includeFeed=false){
+ const required=includeFeed?[...saleFields,"feed"]:[...saleFields];
+ const hasRequired=(values:string[])=>required.every(field=>values.includes(field));
  const appAuth=FACEBOOK_APP_ID+"|"+config.appSecret;
  const readPage=()=>graphList(config,FACEBOOK_PAGE_ID+"/subscribed_apps",{fields:"id,subscribed_fields",limit:"100"},pageToken,"subscription_failed",deadline);
  const readApp=()=>graphList(config,FACEBOOK_APP_ID+"/subscriptions",{},appAuth,"subscription_failed",deadline);
@@ -207,20 +210,21 @@ async function verifyFeedSubscription(config:FacebookOAuthConfig,pageToken:strin
  const beforePage=pageSubscription(pageRows),beforeApp=appSubscription(appRows);
  // The caller has already verified this exact app, Page, scopes, tasks and reads.
  // Keep all existing Messenger fields and never replace an unrelated callback.
- if(!beforeApp.active||!beforeApp.fields.includes("feed")){
+ if(!beforeApp.active||!hasRequired(beforeApp.fields)){
   if(config.verifyToken.length<16)throw tokenError("subscription_failed");
   const ack=await graph(config,FACEBOOK_APP_ID+"/subscriptions",{object:"page",callback_url:FACEBOOK_MESSENGER_WEBHOOK,
-   fields:[...new Set([...beforeApp.fields,"feed"])].join(","),verify_token:config.verifyToken,include_values:"true"},appAuth,"subscription_failed",deadline,"POST");
+   fields:[...new Set([...beforeApp.fields,...required])].join(","),verify_token:config.verifyToken,include_values:"true"},appAuth,"subscription_failed",deadline,"POST");
   if(ack.success!==true&&ack.success!=="true")throw tokenError("subscription_failed");
  }
- if(!beforePage.fields.includes("feed")){
-  const ack=await graph(config,FACEBOOK_PAGE_ID+"/subscribed_apps",{subscribed_fields:[...new Set([...beforePage.fields,"feed"])].join(",")},pageToken,"subscription_failed",deadline,"POST");
+ if(!hasRequired(beforePage.fields)){
+  const ack=await graph(config,FACEBOOK_PAGE_ID+"/subscribed_apps",{subscribed_fields:[...new Set([...beforePage.fields,...required])].join(",")},pageToken,"subscription_failed",deadline,"POST");
   if(ack.success!==true&&ack.success!=="true")throw tokenError("subscription_failed");
  }
  const [pageAfter,appAfter]=await Promise.all([readPage(),readApp()]);
  const afterPage=pageSubscription(pageAfter),afterApp=appSubscription(appAfter);
- if(!afterPage.exists||!afterPage.fields.includes("feed")||!afterApp.active||!afterApp.fields.includes("feed")||
+ if(!afterPage.exists||!hasRequired(afterPage.fields)||!afterApp.active||!hasRequired(afterApp.fields)||
   !beforePage.fields.every(field=>afterPage.fields.includes(field))||!beforeApp.fields.every(field=>afterApp.fields.includes(field)))throw tokenError("subscription_failed");
+ return {addedToApp:required.filter(field=>!beforeApp.fields.includes(field)),addedToPage:required.filter(field=>!beforePage.fields.includes(field))};
 }
 
 async function completeFacebookAuthorization(req:NextRequest,binding:string):Promise<NextResponse>{
@@ -243,7 +247,7 @@ async function completeFacebookAuthorization(req:NextRequest,binding:string):Pro
  const metadata=validateToken(await graph(config,"debug_token",{input_token:pageToken},appAuth,"token_invalid",deadline),"PAGE");
  if(metadata.userId!==userMetadata.userId)throw tokenError("token_invalid");
  await verifyPageRead(config,pageToken,deadline);
- await verifyFeedSubscription(config,pageToken,deadline);
+ await verifySaleSubscriptions(config,pageToken,deadline,true);
  const finishArgs={
   p_attempt_id:attempt.attempt_id,p_exchange_token:attempt.exchange_token,p_authorized_by:actor.id,p_page_token_cipher:sealFacebookSecret(pageToken,"page-token"),
   p_verified_metadata:{app_id:FACEBOOK_APP_ID,page_id:FACEBOOK_PAGE_ID,granted_scopes:[...new Set(metadata.scopes.filter(scope=>(FACEBOOK_REQUIRED_PAGE_SCOPES as readonly string[]).includes(scope)||scope==="business_management"))],verified_at:new Date().toISOString(),token_expires_at:metadata.expiresAt,data_access_expires_at:metadata.dataAccessExpiresAt},

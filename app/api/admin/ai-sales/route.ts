@@ -1,6 +1,8 @@
 import {after,NextRequest,NextResponse} from "next/server";
 import {requireRole,staffDb} from "../../../../lib/staff-auth";
-import {getMessengerConfig} from "../../../../lib/facebook-messenger";
+import {getMessengerConfig,getMessengerGraphConfig} from "../../../../lib/facebook-messenger";
+import {getFacebookOAuthConfig} from "../../../../lib/facebook-page-connection";
+import {verifySaleSubscriptions} from "../../../../lib/facebook-page-oauth";
 import {aiRpc,aiSalesConfigurationReady,getAiSalesSettings,probeAiSalesModel,runAiSalesQueue} from "../../../../lib/ai-sales";
 import {AI_SALES_MODEL,AI_SALES_MODEL_LABEL} from "../../../../lib/ai-sales-policy";
 import {sendAiSalesOwnerNotifications} from "../../../../lib/ai-sales-notifications";
@@ -57,6 +59,14 @@ export async function PATCH(req:NextRequest){
  const input=await req.json().catch(()=>null);
  try{
   const pageId=getMessengerConfig()?.pageId;if(!pageId)return reply({error:"Messenger chưa sẵn sàng."},503);
+  if(input?.action==="connect_ad_referrals"){
+   const config=getFacebookOAuthConfig(),messenger=await getMessengerGraphConfig();
+   if(!config||!messenger||config.pageId!==messenger.pageId)return reply({error:"Chưa xác minh được kết nối của fanpage 1 EXTRA."},503);
+   try{
+    const subscription=await verifySaleSubscriptions(config,messenger.pageToken,Date.now()+30000);
+    return reply({ok:true,...subscription});
+   }catch{return reply({error:"Meta chưa xác nhận kết nối nguồn quảng cáo cho ứng dụng và fanpage."},503);}
+  }
   if(input?.action==="set_enabled"&&typeof input.enabled==="boolean"){
    if(input.enabled){const probe=await probeAiSalesModel();if(!probe.ready)return reply({error:probe.message||"AI chưa sẵn sàng; chưa bật trả lời tự động."},503);}
    const result=await aiRpc("configure",{p_page_id:pageId,p_enabled:input.enabled,p_model:AI_SALES_MODEL});

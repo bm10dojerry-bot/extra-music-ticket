@@ -50,6 +50,9 @@ export async function recognizeInquiry(messages:readonly Message[],page:string,p
  // Read the customer's own caption separately from any text extracted from an image.
  const memory:MessengerSaleMemory=salesPreferences(scoped.map(m=>m.id===latest.id?{...m,body:question}:m),shows,result.showId);
  const show=shows.find(s=>s.id===(textMatch.id||(!memory.showSelectionUnresolved&&memory.showId)));
+ if(signal && !show && !result.reply && simplePriceQuestion(question)){
+  result.reply="Mình đang xem đêm của ca sĩ nào hoặc ngày nào ạ? Em sẽ gửi đúng giá vé cho mình.";
+ }
  if(!show||result.reply||sensitiveQuestion(question)||customerRequestsHuman(question))return result;
  result.showId=show.id;
  const name=show.artist+" ngày "+show.date.slice(8,10)+"/"+show.date.slice(5,7);
