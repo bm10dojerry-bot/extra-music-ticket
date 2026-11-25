@@ -279,3 +279,73 @@ test('Meta preflight reads the exact Page and checks the reserved lifetime budge
   assert.deepEqual(paths.sort(),['/v27.0/act_1915621506464312','/v27.0/act_1915621506464312/minimum_budgets','/v27.0/me']);
   assert.equal(ad.campaignId,null);
 });
+
+test('sample workflow runs all eleven agents with verified demo receipt and isolated figures',usePg,async t=>{
+  const {sampleBrief,sampleReleaseRequestId}=require('./director-sample.cjs');
+  const {makeConnectors}=require('./director-connectors.cjs');
+  const pool=await database(t);
+  const downloadPaths=[];
+  const saleUrl='http://ai-sale23-sandbox.railway.internal:8080/api/extra-os/director';
+  const env={EXTRA_OS_SALE_LINK_URL:saleUrl,EXTRA_OS_SALE_LINK_TOKEN:'local-fixture-token-used-for-testing-the-sale-connector-x'};
+  const request=async (url,options)=>{
+    const path=new URL(url).pathname;
+    downloadPaths.push(path);
+    if (url===saleUrl) {
+      const payload=JSON.parse(options.body);
+      assert.equal(payload.kind,'retail_sample');
+      assert.equal(payload.input.stock,10);
+      assert.equal(payload.input.knowledgeVersion,1);
+      assert(payload.input.rules.includes('confirm_quantity'));
+      const text='Báo giá mẫu đúng đơn giá và số lượng sau khi xác nhận.';
+      return Response.json({
+        id:payload.id,agent:'Sale',version:'2.3',kind:payload.kind,mode:'dry_run',status:'succeeded',
+        report:{knowledgeVersion:1,source:'sample_rules',generatedByModel:false,reply:text,objectionReply:text,
+          quote:{inventorySource:'fixture',priceVnd:15000,quantity:2,totalVnd:30000,
+            priceVerified:true,stockChecked:true,explicitConfirmation:true},
+          ordersCreated:0,liveSales:false}
+      });
+    }
+    assert.equal(new URL(url).origin,'https://extra-24h.onrender.com');
+    if (path==='/api/demo/catalog') return Response.json({source:'demo_fixture',demo:true,
+      products:[{id:'demo-a',name:'Nước uống mẫu',stock:10,price:15000}]});
+    assert.equal(path,'/api/demo/orders');
+    const order=JSON.parse(options.body);
+    assert.deepEqual(order.items,[{id:'demo-a',quantity:2}]);
+    assert.match(order.requestId,/^[a-f0-9-]{36}$/);
+    return Response.json({code:'DEMO-123456789ABCDEF0',demo:true,persisted:false,total:30000,
+      items:[{id:'demo-a',quantity:2,unitPrice:15000}]});
+  };
+  const integration=makeConnectors(pool,env,request);
+  const execute=makeExecutor(pool,{...integration,model:()=>assert.fail('sample called a live model')});
+  const blueprint=definitions(sampleBrief);
+  const id=await queue.queueDirector(pool,sampleReleaseRequestId,sampleBrief,blueprint);
+  assert.equal(await queue.queueDirector(pool,sampleReleaseRequestId,sampleBrief,blueprint),id);
+  await drain(pool,execute);
+  const {jobs,versions}=await queue.listRuns(pool,id);
+  assert(jobs.every(job=>job.status==='accepted'),JSON.stringify(jobs.map(job=>[job.kind,job.status,job.issues])));
+  const report=jobs.find(job=>job.kind==='report').result;
+  assert.equal(Object.keys(report.agentPerformance).length,11);
+  assert.equal(report.mode,'sample');
+  assert.equal(versions[0].active,true);
+  assert.equal(report.actuals.basis,'unknown');
+  assert.equal(report.actuals.orders,null);
+  assert.equal(report.actuals.revenueVnd,null);
+  assert.equal(report.sample.receipt,'DEMO-123456789ABCDEF0');
+  assert.equal(report.sample.checkoutVnd,30000);
+  assert.equal(report.sample.spendVnd,8160);
+  assert.equal(report.sample.profitVnd,840);
+  assert.equal(jobs.find(job=>job.kind==='ads').result.decisions[0].action,'ignore');
+  const crm=jobs.find(job=>job.kind==='crm').result;
+  assert.deepEqual([crm.saleIntents,crm.supportIntents,crm.optOuts,crm.outboundMessages],[1,1,1,0]);
+  assert.deepEqual(downloadPaths,['/api/demo/catalog','/api/extra-os/director','/api/demo/orders']);
+});
+
+test('regular retail intake cannot select sample mode and budget exercise excludes foreign campaigns',()=>{
+  const {sampleBrief,exerciseSampleBudget}=require('./director-sample.cjs');
+  const form=new URLSearchParams(request);
+  form.set('mode','sample');
+  assert.equal(readRetailBrief(form).input.mode,'rehearsal');
+  const details=exerciseSampleBudget(adsPlan(sampleBrief),'sample');
+  assert.deepEqual(details.decisions.map(item=>item.action),['ignore','continue','pause']);
+  assert.equal(details.campaignCreated,false);
+});

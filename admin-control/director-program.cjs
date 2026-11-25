@@ -1,6 +1,7 @@
 'use strict';
 
 const {knowledgeVersion} = require('./director-queue.cjs');
+const {sampleText,exerciseSampleBudget,sampleSummary} = require('./director-sample.cjs');
 
 const scope = Object.freeze({pageId:'1413936608477545',adAccountId:'1915621506464312',namespace:'EXTRA24H'});
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -27,6 +28,8 @@ const permissionLabels = {
   dependency:'Nhiệm vụ phụ thuộc chưa được nghiệm thu',
   actual_costs:'Chứng từ chi phí và đối soát thực tế',
   order_attribution:'Thẻ đối soát đơn đúng chiến dịch 24H',
+  sample_catalog:'Danh mục mẫu 24H chưa sẵn sàng hoặc sai giá',
+  sample_order:'Dịch vụ biên nhận mẫu 24H chưa sẵn sàng',
   content_review:'Kiểm tra nội dung, giá niêm yết và điều kiện xuất bản'
 };
 
@@ -97,9 +100,17 @@ const work = [
 ];
 
 function definitions(input) {
-  const plan = work.map(([kind,agent,objective,needs = [],observes = [],permissions = []]) => ({
-    kind,agent,objective,needs,observes,permissions,budgetVnd:kind === 'ads' ? input.budgetVnd : 0
-  }));
+  const isSample = input.mode==='sample';
+  const plan = work.map(([kind,agent,objective,needs = [],observes = [],permissions = []]) => {
+    if (isSample && kind==='catalog') objective='Kiểm tra giá và tồn kho trên danh mục mẫu 24H';
+    if (isSample && kind==='actuals') {
+      objective='Đối chiếu báo giá Sale với biên nhận mẫu của website';
+      needs=[...needs,'catalog','sale_rehearsal'];
+    }
+    if (isSample && kind==='sale_rehearsal') needs=[...needs,'catalog'];
+    return {kind,agent,objective,needs,observes,
+      permissions:isSample ? [] : permissions,budgetVnd:kind==='ads' ? input.budgetVnd : 0};
+  });
   plan.push({
     kind:'report',agent:'Director',objective:'Nghiệm thu và tổng hợp kết quả chiến dịch',
     needs:[],observes:plan.map(job=>job.kind),permissions:[],budgetVnd:0
@@ -200,13 +211,13 @@ async function askModel(kind, job, dependencies, env, request = fetch) {
 
 function auditRetail(job, forecast) {
   const input = job.input;
-  const valid = job.platform === '24h' && input.mode === 'rehearsal' && input.ageMin === 18 &&
+  const valid = job.platform === '24h' && ['rehearsal','sample'].includes(input.mode) && input.ageMin === 18 &&
     vnd(input.priceVnd,1) && vnd(input.purchaseVnd) && vnd(input.budgetVnd) && forecast?.basis === 'forecast';
   if (!valid) throw new Blocked(['source_review']);
   return {
     valid,scope,ageMin:input.ageMin,region:input.region,lockedPriceVnd:input.priceVnd,adCapVnd:input.budgetVnd,
     livePermissions:[],forecastViability:forecast.viability,
-    checks:['Khóa giá đầu vào','Giới hạn quyền theo Page và tài khoản 24H','Chế độ diễn tập']
+    checks:['Khóa giá đầu vào','Giới hạn quyền theo Page và tài khoản 24H',input.mode==='sample'?'Dữ liệu mẫu':'Diễn tập kết nối']
   };
 }
 
@@ -232,10 +243,13 @@ function checkPublication(input,content,catalog,creative) {
 
 function finalReport(job, dependencies) {
   const entries = Object.values(dependencies);
-  const actuals=dependencies.actuals?.status==='accepted' ? dependencies.actuals.result : null;
+  const isSample=job.input.mode==='sample';
+  const actuals=(!isSample && dependencies.actuals?.status==='accepted' &&
+    dependencies.actuals.result?.basis==='sapo_tagged_paid_orders') ? dependencies.actuals.result : null;
   return {
     product:job.input.product,mode:job.input.mode,
     work:entries.map(item=>({agent:item.agent,kind:item.kind,status:item.status,issues:item.issues,attempts:item.attempts,revision:item.revision})),
+    ...(isSample ? {sample:sampleSummary(job.input,dependencies)} : {}),
     approvedForecast:dependencies.forecast?.result ?? null,
     strategy:dependencies.direction?.status==='accepted' ? dependencies.direction.result : dependencies.plan?.result?.text ?? null,
     agentPerformance:Object.fromEntries([...new Set(entries.map(entry=>entry.agent))].map(agent=>{
@@ -257,11 +271,13 @@ function makeExecutor(pool, integrations = {}) {
   const request = integrations.request ?? fetch;
   const model = integrations.model ?? ((kind,job,deps)=>askModel(kind,job,deps,env,request));
   return async (job, dependencies) => {
+    const sample = job.input.mode==='sample';
+    const draftText = sample ? sampleText : model;
     const resultOf = key => dependencies[key]?.result;
     const results = Object.fromEntries(Object.entries(dependencies).filter(([,row])=>row.status==='accepted').map(([key,row])=>[key,row.result]));
     switch (job.kind) {
       case 'brief':
-        return {mode:'rehearsal',approvedInputs:job.input,scope,livePermissions:[],deadline:job.deadline};
+        return {mode:job.input.mode,approvedInputs:job.input,scope,livePermissions:[],deadline:job.deadline};
       case 'forecast':
         return financialPlan(job.input);
       case 'audit':
@@ -270,26 +286,30 @@ function makeExecutor(pool, integrations = {}) {
       case 'plan':
       case 'direction':
       case 'content':
-        return model(job.kind,job,results);
+        return draftText(job.kind,job,results);
       case 'creative': {
-        const design = await model(job.kind,job,results);
+        const design = await draftText(job.kind,job,results);
+        if (sample) return design;
         if (!integrations.creative) throw new Blocked(['images','drive','asset_rights'],design);
         return integrations.creative(job,design,resultOf('research'));
       }
       case 'training': {
-        const bundle = await model(job.kind,job,results);
+        const bundle = await draftText(job.kind,job,results);
         return {...bundle,product:job.input.product,sources:resultOf('research').sources};
       }
       case 'sale_rehearsal': {
         const knowledge = await knowledgeVersion(pool,job.run_id);
         if (!knowledge) throw Error('Missing training bundle');
         if (!integrations.sale) throw new Blocked(['sale_link']);
-        return integrations.sale(job,knowledge);
+        return integrations.sale(job,knowledge,sample ? resultOf('catalog') : null);
       }
-      case 'catalog':
-        if (!integrations.catalog) throw new Blocked(['sapo_catalog']);
-        return integrations.catalog(job);
+      case 'catalog': {
+        const readCatalog = sample ? integrations.sampleCatalog : integrations.catalog;
+        if (!readCatalog) throw new Blocked([sample ? 'sample_catalog' : 'sapo_catalog']);
+        return readCatalog(job);
+      }
       case 'crm':
+        if (sample) return integrations.sampleCrm(dependencies.sale_rehearsal.status);
         if (integrations.crm) return integrations.crm(job,dependencies.sale_rehearsal.status);
         return {mode:'rehearsal',conversations:null,orders:null,outboundMessages:0,
           policy:['Chỉ xử lý hội thoại inbound 24H','Kiểm tra cửa sổ phản hồi trước khi liên hệ',
@@ -299,20 +319,26 @@ function makeExecutor(pool, integrations = {}) {
         return checkPublication(job.input,resultOf('content'),resultOf('catalog'),resultOf('creative'));
       case 'social': {
         const checks=resultOf('publication_checks') ?? checkPublication(job.input,resultOf('content'),resultOf('catalog'),resultOf('creative'));
-        const draft={mode:'rehearsal',pageId:scope.pageId,facebook:resultOf('content').facebook,
+        const draft={mode:job.input.mode,pageId:scope.pageId,facebook:resultOf('content').facebook,
           tiktok:resultOf('content').tiktok,website:resultOf('catalog')?.productUrl ?? null,
           schedule:'Chờ quyền xuất bản và xác minh sản phẩm',checks};
         if (checks.wrongAmounts.length) throw new Blocked(['content_review'],draft);
+        if (sample) return {...draft,schedule:'Bản nháp diễn tập',published:false};
         const readiness=integrations.facebookReadiness ? await integrations.facebookReadiness(draft) : draft;
         throw new Blocked(['facebook','asset_rights'],readiness);
       }
       case 'ads': {
         const plan = adsPlan(job.input);
+        if (sample) return exerciseSampleBudget(plan,job.run_id);
         if (!job.input.budgetVnd) return {...plan,delivery:'not_requested'};
         const preflight = integrations.advertisingReadiness ? await integrations.advertisingReadiness(plan) : plan;
         throw new Blocked(['ads_controls'],preflight);
       }
       case 'actuals':
+        if (sample) {
+          if (!integrations.sampleOrder) throw new Blocked(['sample_order']);
+          return integrations.sampleOrder(job,resultOf('catalog'),resultOf('sale_rehearsal'));
+        }
         if (integrations.actuals) return integrations.actuals(job,resultOf('catalog'));
         throw new Blocked(['sapo_orders','actual_costs'],{basis:'unknown',orders:null,revenueVnd:null,profitVnd:null});
       case 'report':

@@ -29,3 +29,9 @@ Dùng cơ sở dữ liệu riêng để chạy kiểm thử tích hợp. Các b�
 Website đọc danh mục, giá và tồn kho từ Sapo Web nếu đã cấu hình ở Render. Luồng nội bộ chờ các kết nối xuất bản Sapo, đặt đơn thật, phản hồi Messenger, đăng bài Facebook và vận hành quảng cáo. Phần tài chính giữ nguyên nguồn và thời điểm tính. Ô doanh thu hoặc lợi nhuận vẫn trống khi chưa có số đối soát.
 
 Khi cấp quyền còn thiếu, mở nhiệm vụ bị chặn và chọn **Yêu cầu làm lại**. Director tự đồng bộ các nhiệm vụ phụ thuộc và cập nhật báo cáo. Nếu một bài diễn tập Sale bị Director trả lại, hệ thống tạo phiên kiến thức mới và chỉ áp dụng sau khi nghiệm thu. Có thể khôi phục phiên đã qua kiểm tra trong mục kiến thức của chiến dịch.
+
+## Kiểm thử 24H bằng dữ liệu mẫu
+
+Trong **ONE CLICK 24H**, bấm **Chạy dữ liệu mẫu** để kiểm tra hàng đợi của 11 Agent, đọc danh mục mẫu ở Render, chạy bộ quy tắc mẫu của Sale V 2.3 và lấy mã biên nhận `DEMO-`. Lượt này dùng nội dung và số liệu thử nghiệm. Chi tiêu và lãi/lỗ mô phỏng nằm trong báo cáo mẫu riêng. Bạn có thể mở bảng **AI Director** hoặc tải báo cáo JSON sau khi lượt chạy kết thúc.
+
+Railway `staging/admin-web` tự tạo một lượt kiểm thử mẫu khi triển khai phiên bản này, dựa trên mã yêu cầu cố định để tránh tạo trùng khi khởi động lại.

@@ -145,7 +145,7 @@ function claim(pool) {
     await settleUnavailable(db);
     const {rows} = await db.query(`
       with candidate as (
-        select j.id from os_director_jobs j
+        select j.id from os_director_jobs j join os_director_runs r on r.id=j.run_id
         where j.deadline>now() and (
           (j.status='running' and j.lease_until<=now() and j.attempts < $1)
           or (j.status='queued' and j.available_at<=now() and not exists (
@@ -154,7 +154,8 @@ function claim(pool) {
               or (d.kind=any(j.observes) and d.status<>all($2::text[])))
           ))
         )
-        order by (j.kind in ('brief','forecast','audit','report')) desc,j.available_at,j.kind,j.id
+        order by (r.input->>'mode'='sample') asc nulls first,
+          (j.kind in ('brief','forecast','audit','report')) desc,j.available_at,j.kind,j.id
         limit 1 for update of j skip locked
       )
       update os_director_jobs j set status='running',attempts=j.attempts+1,
@@ -217,7 +218,7 @@ function reviewNext(pool, evaluate) {
   return transaction(pool, async db => {
     // Serialize acceptance with owner feedback and knowledge rollback for the same run.
     const {rows:[run]} = await db.query(`
-      select r.id from os_director_runs r
+      select r.id,r.input->>'mode' as mode from os_director_runs r
       where exists (select 1 from os_director_jobs j where j.run_id=r.id and j.status='reported')
       order by r.created_at,r.id limit 1 for update of r skip locked
     `);
@@ -255,7 +256,7 @@ function reviewNext(pool, evaluate) {
       update os_director_jobs set status='accepted',issues='{}',updated_at=now() where id=$1
     `, [job.id]);
     await event(db,job.id,'accepted',{revision:job.revision});
-    return true;
+    return job.kind==='report' ? {runId:run.id,mode:run.mode,report:job.result} : true;
   });
 }
 
@@ -324,7 +325,9 @@ async function listRuns(pool, runId) {
         (select status,count(*)::int total from os_director_jobs where run_id=r.id group by status) counts
     ) counts from os_director_runs r order by created_at desc limit 20
   `);
-  const selected = runId ? (await pool.query('select * from os_director_runs where id=$1',[runId])).rows[0] : recent.rows[0];
+  const selected = runId
+    ? (await pool.query('select * from os_director_runs where id=$1',[runId])).rows[0]
+    : recent.rows.find(run=>run.input.mode!=='sample') ?? recent.rows[0];
   const jobs = selected ? await pool.query(`
     select j.*, (
       select coalesce(jsonb_agg(to_jsonb(e) order by e.id desc),'[]')
@@ -341,7 +344,11 @@ function startDirectorWorker(pool, execute, evaluate, options = {}) {
   let stopped = false, timer, active;
   async function tick() {
     for (let n=0; n<12 && !stopped; n++) {
-      if (await reviewNext(pool,evaluate)) continue;
+      const review=await reviewNext(pool,evaluate);
+      if (review) {
+        if (review?.report) options.onReport?.(review);
+        continue;
+      }
       const job = await claim(pool);
       if (!job) break;
       try {

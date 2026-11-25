@@ -126,4 +126,21 @@ function crmExecutor(pool,env=process.env) {
   };
 }
 
-module.exports = {initCrm,messengerWebhook,crmExecutor,inboundRows};
+function sampleCrm(saleStatus) {
+  const now=Date.now();
+  const cases=[
+    {mid:'sample-purchase',sender:'100001',text:'Tôi muốn mua hai đơn vị.'},
+    {mid:'sample-support',sender:'100002',text:'Tôi muốn hỏi chính sách đổi trả.'},
+    {mid:'sample-opt-out',sender:'100003',text:'Xin đừng nhắn thêm cho tôi.'}
+  ];
+  const payload={object:'page',entry:[{id:scope.pageId,messaging:cases.map(item=>({
+    sender:{id:item.sender},recipient:{id:scope.pageId},timestamp:now,message:{mid:item.mid,text:item.text}
+  }))}]};
+  const rows=inboundRows(payload,'extra24h-sample-fixture',now);
+  return {mode:'sample',source:'demo_fixture',saleStatus,
+    saleIntents:rows.filter(row=>row.category==='sales').length,
+    supportIntents:rows.filter(row=>row.category==='support').length,
+    optOuts:rows.filter(row=>row.category==='opt_out').length,outboundMessages:0};
+}
+
+module.exports = {initCrm,messengerWebhook,crmExecutor,inboundRows,sampleCrm};

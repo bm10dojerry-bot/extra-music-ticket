@@ -14,6 +14,8 @@ const versions = {
   Director:'V 1.0',Research:'V 0.1',Planner:'V 0.1',Content:'V 0.1',Creative:'V 0.1',
   Social:'V 0.1',Ads:'V 0.1',Sale:'V 2.3',CRM:'V 0.1',Analyst:'V 1.0',Auditor:'V 0.1'
 };
+const isSample = run => run.input.mode==='sample';
+const runMode = run => isSample(run) ? 'Dữ liệu mẫu' : 'Diễn tập kết nối';
 const reports = {
   research:'Nghiên cứu',plan:'Chiến lược',direction:'Chỉ đạo triển khai',forecast:'Dự kiến tài chính',audit:'Kiểm tra quyền và ngân sách',
   content:'Nội dung',creative:'Tư liệu',training:'Kiến thức Sale',sale_rehearsal:'Diễn tập Sale',
@@ -21,7 +23,7 @@ const reports = {
   actuals:'Đối soát',publication_checks:'Kiểm tra trước xuất bản',report:'Báo cáo tổng hợp',brief:'Chỉ đạo'
 };
 
-function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrfField,s,agents,saleLinkHtml,requestId}) {
+function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrfField,s,agents,saleLinkHtml,requestId,sampleRequestId}) {
   const field = (key,label,max) => '<label>'+esc(label)+'<input required name="'+key+'" maxlength="'+max+'"></label>';
   const amount = (key,label,required) => '<label>'+esc(label)+'<input type="number" name="'+key+
     '" min="'+(key==='priceVnd'?'1':'0')+'" max="1000000000" step="1"'+(required?' required':'')+'></label>';
@@ -34,11 +36,15 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
     '<p>Diễn tập 24H cho khách từ 18 tuổi. Director tự giao việc, kiểm tra kết quả và ghi rõ các bước còn thiếu quyền.</p>'+
     '<button>Chạy ONE CLICK 24H</button></form>';
 
+  const sampleForm = '<form class="director-sample" action="/director/sample" method="post">'+csrfField(s)+
+    '<input type="hidden" name="request_id" value="'+esc(sampleRequestId)+'">'+
+    '<div><h3>Kiểm thử 24H bằng dữ liệu mẫu</h3><p>Chạy 11 Agent với danh mục, báo giá và biên nhận thử nghiệm.</p></div>'+
+    '<button>Chạy dữ liệu mẫu</button></form>';
   const runUrl = id => '/?directorRun='+id+'#oneclick24';
   const runLinks = runs.map(run=>{
     const counts = run.counts ?? {};
     return '<li><a href="'+runUrl(run.id)+'"'+(run.id===selected?.id?' aria-current="true"':'')+'>'+
-      esc(run.input.product)+'</a> · '+esc(counts.accepted ?? 0)+' đã nghiệm thu · '+esc((counts.blocked ?? 0)+(counts.failed ?? 0))+
+      esc(run.input.product)+'</a> · '+esc(runMode(run))+' · '+esc(counts.accepted ?? 0)+' đã nghiệm thu · '+esc((counts.blocked ?? 0)+(counts.failed ?? 0))+
       ' cần xử lý · '+esc(new Date(run.created_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+'</li>';
   }).join('');
 
@@ -49,6 +55,13 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
       ' / đơn vị · Hòa vốn chỉ tính giá vốn và quảng cáo: '+esc(job.result.subtotalBreakEvenUnits ?? '—')+
       ' · Hòa vốn đủ chi phí: '+esc(job.result.breakEvenUnits ?? '—')+'</p>' : '';
     const report = job.kind==='report' && job.result?.actuals ? (() => {
+      const sample=job.result.sample;
+      if (sample) {
+        const receipt=sample.receipt ? 'Biên nhận '+sample.receipt+' · '+sample.units+' đơn vị · '+money(sample.checkoutVnd) : 'Chưa có biên nhận mẫu';
+        const budget=sample.adsStop ? 'Đã thử dừng ở '+money(sample.spendVnd) : 'Chưa kiểm tra được ngưỡng dừng';
+        return '<p>'+esc(receipt+' · '+budget)+'</p>'+
+          (sample.profitVnd!==null ? '<p>Lãi/lỗ mô phỏng '+esc(money(sample.profitVnd))+'</p>' : '');
+      }
       const row=job.result.actuals;
       const known = row.basis==='sapo_tagged_paid_orders';
       return '<p>'+esc(known?'Đã đọc các đơn gắn thẻ từ Sapo. Tổng đã thanh toán '+money(row.grossPaidVnd)+
@@ -58,7 +71,7 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
     const reopen = ['accepted','blocked','failed'].includes(job.status) ? '<form action="/director/revise" method="post">'+csrfField(s)+
       '<input type="hidden" name="job_id" value="'+job.id+'"><label>Phản hồi cho Agent<input required name="feedback" maxlength="1000"></label>'+
       '<button>Yêu cầu làm lại</button></form>' : '';
-    return '<details class="director-job"><summary>'+esc(reports[job.kind] ?? job.kind)+' · '+esc(agents[job.agent]?.label ?? job.agent)+
+    return '<details class="director-job"><summary>'+esc(isSample(selected)&&job.kind==='actuals'?'Đối chiếu biên nhận mẫu':reports[job.kind] ?? job.kind)+' · '+esc(agents[job.agent]?.label ?? job.agent)+
       ' · '+esc(statuses[job.status])+'</summary><p>'+esc(job.objective)+'</p>'+
       '<p><small>Mã '+esc(job.id)+' · Giao bởi '+esc(job.assigned_by)+' · Phiên '+esc(job.revision+1)+' · Lượt chạy '+esc(job.attempts)+
       ' · Hạn '+esc(new Date(job.deadline).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+'</small></p>'+
@@ -84,30 +97,34 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
     return '<li>Phiên bản '+v.version+' · '+state+button+'</li>';
   }).join('')+'</ul>';
 
+  const reported = jobs.some(job=>job.kind==='report'&&job.status==='accepted');
   const current = selected ? '<div class="director-run"><h3>'+esc(selected.input.product)+'</h3><p>'+esc(selected.input.objective)+'</p>'+
-    '<p>'+esc(selected.input.region)+' · 18+ · '+esc(money(selected.input.priceVnd))+' · Diễn tập</p>'+
-    '<p><a href="'+runUrl(selected.id)+'">Cập nhật trạng thái</a></p>'+jobs.map(renderJob).join('')+history+'</div>' : '';
-  const retail = brief+'<h3>Chiến dịch 24H</h3>'+(runLinks?'<ul class="director-runs">'+runLinks+'</ul>':'<p>Chưa có chiến dịch.</p>')+current;
+    '<p>'+esc(selected.input.region)+' · 18+ · '+esc(money(selected.input.priceVnd))+' · '+esc(runMode(selected))+'</p>'+
+    '<p class="director-links"><a href="'+runUrl(selected.id)+'">Cập nhật trạng thái</a>'+
+      (reported?'<a href="/director/report?run='+esc(selected.id)+'">Tải báo cáo JSON</a>':'')+'</p>'+jobs.map(renderJob).join('')+history+'</div>' : '';
+  const retail = sampleForm+brief+'<h3>Chiến dịch 24H</h3>'+(runLinks?'<ul class="director-runs">'+runLinks+'</ul>':'<p>Chưa có chiến dịch.</p>')+current;
 
   const panel = '<section class="os-panel" id="agents"><h2>AI Director</h2>'+
     (selected?'<p>Hiển thị từ lượt điều hành <a href="'+runUrl(selected.id)+'">'+esc(selected.input.product)+'</a>.</p>':'')+
-    '<div class="grid director-agents">'+Object.entries(agents).map(([key,agent])=>{
-      const records = jobs.filter(job=>job.agent===key);
-      const active = records.find(job=>['running','reported','queued'].includes(job.status));
-      const last = records.find(job=>['accepted','blocked','failed'].includes(job.status));
-      const missing = [...new Set(records.flatMap(job=>[...job.issues,...(job.result?.remaining ?? [])]))];
-      const connection = records.some(job=>job.attempts>0 || job.status==='accepted');
-      const tested = key==='Sale' ? records.some(job=>job.kind==='sale_rehearsal'&&job.status==='accepted') :
-        records.some(job=>job.status==='accepted');
-      return '<article class="tile"><strong>'+esc(agent.label+(versions[key]?' '+versions[key]:''))+'</strong><p>'+esc(agent.responsibility)+'</p>'+
-        '<p><small>Triển khai '+(key==='Sale'?'Dịch vụ V 2.3 staging':'Bộ điều phối 24H staging')+'</small><br>'+
-        '<small>Kết nối Director '+(connection?'Có nhật ký thực thi':'Chờ lượt chạy')+'</small><br>'+
-        '<small>Kiểm thử '+(tested?'Đã nghiệm thu tác vụ diễn tập':'Chưa có nghiệm thu diễn tập')+'</small></p>'+
-        (active?'<p>'+esc(reports[active.kind])+' · '+esc(statuses[active.status])+'</p>':'')+
-        (last?'<p>Kết quả gần nhất '+esc(reports[last.kind])+' · '+esc(statuses[last.status])+'</p>':'')+
-        (missing.length?'<p class="tag">'+missing.map(key=>esc(permissionLabels[key] ?? key)).join(' · ')+'</p>':'')+
-        (key==='Sale'?saleLinkHtml:'')+'</article>';
-    }).join('')+'</div></section>';
+    '<div class="scroll"><table class="director-agents"><thead><tr><th scope="col">Agent</th>'+
+    '<th scope="col">Tiến độ lượt chạy</th><th scope="col">Kết quả / Việc còn chờ</th></tr></thead><tbody>'+
+    Object.entries(agents).map(([key,agent])=>{
+      const records=jobs.filter(job=>job.agent===key);
+      const open=records.find(job=>['running','reported','queued'].includes(job.status));
+      const last=records.find(job=>['accepted','blocked','failed'].includes(job.status));
+      const verified=records.filter(job=>job.status==='accepted').length;
+      const missing=[...new Set(records.flatMap(job=>[...job.issues,...(job.result?.remaining ?? [])]))];
+      const complete=records.length>0 && verified===records.length && missing.length===0;
+      const progress=complete
+        ? '<span class="director-pass"><span aria-hidden="true">✓ </span>Nghiệm thu lượt '+(isSample(selected)?'mẫu':'diễn tập')+'</span>'
+        : '<span>'+esc(open?statuses[open.status]:(last&&last.status!=='accepted'?statuses[last.status]:records.length?'Chờ tích hợp':'Chưa có lượt chạy'))+'</span>';
+      return '<tr><th scope="row"><strong>'+esc(agent.label+' '+versions[key])+'</strong><br><small>'+
+        esc(agent.responsibility)+'</small></th><td>'+progress+
+        (records.length?'<br><small>'+verified+'/'+records.length+' nhiệm vụ được nghiệm thu</small>':'')+'</td><td>'+
+        (last?'<strong>'+esc(reports[last.kind] ?? last.kind)+'</strong><br>':'')+
+        (missing.length?'<small>'+missing.map(key=>esc(permissionLabels[key] ?? key)).join(' · ')+'</small>':'')+'</td></tr>';
+    }).join('')+'</tbody></table></div>'+
+    '<details><summary>Kết nối AI Sale V 2.3</summary>'+saleLinkHtml+'</details></section>';
   return {retail,panel};
 }
 
@@ -118,8 +135,13 @@ const directorCss = `
 .director-result {white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f7f8;border-radius:6px;padding:12px;font-size:.85rem;line-height:1.5}
 .director-runs,.director-versions {padding-left:20px;line-height:1.65}
 .director-versions form {display:inline-block;margin-left:10px}
-.os-content .director-agents {grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr))}
-.director-agents .tile p {margin:7px 0}
+.director-agents th:first-child {min-width:160px}
+.director-agents td {min-width:125px}
+.director-agents small {font-weight:400}
+.director-pass {background:#eaf7ef;color:#125d36;display:inline-block;padding:4px 8px;border-radius:5px;font-weight:700}
+.director-sample {display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#f5f8f6;border:1px solid #dae9e0;border-radius:8px;padding:12px;margin-bottom:20px}
+.director-sample h3,.director-sample p {margin:0}
+.director-links {display:flex;gap:16px;flex-wrap:wrap}
 .os-content :is(#agents,#oneclick24) {max-width:1350px}
 @media(max-width:480px){.director-job {padding:9px}.director-job summary{font-size:14px}}
 `;
