@@ -19,7 +19,8 @@ export function directionUrl(v:MapVenue,origin?:string,mode?:Mode,originId?:stri
   const p=new URLSearchParams({api:"1",destination:venueDestination(v)});
   if(origin)p.set("origin",origin);
   if(originId)p.set("origin_place_id",originId);
-  if(destId)p.set("destination_place_id",destId);
+  const verifiedId=destId||verifiedVenuePlaces[v.id];
+  if(verifiedId)p.set("destination_place_id",verifiedId);
   if(mode)p.set("travelmode",mode==="WALK"?"walking":mode==="TWO_WHEELER"?"two-wheeler":"driving");
   return "https://www.google.com/maps/dir/?"+p.toString();
 }
@@ -28,7 +29,9 @@ const goodId=(id:unknown):id is string=>typeof id==="string"&&/^[A-Za-z0-9_-]{8,
 const clean=(s:unknown)=>typeof s==="string"?s.replace(/[\u0000-\u001f\u007f]/g," ").replace(/https?:\/\/\S+/g,"").trim().slice(0,180):"";
 // Owner-provided compound Plus Code; do not shorten it to just 68P.
 const laoCaiPlusCode="FXGV+68P, Phú Thịnh, Cam Đường, Lào Cai, Việt Nam";
-function venueDestination(v:MapVenue){return v.id==="laocai"?laoCaiPlusCode:v.name+", "+v.address;}
+// Both independent address queries resolved to this same Google Maps listing.
+const verifiedVenuePlaces:Record<string,string>={ccc:"ChIJ1dIHLQBBzTYRPivq9rlFZsI",moana:"ChIJOUsUjU9BzTYR2iiyXdPUg-g"};
+function venueDestination(v:MapVenue){return v.id==="laocai"?laoCaiPlusCode:v.id==="ccc"?"Không Gian Văn Hoá - Sa Pa Tinh Hoa Hội Tụ, 8RPR+7CC, Fansipan, Sa Pa, Lào Cai":v.name+", "+v.address;}
 async function findPlaces(query:string,key:string):Promise<Place[]>{
  const res=await fetch("https://places.googleapis.com/v1/places:searchText",{method:"POST",headers:{"Content-Type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress"},body:JSON.stringify({textQuery:query,languageCode:"vi",regionCode:"VN",pageSize:5}),cache:"no-store",signal:AbortSignal.timeout(2500)});
  if(!res.ok)throw Error("Places lookup unavailable");
@@ -67,10 +70,11 @@ async function resolveVenue(v:MapVenue,key:string,configuredId:string|undefined)
 export async function mapDistanceReply(q:string,v:MapVenue):Promise<string>{
   const mode=modeOf(q),origin=extractOrigin(q);
   if(!origin)return "Mình cho em tên cụ thể khách sạn hoặc địa danh và khu vực đang ở để em kiểm tra đường đến "+v.name+" ạ.";
-  const configuredId=process.env["EXTRA_MAPS_PLACE_"+v.id.toUpperCase()];
+  const overrideId=process.env["EXTRA_MAPS_PLACE_"+v.id.toUpperCase()];
+  const configuredId=goodId(overrideId)?overrideId:verifiedVenuePlaces[v.id];
   const key=process.env.GOOGLE_MAPS_API_KEY;
   const originQuery=isSaPa(norm(v.city))&&isStoneChurch(norm(origin))?"Nhà thờ Đá (Nhà thờ Đức Mẹ Mân Côi), Phạm Xuân Huân, Sa Pa, Lào Cai, Việt Nam":origin+", "+v.city+", Việt Nam";
-  const fallback="Em chưa xác minh được khoảng cách từ "+origin+" đến "+v.name+" ("+v.address+"), nên chưa thể báo số km hoặc phút chính xác. Mình có thể mở Google Maps và chọn đúng điểm xuất phát tại đây ạ:\n"+directionUrl(v,undefined,mode,undefined,goodId(configuredId)?configuredId:undefined);
+  const fallback="Em chưa xác minh được khoảng cách từ "+origin+" đến "+v.name+" ("+venueDestination(v)+"), nên chưa thể báo số km hoặc phút chính xác. Mình có thể mở Google Maps và chọn đúng điểm xuất phát tại đây ạ:\n"+directionUrl(v,undefined,mode,undefined,goodId(configuredId)?configuredId:undefined);
   if(!key)return fallback;
   try{
     const [places,destination]=await Promise.all([findPlaces(originQuery,key),resolveVenue(v,key,configuredId)]);
