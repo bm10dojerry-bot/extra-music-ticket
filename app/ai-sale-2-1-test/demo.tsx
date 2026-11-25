@@ -5,6 +5,7 @@ import { initial21, simulateExtra21, seatMapNames, type SeatMapVenue, type Extra
 import styles from "./demo.module.css";
 
 const scenarios: { id: Scenario; name: string; hint: string }[] = [
+  { id: "child_fare", name: "Vé trẻ em", hint: "Tuổi ngày diễn, ghế và giá vé" },
   { id: "after_purchase", name: "Sau mua vé", hint: "Cảm ơn, check-in, giao lưu" },
   { id: "photo_reminder", name: "Đăng ký chụp ảnh", hint: "Nhắc khách đã mua vé" },
   { id: "three_min", name: "Im lặng 3 phút", hint: "Nhắc khách chưa mua" },
@@ -43,7 +44,7 @@ export default function Extra21Demo({availableMaps}: {availableMaps: SeatMapVenu
       ["photo_reminder", "after_purchase", "show_day", "after_show"].includes(scenario) ? true : previous.paymentVerified,
   }));
   const isReminder = data.scenario === "three_min" || data.scenario === "day_before";
-  const isWeather = data.scenario === "weather" || data.scenario === "show_day";
+  const isWeather = data.scenario === "day_before" || data.scenario === "weather" || data.scenario === "show_day";
   const relevantStatus = ["photo_reminder", "after_purchase", "three_min", "day_before", "show_day", "after_show"].includes(data.scenario);
 
   return <main className={styles.main}>
@@ -84,6 +85,11 @@ export default function Extra21Demo({availableMaps}: {availableMaps: SeatMapVenu
               </label>
             </div>
 
+            {data.scenario==="child_fare" && <div className={styles.fieldGrid}>
+              <label className={styles.field}>Tuổi tròn vào ngày diễn<input type="number" min="0" value={data.childAge} onChange={e=>change({childAge:Number(e.target.value)})}/></label>
+              <label className={styles.field}>Giá người lớn cùng hạng (đồng, mô phỏng)<input type="number" min="1" value={data.tierPrice} onChange={e=>change({tierPrice:Number(e.target.value)})}/></label>
+              {data.childAge<4 && <Toggle label="Bé ngồi ghế riêng" checked={data.separateSeat} onChange={v=>change({separateSeat:v})}/>}
+            </div>}
             {relevantStatus && <>
               <h3>Trạng thái đơn hàng</h3>
               <div className={styles.statuses}>{statuses.map(item =>

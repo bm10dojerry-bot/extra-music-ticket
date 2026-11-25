@@ -4,7 +4,7 @@
  * Production integration must independently recheck consent, paid status and dedupe.
  */
 export type TicketState = "not_purchased" | "pending" | "paid" | "cancelled";
-export type Scenario = "after_purchase" | "photo_reminder" | "three_min" | "day_before" | "show_day" | "after_show" | "weather" | "complaint" | "images" | "voice";
+export type Scenario = "child_fare" | "after_purchase" | "photo_reminder" | "three_min" | "day_before" | "show_day" | "after_show" | "weather" | "complaint" | "images" | "voice";
 export type LastSpeaker = "ai" | "customer" | "staff";
 
 export type Extra21Input = {
@@ -13,6 +13,9 @@ export type Extra21Input = {
   showName: string;
   showDate: string; // YYYY-MM-DD in Asia/Ho_Chi_Minh
   today: string; // YYYY-MM-DD in Asia/Ho_Chi_Minh
+  childAge: number;
+  separateSeat: boolean;
+  tierPrice: number;
   minutesSilent: number;
   lastSpeaker: LastSpeaker;
   withinMessengerWindow: boolean;
@@ -52,6 +55,7 @@ export const initial21: Extra21Input = {
   showName: "Đình Dũng",
   showDate: "2026-11-28",
   today: "2026-11-27",
+  childAge: 3, separateSeat: true, tierPrice: 399000,
   minutesSilent: 3,
   lastSpeaker: "ai",
   withinMessengerWindow: true,
@@ -89,9 +93,9 @@ const block = (title: string, reason: string, notes: string[] = []): Extra21Deci
   eligible: false, title, reason, notes, message: "", attachments: [], action: "do_not_send",
 });
 const weatherText = (input: Extra21Input): string[] => {
-  if (!input.forecastVerified) return ["Dự báo thời tiết chưa được xác minh; chỉ nhắc chung rằng buổi tối Sa Pa có thể lạnh, mình nên mang áo ấm."];
+  if (!input.forecastVerified) return ["Mình xem lại dự báo thời tiết trước khi đến nhé."];
   const result: string[] = [];
-  if (input.mayBeCold) result.push("Thời tiết hôm nay có thể lạnh, anh/chị nhớ mặc áo ấm một chút khi đi xem nhạc nhé!");
+  if (input.mayBeCold) result.push("Dự báo quanh giờ diễn có thể lạnh, anh/chị nhớ mặc áo ấm một chút khi đi xem nhạc nhé!");
   if (input.rainForecast) {
     result.push(input.canopyConfirmed
       ? "Nếu trời mưa, khu vực biểu diễn có rạp và căng tăng che mưa để mình yên tâm thưởng thức đêm nhạc ạ."
@@ -99,7 +103,7 @@ const weatherText = (input: Extra21Input): string[] => {
   }
   return result;
 };
-export const artistPhotoNotice = "Sau khi đêm nhạc kết thúc, mình sẽ có 15 phút để chụp ảnh cùng ca sĩ. Anh/chị muốn chụp ảnh kỷ niệm thì đăng ký với Ban Tổ chức giúp em nhé!";
+export const artistPhotoNotice = "Dự kiến khoảng 25 phút cuối chương trình sẽ dành cho việc chụp ảnh cùng nghệ sĩ. Nếu muốn tham gia, mình đăng ký với ban tổ chức nhé.";
 export const seatMapNames = { ccc: "CCC Sa Pa · 550 ghế", laocai: "Lào Cai · 600 ghế" } as const;
 export type SeatMapVenue = keyof typeof seatMapNames;
 const withPhotoNotice = (message: string, x: Extra21Input) =>
@@ -118,6 +122,12 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
   if (stopped) return block("Dừng gửi", stopped);
   const name = show(x);
 
+  if (x.scenario === "child_fare") {
+    if(!Number.isInteger(x.childAge)||x.childAge<0||!Number.isSafeInteger(x.tierPrice)||x.tierPrice<=0)return block("Cần tuổi và giá vé hợp lệ","Nhập tuổi vào ngày diễn và giá người lớn của đúng hạng vé.");
+    if(x.childAge<4 && !x.separateSeat)return done("Bé ngồi cùng bố mẹ","Bé được miễn vé, không giữ thêm ghế.");
+    const price=x.childAge<11 ? Math.round(x.tierPrice*0.7) : x.tierPrice;
+    return done(x.childAge<11?"Vé trẻ em · 70%":"Vé người lớn", "Giá một vé "+new Intl.NumberFormat("vi-VN").format(price)+" đồng. Vé có ghế và mã QR riêng.");
+  }
   if (x.scenario === "three_min") {
     if (x.ticketState !== "not_purchased") return block("Không nhắc sau 3 phút", "Chỉ dùng cho khách chưa mua vé; khách đã mua hoặc chờ thanh toán cần kịch bản riêng.");
     if (!x.withinMessengerWindow) return block("Không nhắc sau 3 phút", "Không còn trong cửa sổ Messenger cho phép phản hồi.");
@@ -143,7 +153,7 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
       if (!x.paymentVerified) return block("Chưa đủ dữ liệu", "Chưa đối soát thanh toán, không nhận định khách đã mua.");
       if (!canService(x)) return block("Không gửi tự động", "Thiếu quyền thông báo dịch vụ hoặc cửa sổ phản hồi Messenger hợp lệ.");
       return done("Nhắc khách đã mua vé",
-        withPhotoNotice("Dạ anh/chị ơi, chỉ còn một ngày nữa là đến đêm nhạc " + name + " rồi ạ! Anh/chị có cần bên em hỗ trợ gì về đường đi, giờ check-in hay chỗ ngồi không ạ? Nếu muốn rủ thêm người thân hoặc bạn bè, em cũng có thể hỗ trợ mình đặt thêm vé nhé! ❤️", x),
+        withPhotoNotice("Ngày mai (" + x.showDate.split("-").reverse().join("/") + ") là đêm nhạc " + name + ". " + weatherText(x).join(" ") + (x.forecastVerified ? " Mình xem lại dự báo trước khi đi nhé." : "") + " Hẹn gặp mình tại đêm nhạc!", x),
         ["Ưu tiên hỗ trợ, không tạo đơn hay giữ ghế khi khách chưa yêu cầu."]);
     }
     if (x.ticketState === "pending") {
@@ -154,7 +164,7 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
     }
     if (!canMarketing(x)) return block("Không gửi lời mời đặt vé", "Tin mời mua vé cần nằm trong cửa sổ Messenger hoặc có quyền nhận tiếp thị phù hợp.");
     return done("Nhắc khách chưa mua vé",
-      withPhotoNotice("Dạ anh/chị ơi, chỉ còn một ngày nữa là diễn ra đêm nhạc " + name + " rồi ạ! Không biết mình đã sắp xếp được thời gian chưa? Nếu anh/chị muốn tham dự, em có thể tư vấn vị trí ngồi và hỗ trợ đặt vé nhé! ❤️", x),
+      withPhotoNotice("Ngày mai là đêm nhạc " + name + ". Mình có muốn đặt vé để đến nghe nhạc và giao lưu cùng nghệ sĩ không ạ?", x),
       ["Không khẳng định còn vé nếu chưa kiểm tra tồn ghế trực tiếp."]);
   }
 

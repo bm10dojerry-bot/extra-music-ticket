@@ -12,15 +12,15 @@ test("D-1 compares Vietnam calendar dates", () => {
 });
 test("paid customer receives support rather than new purchase pitch", () => {
   const value = check("day_before");
-  assert.match(value.message, /cần bên em hỗ trợ/);
-  assert.match(value.message, /đặt thêm vé/);
+  assert.match(value.message, /28\/11\/2026/);
+  assert.match(value.message, /Hẹn gặp/);
   assert.doesNotMatch(value.message, /đã sắp xếp được thời gian chưa/);
 });
 test("unpaid customer requires allowed marketing response", () => {
   const blocked = check("day_before", { ticketState: "not_purchased", paymentVerified: false, withinMessengerWindow: false });
   assert.equal(blocked.eligible, false);
   const allowed = check("day_before", { ticketState: "not_purchased", paymentVerified: false, withinMessengerWindow: false, marketingOptIn: true });
-  assert.match(allowed.message, /hỗ trợ đặt vé/);
+  assert.match(allowed.message, /muốn đặt vé/);
 });
 test("pending payment never asks to pay twice", () => {
   const value = check("day_before", { ticketState: "pending", paymentVerified: false });
@@ -39,10 +39,10 @@ test("three-minute follow-up only occurs once for an unanswered AI sales reply",
 test("after purchase requires verified paid status", () => {
   assert.equal(check("after_purchase", { paymentVerified: false }).eligible, false);
   assert.match(check("after_purchase").message, /mã QR/);
-  assert.match(check("after_purchase").message, /15 phút.*đăng ký với Ban Tổ chức/u);
+  assert.match(check("after_purchase").message, /25 phút cuối.*đăng ký với ban tổ chức/u);
 });
 test("show-day weather never claims current conditions without verification", () => {
-  assert.match(check("show_day", { today: "2026-11-28" }).message, /có thể lạnh/);
+  assert.match(check("show_day", { today: "2026-11-28" }).message, /xem lại dự báo/);
   const rain = check("show_day", { today: "2026-11-28", forecastVerified: true, rainForecast: true });
   assert.match(rain.message, /căng tăng che mưa/);
   assert.doesNotMatch(rain.message, /căng bạt/);
@@ -60,11 +60,11 @@ test("voice requires consent and configured channel", () => {
   assert.equal(check("voice", { voiceConsent: true }).eligible, false);
   assert.equal(check("voice", { voiceConsent: true, audioChannelReady: true }).eligible, true);
 });
-test("artist photos are a 15 minute session after the show and registration is through the organizer", () => {
+test("artist photos are about 25 minutes at the end of the show and registration is through the organizer", () => {
   for (const [scenario,changes] of [["after_purchase",{}],["day_before",{}],["show_day",{today:initial21.showDate}],["photo_reminder",{}],["day_before",{ticketState:"not_purchased"}]]) {
     const value = check(scenario, changes);
-    assert.match(value.message, /Sau khi đêm nhạc kết thúc.*15 phút.*chụp ảnh cùng ca sĩ.*đăng ký với Ban Tổ chức/u);
-    assert.doesNotMatch(check(scenario,{...changes,photoNoticeAlreadySent:true}).message,/15 phút/);
+    assert.match(value.message, /25 phút cuối chương trình.*chụp ảnh cùng nghệ sĩ.*đăng ký với ban tổ chức/u);
+    assert.doesNotMatch(check(scenario,{...changes,photoNoticeAlreadySent:true}).message,/25 phút cuối/);
   }
   for (const change of [{paymentVerified:false},{ticketState:"pending"},{ticketState:"cancelled"},{today:"2026-11-29"},{optedOut:true},{reminderAlreadySent:true},{withinMessengerWindow:false}]) {
     assert.equal(check("photo_reminder",change).eligible,false);
@@ -108,4 +108,8 @@ test("map history is venue-specific; explicit resend is opt-in", () => {
   assert.deepEqual(repeat.attachments,[]);
   assert.match(repeat.message,/gần sân khấu/);
   assert.equal(check("images",{...settings,resendRequested:true}).attachments.length,2);
+});
+
+test("family fares use age on the show date",()=>{
+ for(const [childAge,separateSeat,expected] of [[3,false,/miễn vé/],[3,true,/279.300/],[4,true,/279.300/],[10,true,/279.300/],[11,true,/399.000/]])assert.match(check("child_fare",{childAge,separateSeat,tierPrice:399000}).message,expected);
 });
