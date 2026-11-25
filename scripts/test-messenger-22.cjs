@@ -32,7 +32,7 @@ test('use an appropriate emoji sparingly and adapt to the previous reply',()=>{
  const repeat=style.styleSalesReply('Em vừa kiểm tra ghế.','Ghế nào?', [{sender:'staff',body:'💺 Mình thích góc nào?'},{sender:'customer',body:'Ghế nào?'}]);
  assert.doesNotMatch(repeat,/💺/);
  assert.equal(style.styleSalesReply('🎉 Em sẽ đối soát. 😊','Khiếu nại thanh toán'),'Em sẽ đối soát.');
- assert.equal((style.styleSalesReply('🎵 Dạ, em có hai lựa chọn 🎉😊','giá vé').match(/\p{Extended_Pictographic}/gu)||[]).length,1);
+ assert.equal((style.styleSalesReply('🎵 Dạ, em có hai lựa chọn 🎉😊','đêm nhạc').match(/\p{Extended_Pictographic}/gu)||[]).length,1);
 });
 test('private comment replies keep prices in Messenger by default',()=>{
  const p=load('ai-comment-policy',{'./poster-offers':load('poster-offers'),'./ai-sales-policy':load('ai-sales-policy'),'./messenger-conversation-style':style});
@@ -42,11 +42,14 @@ test('private comment replies keep prices in Messenger by default',()=>{
  assert.match(p.renderCommentPrivateReply(d,show,'Giá bao nhiêu, cho xin link đặt vé'),/399.000đ[\s\S]+https:\/\/iextra.net\/show\/dinh-dung-2811/);
 });
 // Drive the built worker with a private in-memory conversation. No network or seat holds.
-async function inbox(body,prior=[],paid=false){
- const rows=['Show Đình Dũng',...prior,body].map((text,i,all)=>({id:i+1,body:text,sender:i===0?'staff':'customer',staff_name:i===0?'EXTRA AI':null,created_at:new Date().toISOString()})).reverse();
+async function inbox(body,prior=[],paid=false,scenario={}){
+ const rows=[...(scenario.fresh?[]:['Show Đình Dũng']),...prior,body].map((text,i,all)=>({id:i+1,body:text,external_message_id:'m_fixture_'+i,sender:i===0&&!scenario.fresh?'staff':'customer',staff_name:i===0?'EXTRA AI':null,created_at:new Date().toISOString()})).reverse();
  const posted=[];
  const show={id:'dinh-dung-2811',url:page,artist:'Đình Dũng',title:'Đêm Đình Dũng',date:'2026-11-28',time:'19:30',venueId:'ccc',venueName:'CCC Sa Pa',prices:load("poster-offers").posterPrices["dinh-dung-2811"]};
  const modules={'server-only':{},'./staff-auth':{staffDb:async(path,options)=>{
+   if(path.startsWith('show_landing_content?'))return [{setlist:scenario.setlist??''}];
+   if(path.startsWith('extra_messenger_heart_verification?'))return [];
+   if(path.startsWith('extra_messenger_show_signals?'))return scenario.signal?[{occurred_at:rows[0].created_at,show_id:scenario.signal}]:[];
    if(path.startsWith('extra_support_messages?'))return path.includes('body=eq.')?[]:rows;
    if(path.startsWith('extra_messenger_ai_state?'))return paid?[{current_order_code:'EX0000000000000000',status:'paid'}]:[];
    if(path.startsWith('extra_messenger_ai_outbox?')||path.startsWith('extra_messenger_ai_timeout_ledger?'))return [];
@@ -57,11 +60,12 @@ async function inbox(body,prior=[],paid=false){
    throw Error('Unexpected DB access: '+path);
  }},'./facebook-messenger':{sendMessengerPageMessage:async(id,text)=>{posted.push(text);return {messageId:'fixture-mid'};},
  sendMessengerPageImage:async()=>{posted.push('[image]');return {messageId:'fixture-image'};}},
- './ai-comment-context':{getCommentContextForChat:async()=>({showId:show.id})},
- './ai-sales-checkout':{listAiSalesShows:async()=>[show],getAiLatestQuote:async()=>null,isAiPurchaseConfirmation:()=>false,
+ './ai-comment-context':{getCommentContextForChat:async()=>scenario.fresh?null:({showId:show.id})},
+ './ai-sales-checkout':{listAiSalesShows:async()=>[show,{...show,id:'thai-hoc-3112',artist:'Thái Học',venueId:'laocai',venueName:'Sân khấu Lào Cai',date:'2026-12-31'}, {...show,id:'khac-viet-2612',artist:'Khắc Việt',date:'2026-12-26',prices:load('poster-offers').posterPrices['khac-viet-2612']}],getAiLatestQuote:async()=>null,isAiPurchaseConfirmation:()=>false,
  getAiSeatSnapshot:async()=>({show,seats:load('venues').seatsFor('ccc'),taken:new Set()}),
  getAiOrderStatus:async()=>({code:'EX0000000000000000',status:'paid'}),getAiPaidTicketDelivery:async()=>({message:'Vé QR: https://iextra.net/ve?code=FIXTURE'})},
  'ai':{ToolLoopAgent:class{async generate(){return {text:'Hạng C giá 399.000đ/vé. Mình xem ghế tại '+other+' nhé.'}}},tool:x=>x,isStepCount:()=>()=>false}};
+ if(scenario.image)modules["./ai-sales-inbound-image"]={readMessengerImage:async()=>scenario.image};
  function dependency(id){
    if(Object.hasOwn(modules,id))return modules[id];
    if(!id.startsWith('./'))return require(id);
@@ -89,4 +93,79 @@ test('poster ticket names and prices use the catalog selected for the conversati
  assert.match(reply,/VIP: 349\.000đ/);
  const standard=(await inbox('Giá Standard 2 Đình Dũng?')).join(' ');
  assert.match(standard,/Standard 2: 199\.000đ/);
+});
+
+test('fresh ad question, poster, split caption, explicit change and unreadable image',async()=>{
+ const q='Giá vé đêm nhạc là bao nhiêu?', marker='[Khách gửi ảnh; chưa đọc nội dung ảnh.]';
+ const poster={kind:'poster',showText:'ĐÌNH DŨNG 28/11',multipleShows:false,amount:null,reference:null};
+ const fresh={fresh:true},ad={...fresh,signal:'dinh-dung-2811'};
+ const first=(await inbox(q,[],false,ad)).join(' ');
+ for(const fact of ['Đình Dũng','399.000','349.000','249.000','199.000'])assert.ok(first.includes(fact),fact);
+ assert.doesNotMatch(first,/ca sĩ nào|nghệ sĩ nào/);
+ assert.match((await inbox(marker,[],false,{...fresh,image:poster})).join(' '),/poster đêm Đình Dũng/);
+ assert.match((await inbox(marker+' '+q,[],false,{...fresh,image:poster})).join(' '),/349.000/);
+ assert.match((await inbox(q,[marker],false,{...fresh,image:poster})).join(' '),/349.000/);
+ assert.match((await inbox('Giá vé VIP Khắc Việt bao nhiêu?',[],false,ad)).join(' '),/449.000/);
+ assert.match((await inbox(marker,[],false,{...fresh,image:{...poster,multipleShows:true}})).join(' '),/ca sĩ nào/);
+ const unreadable=(await inbox(marker,[],false,{...fresh,image:{...poster,kind:'unreadable',showText:null}})).join(' ');
+ assert.doesNotMatch(unreadable,/Đình Dũng|mã đơn/i);
+ const receipt=(await inbox(marker,[],false,{...fresh,image:{...poster,kind:'transfer_receipt',reference:null}})).join(' ');
+ assert.match(receipt,/mã đơn/i);assert.doesNotMatch(receipt,/đã xác nhận thanh toán/i);
+});
+test('signed ad sources are scoped to the same Page and sender; conflicting dates or artists stay ambiguous',async()=>{
+ const map=load('messenger-extra-ad-shows');
+ const sig=load('messenger-show-signals',{'server-only':{},'./ai-sales-checkout':{},'./staff-auth':{},'./messenger-extra-ad-shows':map});
+ const page='1223940670813189',now=Date.now(),shows=[{artist:'Đình Dũng',id:'dinh-dung-2811',date:'2026-11-28'},{artist:'Khắc Việt',id:'khac-viet-2612',date:'2026-12-26'}];
+ const r={source:'ADS',ad_id:'120250663161090420',ads_context_data:{ad_title:'1 EXTRA'}};
+ const evt={sender:{id:'10000123'},recipient:{id:page},timestamp:now};
+ for(const e of [{referral:r},{message:{mid:'m_ok',referral:r}},{postback:{referral:r}},{referral:{...r,ad_id:'12345678901',ads_context_data:{ad_title:'ĐÌNH DŨNG HẸN GẶP BẠN TẠI KHÔNG GIAN VĂN HOÁ CCC SA PA'}}}]){
+  assert.equal((await sig.signedSignals(page,{...evt,...e},async()=>shows,now))[0].show_id,shows[0].id);
+ }
+ assert.equal((await sig.signedSignals(page,{...evt,referral:{...r,ads_context_data:{ad_title:'Khắc Việt 26/12'}}},async()=>shows,now))[0].show_id,null);
+ for(const e of [{...evt,recipient:{id:'987654321'},referral:r},{...evt,message:{is_echo:true,referral:r}},{...evt,message:{text:JSON.stringify(r)}}])assert.equal((await sig.signedSignals(page,e,async()=>shows,now)).length,0);
+ assert.equal(sig.matchShowEvidence('Đình Dũng 26/12',shows).id,null);assert.equal(sig.matchShowEvidence('Đình Dũng 28/11, Khắc Việt 26/12',shows).id,null);
+ assert.equal(sig.matchShowEvidence('chỉ có ảnh ca sĩ',shows).id,null);
+ assert.equal(sig.matchShowEvidence('Đình Dũng 28/11/2025',shows).id,null);
+ assert.equal(sig.matchShowEvidence('Khac Viet 26/12',shows).id,shows[1].id);
+});
+
+test('drinks, directions, published program and seat preferences via Messenger worker',async()=>{
+ const ask=async(q,prior=[],options={})=>(await inbox(q,prior,false,options)).join(' ');
+ assert.match(await ask('Vé Đình Dũng có kèm nước không?'),/không kèm nước uống[\s\S]+gọi nước/);
+ const water=await ask('Trong khu diễn có bán đồ uống không?',[],{fresh:true});assert.match(water,/điểm bán nước/);assert.doesNotMatch(water,/ca sĩ nào/);
+ assert.match(await ask('Vé Khắc Việt có bao gồm nước uống?'),/chưa có xác nhận/);
+ const map=await ask('Có map chỉ đường không?');
+ assert.ok(decodeURIComponent(map).includes('002 Phan Xi Păng'));assert.match(map,/google\.com\/maps\/dir/);assert.doesNotMatch(map,/iextra.net\/show/);
+ const laocai=await ask('Map chỉ đường đêm Thái Học');assert.match(decodeURIComponent(laocai),/68P Phú Thịnh, Cam Đường/);assert.doesNotMatch(laocai,/CCC/);
+ const noShow=await ask('Cho em xin map chỉ đường',[],{fresh:true});assert.match(noShow,/ca sĩ nào/);assert.doesNotMatch(noShow,/https/);
+ const all=await ask('Show có kèm nước và hát bao nhiêu bài? Có map chỉ đường không?',[],{setlist:'Bài một\n\nBài hai'});
+ assert.match(all,/không kèm nước/);assert.match(all,/có 2 bài/);assert.match(all,/Google Maps/);
+ assert.match(await ask('Đêm Khắc Việt hát mấy bài?'),/chưa công bố/);
+ assert.match(await ask('Có chỗ nào ngồi đẹp không?'),/gần ca sĩ hay chính diện/);
+ const seats=await ask('Có chỗ nào ngồi đẹp không?', ['Hai vợ chồng đi đêm Đình Dũng, 700 nghìn cả hai, thích chính diện']);
+ assert.match(seats,/663.100đ/);assert.match(seats,/chính diện/);assert.doesNotMatch(seats,/đi mấy người|ngân sách mình/);
+ assert.match(await ask('Để anh hỏi vợ đã'),/cứ trao đổi thêm/);
+ assert.doesNotMatch(style.styleSalesReply('🎵 Vé VIP 349.000đ ạ','Bao nhiêu tiền?'),/\p{Extended_Pictographic}/u);
+ assert.doesNotMatch(style.styleSalesReply('Để em kiểm tra ạ 🎵','Vé lỗi rồi'),/\p{Extended_Pictographic}/u);
+});
+test('heart directly targets the incoming message and ordinary customers require verified support',async()=>{
+ const mid='m_test123',id='10000001',pageId='1223940670813189',positive=[{sender:'customer',body:'Cảm ơn em nhé'}];
+ let gate={},requests=[],claims=0,patches=0;
+ const heart=load('messenger-heart',{'server-only':{},'./messenger-conversation-style':style,
+  './staff-auth':{staffDb:async(path,opts)=>{if(opts?.method==='PATCH'){patches++;if(path.includes('attempted_at=is.null')){claims++;return [{page_id:pageId}];}return null;}return [gate];}},
+  './facebook-messenger':{getMessengerGraphConfig:async()=>({pageId,pageToken:'fixture',apiVersion:'v24.0'})}});
+ const original=global.fetch;global.fetch=async(u,init)=>{requests.push(JSON.parse(init.body));return Response.json({recipient_id:id});};
+ try{
+  await heart.maybeSendHeart(pageId,id,mid,positive,async()=>{});assert.equal(requests.length,0);
+  gate={verified_at:'2026-11-25'};
+  for(const body of ['Cảm ơn, em chuyển tiền rồi nhưng chưa có vé','Vé lỗi','Khiếu nại','Cảm ơn em, giá vé là bao nhiêu?','Chưa nhận được vé']){
+   await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body}],async()=>{});assert.equal(requests.length,0);
+  }
+  await heart.maybeSendHeart(pageId,id,mid,positive,async()=>{});
+  assert.deepEqual(requests.pop(),{recipient:{id},sender_action:'react',payload:{message_id:mid,reaction:'love'}});
+  await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body:'Vui quá cả nhà đi được rồi'}],async()=>{});assert.equal(requests.length,1);
+  const sample='Cảm ơn Extra a1b2c3d4e5';gate={verified_at:null,test_digest:require('node:crypto').createHash('sha256').update(sample).digest('hex'),test_until:new Date(Date.now()+60000).toISOString(),attempted_at:null};
+  await heart.maybeSendHeart(pageId,id,mid,[{sender:'customer',body:sample}],async()=>{});assert.equal(claims,1);assert.equal(patches,2);
+  assert.equal(gate.verified_at,null);
+ }finally{global.fetch=original;}
 });

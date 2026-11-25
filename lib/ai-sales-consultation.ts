@@ -9,6 +9,8 @@ type Tier = keyof AiSalesShow["prices"];
 const tiers: Tier[] = ["A","B","C","D"];
 export const consultationPolicy = [
   posterAdvice,
+  "Khi khách chỉ cảm ơn, đáp một câu ấm áp. Khi khách lo ngại, ghi nhận đúng điều họ vừa nói và hỏi tối đa một điều còn thiếu. Khi khách nói để bàn với gia đình, cho khách thời gian quyết định. Xưng em; chỉ dùng anh/chị khi cách tự xưng đã rõ.",
+  "Ban tổ chức có điểm bán nước trong khu diễn và khách có thể gọi nước tại quầy. Vé đêm Đình Dũng 28/11 không kèm nước; với đêm khác chỉ nêu quyền lợi đã xác nhận. Chỉ dùng số bài dự kiến đã công bố của đúng show và địa chỉ chính thức từ danh mục. Không hứa mang nước tới ghế, số bài biểu diễn thực tế hoặc lối xe lăn khi chưa xác nhận.",
   "Tư vấn đúng show đang mở bán. Nếu khách đến từ quảng cáo hoặc bình luận có show đã đối chiếu, nhắc đúng tên show trong câu mở đầu. Nếu khách hỏi cụ thể, trả lời ngay.",
   "Khách hỏi giá một hạng thì báo riêng hạng đó theo giá hiện hành của show. Chỉ đưa cả bảng khi khách hỏi chung hoặc yêu cầu tất cả. Khách chỉ tham khảo thì dừng sau khi trả lời.",
   "Nhớ show, số người, hạng, ngân sách và hướng nhìn. Khi khách muốn chọn ghế mà chưa biết hướng, hỏi: "+seatViewQuestion,

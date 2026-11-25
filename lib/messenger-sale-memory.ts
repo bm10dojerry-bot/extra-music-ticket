@@ -123,7 +123,8 @@ const quantityAnswer = new RegExp(String.raw`^(${countPattern})(?: (?:a|nhe|nha)
 function ticketQuantity(text: string, memory: MessengerSaleMemory): number | undefined {
   const explicit = [...text.matchAll(ticketCount)].filter(match => !/\b\d+\s*(?:k|trieu|tr|nghin|ngan|vnd|d)\s+$/.test(text.slice(0, match.index))).pop();
   const answer = memory.clarification === "quantity" ? text.match(quantityAnswer)?.[1] : undefined;
-  const quantity = explicit?.[2] ?? answer;
+  const couple=/\b(?:hai|2) vo chong\b/.test(text) && !/\b(?:them|be|con nho|tre em|khong di|khong phai|di cung)\b/.test(text);
+  const quantity = explicit?.[2] ?? answer ?? (couple?"2":undefined);
   if (!quantity || /\b(?:bao nhieu|may) (?:ve|ghe|nguoi)\b/.test(text) || /\b(?:neu|gia su) mua\b/.test(text)) return undefined;
   const count = /^\d+$/.test(quantity) ? Number(quantity) : countWords.indexOf(quantity);
   if (!explicit?.[1]) return count;
@@ -160,7 +161,7 @@ function recordBudget(memory: MessengerSaleMemory, text: string) {
   }
   const bareAmount = /^(?:(?:duoi|tam) )?\d+(?:[.,]\d+)?\s*(?:k|trieu|tr|nghin|ngan|vnd|d)\b.*$/.test(text);
   const isBudget = /\b(?:ngan sach|tam|toi da|toi thieu|khoang|duoi|tra duoc|co the chi|vet tui|khong qua|tong)\b/.test(text)
-    || bareAmount || (followsBudget && /^\d{1,3}(?:[.,]\d{3})+\b|^\d{5,9}\b/.test(text));
+    || (basis!=="unspecified" && /\d+\s*(?:k|trieu|nghin|ngan|vnd|d)\b/.test(text)) || bareAmount || (followsBudget && /^\d{1,3}(?:[.,]\d{3})+\b|^\d{5,9}\b/.test(text));
   if (!isBudget) return;
   const matches = [...text.matchAll(/\b(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(trieu|tr|nghin|ngan|vnd|k|d)?\b/g)];
   const tagged = matches.filter(match => match[2]);

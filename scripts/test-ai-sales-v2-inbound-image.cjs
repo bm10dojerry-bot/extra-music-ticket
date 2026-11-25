@@ -9,7 +9,7 @@ function load(file,mocks={}){
  return mod.exports;
 }
 const decision=load("lib/ai-sales-receipt-decision.ts");
-const code="EX0123456789ABCDEF",owned={code,amount:450000,status:"paid"},receipt={kind:"transfer_receipt",amount:450000,reference:code};
+const code="EX0123456789ABCDEF",owned={code,amount:450000,status:"paid"},receipt={kind:"transfer_receipt",showText:null,multipleShows:false,amount:450000,reference:code};
 const cases=[
  ["no image result",null,owned,"unreadable"],
  ["unreadable",{...receipt,kind:"unreadable"},owned,"unreadable"],
@@ -40,6 +40,7 @@ const validGraph=()=>({id:mid,from:{id:psid},to:{data:[{id:cfg.pageId}]},attachm
 let modelCalls=0;
 const imageModule=load("lib/ai-sales-inbound-image.ts",{
  "server-only":{},
+ "./messenger-show-signals":load("lib/messenger-show-signals.ts",{"server-only":{},"./ai-sales-checkout":{},"./messenger-extra-ad-shows":{},"./staff-auth":{staffDb:async()=>[]}}),
  "./facebook-messenger":{getMessengerGraphConfig:async()=>cfg},
  "./ai-sales-policy":{AI_SALES_MODEL:"test-only"},
  "ai":{Output:{object:x=>x},generateText:async options=>{

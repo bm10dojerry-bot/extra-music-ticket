@@ -51,6 +51,17 @@ function removeSeatPages(body:string) {
 }
 const emojiMark=/\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u;
 const graphemes=new Intl.Segmenter("vi",{granularity:"grapheme"});
+export function quietSalesTurn(text:string){
+  return /\b(?:gia|tien|ngan sach|thanh toan|chuyen khoan|giao dich|mat ve|loi|het han|khieu nai|buc minh|that vong|khong hai long|chua nhan|khong nhan|khong quet|khong vao duoc|tra soat|dat nham|doi ve|huy ve|tam ung|dat coc|hoan|mua nham|luc nao cung loi|mat ma|thieu ve)\b/.test(words(text)) || /\d[\d., ]*\s*(?:đ|vnd|k|nghìn|ngàn|triệu)(?![\p{L}\p{N}])/iu.test(text);
+}
+export function friendlyAcknowledgement(body:string){
+  const s=words(body);
+  if(quietSalesTurn(s)||body.includes("?"))return null;
+  if(/^((?:da |vang |ok |oke |cam on |thanks? |thank you )*)(?:(?:cam on|cam on nhieu|thanks?|thank you)(?: (?:em|anh|chi|extra|shop|ban|minh|nhieu|lam|nha|nhe|a|da|rat))*)(?: [a-f0-9]{10})?$/.test(s))return {heart:true,body:"Em rất vui vì giúp được mình ạ."};
+  if(/^(?:(?:da|oi|vang|hay qua|vui qua) )?(?:minh|anh|chi|hai vo chong|ca nha)(?: da| se)? (?:sap xep|thu xep|xin nghi|di) duoc(?: lich| roi| de di| di xem| hom do| nhe| a| show| ca nha)*$/.test(s))return {heart:true,body:"Vui quá, vậy là mình sắp xếp đi nghe nhạc được rồi ạ!"};
+  if(/^(?:(?:da|de) )?(?:anh|chi|minh|em) (?:ban|hoi|trao doi)(?: lai)? (?:voi )?(?:vo|chong|gia dinh|ban)(?: da| truoc| nhe| nha| a| roi bao lai)*$/.test(s))return {heart:false,body:"Dạ, mình cứ trao đổi thêm nhé. Khi mình cần xem lại chỗ ngồi, em hỗ trợ tiếp ạ."};
+  return null;
+}
 function iconFor(text:string){
   if(/\b(chup anh|chup hinh|dang ky chup)\b/.test(text))return "📸";
   if(/\b(dia chi|dia diem|duong di|o dau)\b/.test(text))return "📍";
@@ -61,7 +72,7 @@ function iconFor(text:string){
 }
 export function styleSalesReply(body:string,customer:string,history:readonly Turn[]=[],page?:string) {
   const s=words(customer);
-  const quiet=unrelated.test(s)||/\b(?:loi|that vong|buc minh|khong hai long|nhan vien|nguoi that|doi ve|huy ve|dung nhan|khong mua|(?:dung|khong) (?:can |them |dung |gui )*(?:icon|emoji))\b/.test(s) || /\b(?:chua xac nhan|doi soat|khieu nai|tam chua|chua gui duoc|chua kiem tra duoc)\b/.test(words(body));
+  const quiet=quietSalesTurn(customer)||quietSalesTurn(body)||Boolean(friendlyAcknowledgement(customer))||unrelated.test(s)||/\b(?:loi|that vong|buc minh|khong hai long|nhan vien|nguoi that|doi ve|huy ve|dung nhan|khong mua|(?:dung|khong) (?:can |them |dung |gui )*(?:icon|emoji))\b/.test(s) || /\b(?:chua xac nhan|doi soat|khieu nai|tam chua|chua gui duoc|chua kiem tra duoc)\b/.test(words(body));
   let text=removeSeatPages(body),hasIcon=false;
   text=Array.from(graphemes.segment(text),({segment})=>{
     if(!emojiMark.test(segment))return segment;

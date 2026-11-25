@@ -38,6 +38,45 @@ change('const advice = !familyTopic && !confirmationProblem','const advice = !fa
 change('body:selected.show?"Dạ, ảnh sơ đồ chưa gửi được. Mình xem sơ đồ ghế và ghế còn trống tại "+selected.show.url+" nhé.":"Dạ, ảnh sơ đồ chưa gửi được. Mình cho em tên show để em gửi đúng trang xem sơ đồ ghế nhé."',
  'body:"Em chưa gửi được ảnh sơ đồ. Mình muốn ưu tiên ghế gần ca sĩ, góc chính diện hay mức giá nào để em tư vấn ngay ở đây ạ?"');
 change('const quickReply=(!familyTopic','const quickReply=(!pageWanted&&!familyTopic');
+// Route verified show signals through the same guarded delivery and checkout paths.
+change('import {readMessengerImage} from "./ai-sales-inbound-image";','import {readMessengerImage} from "./ai-sales-inbound-image";\nimport {recognizeInquiry} from "./messenger-recognize-inquiry";');
+change('const [history,stateRows,latestQuote,commentContext]', 'const [history,stateRows,latestQuote,baseComment]');
+change('  const style:{customer:string;', `  await guard(job);
+  const recognition=await recognizeInquiry(messages,chat.messenger_page_id,chat.messenger_psid).catch(()=>({} as Awaited<ReturnType<typeof recognizeInquiry>>));
+  const commentContext=recognition.showId===undefined?baseComment:recognition.showId?{comment:"",post:"",firstReply:"",showId:recognition.showId}:null;
+  if(recognition.caption)latest.body=recognition.caption;
+  const style:{customer:string;`);
+change('  if(process.env.EXTRA_AI_SALE_INBOUND_IMAGE', `  if(recognition.reply){
+    await guard(job);
+    await sendInbound({purpose:"reply",body:recognition.reply});
+    return;
+  }
+  if(process.env.EXTRA_AI_SALE_INBOUND_IMAGE`);
+change('const reading=latest.external_message_id?await readMessengerImage(latest.external_message_id,chat.messenger_psid,chat.messenger_page_id):null;', 'const reading=recognition.reading!==undefined?recognition.reading:latest.external_message_id?await readMessengerImage(latest.external_message_id,chat.messenger_psid,chat.messenger_page_id):null;');
+change('Dạ, em đã nhận ảnh nhưng chưa đọc được rõ nội dung. Mình gửi lại ảnh rõ hơn hoặc cho em mã đơn để kiểm tra nhé.', 'Em chưa đọc rõ nội dung ảnh. Mình có thể gửi ảnh nét hơn hoặc cho em biết phần mình muốn hỏi được không ạ?');
+change('import {recognizeInquiry} from "./messenger-recognize-inquiry";','import {recognizeInquiry} from "./messenger-recognize-inquiry";\nimport {showServiceReply} from "./messenger-show-service";\nimport {maybeSendHeart} from "./messenger-heart";\nimport {friendlyAcknowledgement} from "./messenger-conversation-style";');
+change('  const sendInbound=(action:Action,media?:string)=>sendAiSalesMessage(job,chat,action,media,style);', `  let serviceNote="";
+  const sendInbound=(action:Action,media?:string)=>{
+    const withNote=serviceNote && action.purpose==="reply" && !media ? {...action,body:serviceNote+"\\n"+action.body}:action;
+    if(withNote!==action)serviceNote="";
+    return sendAiSalesMessage(job,chat,withNote,media,style);
+  };`);
+change('  const pageWanted=wantsBookingPage(latest.body,messages);',`  const friendly=friendlyAcknowledgement(latest.body);
+  if(!confirmationProblem && friendly){
+    await guard(job);
+    await sendInbound({purpose:"reply",body:friendly.body});
+    if(friendly.heart && latest.external_message_id && !currentOrder && !state?.current_order_code && state?.status!=="needs_attention")
+      await maybeSendHeart(chat.messenger_page_id,chat.messenger_psid,latest.external_message_id,messages,()=>guard(job)).catch(()=>{});
+    return;
+  }
+  const service=!confirmationProblem?await showServiceReply(latest.body,messages,commentContext?.showId||currentOrder?.showId||latestQuote?.showId).catch(()=>null):null;
+  if(service && !service.continueSales){
+    await guard(job);
+    await sendInbound({purpose:"reply",body:service.body});
+    return;
+  }
+  serviceNote=service?.body||"";
+  const pageWanted=wantsBookingPage(latest.body,messages);`);
 fs.writeFileSync(file,worker);
 const quickFile="lib/ai-sales-quick-reply.ts";
 const quick=fs.readFileSync(quickFile,"utf8");
