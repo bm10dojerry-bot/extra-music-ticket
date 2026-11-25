@@ -176,7 +176,8 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
 
   if (x.scenario === "after_show") {
     if (x.ticketState !== "paid" || !x.paymentVerified) return block("Không chăm sóc sau show", "Chỉ liên hệ khách tham dự đã mua vé hợp lệ.");
-    if (daysToShow(x.today, x.showDate) >= 0) return block("Chưa kết thúc show", "Chỉ hỏi cảm nhận sau ngày biểu diễn.");
+    const daysSince = daysToShow(x.today, x.showDate);
+    if (daysSince === null || daysSince >= 0) return block("Chưa kết thúc show", "Chỉ hỏi cảm nhận sau ngày biểu diễn.");
     if (!canService(x)) return block("Không gửi tự động", "Thiếu quyền nhắn tin hợp lệ sau sự kiện.");
     return done("Hỏi thăm sau đêm nhạc",
       "Dạ anh/chị ơi, không biết đêm nhạc " + name + " vừa rồi có để lại cho mình nhiều kỷ niệm đẹp không ạ? ❤️ Anh/chị có hài lòng với phần check-in và trải nghiệm tại Extra không? Nếu có điều gì cần góp ý, em luôn sẵn lòng lắng nghe ạ.",
