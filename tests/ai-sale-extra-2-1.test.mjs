@@ -98,3 +98,14 @@ test("no outreach after opt-out or staff handover", () => {
     assert.equal(check(scenario, { humanHandling: true }).eligible, false);
   }
 });
+
+test("map history is venue-specific; explicit resend is opt-in", () => {
+  const settings = {availableMaps:["ccc","laocai"], mapsAlreadySent:["ccc"], requestedMap:"both"};
+  const onlyNew = check("images",settings);
+  assert.equal(onlyNew.attachments.length,1);
+  assert.match(onlyNew.attachments[0],/Lào Cai/);
+  const repeat = check("images",{...settings,requestedMap:"ccc"});
+  assert.deepEqual(repeat.attachments,[]);
+  assert.match(repeat.message,/gần sân khấu/);
+  assert.equal(check("images",{...settings,resendRequested:true}).attachments.length,2);
+});

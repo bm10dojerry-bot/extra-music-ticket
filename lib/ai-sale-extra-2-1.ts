@@ -30,6 +30,8 @@ export type Extra21Input = {
   verifiedHotline: string;
   requestedMap: "ccc" | "laocai" | "both";
   availableMaps: SeatMapVenue[];
+  mapsAlreadySent?: SeatMapVenue[];
+  resendRequested?: boolean;
   voiceConsent: boolean;
   audioChannelReady: boolean;
 };
@@ -203,8 +205,10 @@ export function simulateExtra21(x: Extra21Input): Extra21Decision {
   if (x.scenario === "images") {
     if (!x.withinMessengerWindow) return block("Chưa gửi ảnh", "Cần có yêu cầu trong cửa sổ trả lời Messenger.");
     const venues: SeatMapVenue[] = x.requestedMap === "both" ? ["ccc", "laocai"] : [x.requestedMap];
-    const available = venues.filter(v => x.availableMaps.includes(v));
-    const missing = venues.filter(v => !x.availableMaps.includes(v));
+    const requested = venues.filter(v => x.resendRequested || !x.mapsAlreadySent?.includes(v));
+    if (!requested.length) return done("Tư vấn ghế bằng chữ", "Nếu muốn nhìn rõ ca sĩ, mình có thể ưu tiên hàng gần sân khấu. Nếu muốn nhìn toàn sân khấu, mình có thể chọn góc chính diện ở các hàng sau. Mình dự tính khoảng bao nhiêu cho mỗi vé để em kiểm tra ghế và giá của đúng show ạ?");
+    const available = requested.filter(v => x.availableMaps.includes(v));
+    const missing = requested.filter(v => !x.availableMaps.includes(v));
     if (!available.length) return block("Chưa có ảnh sẵn sàng", "Chưa đọc được ảnh gốc đã duyệt cho " + missing.map(v => seatMapNames[v]).join(" và ") + ".");
     return done("Sơ đồ theo địa điểm khách hỏi",
       "Mình tham khảo sơ đồ bố trí ghế nhé. Em sẽ kiểm tra ghế còn trống theo show khi mình chọn chỗ ạ.",

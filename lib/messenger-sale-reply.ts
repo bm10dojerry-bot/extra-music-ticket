@@ -1,3 +1,4 @@
+import {describeSeats,rankSeatGroups} from "./v2-seat-guidance";
 import { artistPhotoNotice } from "./ai-sale-extra-2-1";
 import {
   applicablePromotions, artistInteractionExplanation, openingMessage, promotionMessage,
@@ -24,6 +25,7 @@ type ReplyInput = {
   checkoutOrigin: string;
   show?: ManagedShow | null;
   showDataAvailable: boolean;
+  seatComparison?: boolean;
   inventory?: MessengerSaleInventory | null;
   promotions?: readonly Promotion[];
   resumedAfterHuman?: boolean;
@@ -245,6 +247,17 @@ function textForReply(input: ReplyInput): string {
     return answers.join("\n");
   }
 
+  if (input.seatComparison && open && inventory?.showId === show.id && !intents.has("payment") && !intents.has("booking")) {
+    if (memory.budgetVnd && memory.budgetBasis !== "per_ticket" && (!memory.quantity || (memory.quantity>1 && memory.budgetBasis !== "total"))) {
+      return "Ngân sách mình dự tính là cho mỗi vé hay cho cả nhóm ạ?";
+    }
+    const layout = seatsFor(show.venue,inventory.rowCounts);
+    const count = memory.quantity ?? 1;
+    const ceiling = memory.budgetVnd && memory.budgetBasis === "total" ? Math.floor(memory.budgetVnd/count) : memory.budgetVnd;
+    const compareTiers = /re hon|gia thap|gia cao|tiet kiem|so sanh/.test(message);
+    const options = rankSeatGroups(show.venue,layout,layout.filter(s=>!inventory.unavailable.has(s.id)),show.prices,count,compareTiers ? undefined : memory.zone,memory.seatView,ceiling);
+    return describeSeats(options,show.artist);
+  }
   const venue = venues.find(venue => venue.id === show.venue);
   const time = /^[0-9]{2}:[0-9]{2}/.test(show.time) ? ` lúc ${show.time.slice(0, 5)}` : "";
   const showDetails = `Đêm ${show.artist} diễn ra ngày ${formatShowDate(show.date)}${time}${venue ? ` tại ${venue.name}` : ""} ạ.`;

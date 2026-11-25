@@ -122,6 +122,9 @@ export default function Extra21Demo({availableMaps}: {availableMaps: SeatMapVenu
                   {v === "both" ? "Cả hai địa điểm" : seatMapNames[v]}
                 </button>)}
               </div>
+              {(["ccc","laocai"] as const).map(v => <Toggle key={v} label={"Đã gửi sơ đồ " + seatMapNames[v]} checked={Boolean(data.mapsAlreadySent?.includes(v))}
+                onChange={value => change({mapsAlreadySent:value ? [...(data.mapsAlreadySent ?? []).filter(item=>item!==v),v] : (data.mapsAlreadySent ?? []).filter(item=>item!==v)})} />)}
+              <Toggle label="Khách yêu cầu gửi lại ảnh" checked={Boolean(data.resendRequested)} onChange={value=>change({resendRequested:value})} />
               {(["ccc","laocai"] as const).map(v => <p key={v} className={styles.hint}>{seatMapNames[v]} · {availableMaps.includes(v) ? "Đã kiểm tra đúng ảnh gốc" : "Chưa đọc được ảnh gốc"}</p>)}
             </div>}
 

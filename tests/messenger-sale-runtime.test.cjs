@@ -173,6 +173,7 @@ test("worker revalidates ownership before Graph and retains uncertain delivery f
     const calls = [];
     class SendError extends Error { deliveryUncertain = true; }
     const worker = load("lib/messenger-sale-worker.ts", {
+      "./v2-seat-guidance": load("lib/v2-seat-guidance.ts"),
       "./ai-sale-extra-2-1": load("lib/ai-sale-extra-2-1.ts"),
       "./messenger-sale-media": load("lib/messenger-sale-media.ts"),
       "./messenger-voice": load("lib/messenger-voice.ts"),
