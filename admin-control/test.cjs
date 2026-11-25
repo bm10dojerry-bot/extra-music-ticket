@@ -11,3 +11,11 @@ test('analyst separates internal forecasts and unavailable actuals',()=>{
  const result=analyzeInternalPlans([{intake:{artist:'Test'},finance:{plannedCostVnd:100,targetRevenueVnd:200,projectedRevenueVnd:150,layoutMatches:false}},{intake:{artist:'Missing'},finance:{}}],[{intake:{budget:20}}]);
  assert.equal(result.showCost,100);assert.equal(result.projectedRevenue,150);assert.equal(result.risks[0].gap,50);assert.equal(result.missing,1);assert.equal(result.retailBudget,20);assert.equal(result.actualRevenue,null);assert.equal(result.actualCost,null);assert.equal(result.actualProfit,null);
 });
+
+test('Director dispatches internal analyst plan but does not claim actual reconciliation',()=>{
+ const {executeAnalystPlan,planMarketing}=require('./marketing-director.ts');
+ const s=parseShowIntake(fixture),f=prepareShow(s,now);
+ const jobs=planMarketing(s,now);assert(jobs.some(j=>j.kind==='analyst_plan'&&j.agent==='Analyst'));assert(jobs.some(j=>j.kind==='analyst'));
+ const result=executeAnalystPlan(s,f);assert.equal(result.status,'succeeded');assert.equal(result.analysis.actualRevenue,null);assert.match(result.note,/không phải doanh thu thực tế/);
+ assert.equal(executeAnalystPlan(s,{}).status,'blocked');
+});
