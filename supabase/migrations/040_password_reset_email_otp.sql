@@ -46,7 +46,8 @@ begin
     expires_at=excluded.expires_at,consumed_at=null,attempt_count=0,
     window_started_at=excluded.window_started_at,window_count=excluded.window_count;
   return true;
-end $function$
+end;
+$function$;
 
 revoke all on function public.issue_password_reset_email_code(text,text,text,text) from public,anon,authenticated;
 grant execute on function public.issue_password_reset_email_code(text,text,text,text) to service_role;
@@ -72,7 +73,8 @@ begin
     set consumed_at=now()
     where t.account_kind=target.account_kind and t.account_id=target.account_id;
   return query select target.account_kind,target.account_id;
-end $function$
+end;
+$function$;
 
 revoke all on function public.claim_password_reset_email_code(text,text) from public,anon,authenticated;
 grant execute on function public.claim_password_reset_email_code(text,text) to service_role;
