@@ -3,6 +3,7 @@
 const {Blocked,scope} = require('./director-program.cjs');
 const {mediaExecutor} = require('./director-media.cjs');
 const {crmExecutor} = require('./director-crm.cjs');
+const {ordersExecutor} = require('./director-actuals.cjs');
 
 const saleUrl = 'http://ai-sale23-sandbox.railway.internal:8080/api/extra-os/director';
 const storefront = 'https://extra-24h.onrender.com';
@@ -47,7 +48,7 @@ function makeConnectors(pool, env = process.env, request = fetch) {
     if (response.status === 503) throw new Blocked(['sapo_catalog']);
     if (!response.ok) throw Error('24H catalog unavailable');
     const snapshot = await response.json();
-    if (snapshot.inventoryConnected !== true || snapshot.source !== 'sapo_web' || !Array.isArray(snapshot.products)) {
+    if (snapshot.inventoryConnected !== true || snapshot.source !== 'sapo_web' || snapshot.partial===true || !Array.isArray(snapshot.products)) {
       throw new Blocked(['sapo_catalog']);
     }
     const products = snapshot.products.filter(product=>
@@ -87,7 +88,21 @@ function makeConnectors(pool, env = process.env, request = fetch) {
       budgetAllowsImpressionsDay:verified ? plan.proposedLifetimeVnd >= minimum : null};
   }
 
-  return {env,request,sale,catalog,advertisingReadiness,creative:mediaExecutor(pool,env,request),crm:crmExecutor(pool,env)};
+  async function facebookReadiness(draft) {
+    const version=env.EXTRA24H_META_GRAPH_VERSION ?? '',token=env.EXTRA24H_META_PAGE_TOKEN ?? '';
+    if (!/^v\d{1,2}\.0$/.test(version) || !token) throw new Blocked(['facebook','asset_rights'],draft);
+    const response=await request('https://graph.facebook.com/'+version+'/me?fields=id',{
+      headers:{authorization:'Bearer '+token},redirect:'error',signal:AbortSignal.timeout(10000)
+    });
+    if ([400,401,403,404].includes(response.status)) throw new Blocked(['facebook','asset_rights'],draft);
+    if (!response.ok) throw Error('Meta Page preflight unavailable');
+    const account=await response.json();
+    if (account.id!==scope.pageId) throw new Blocked(['facebook'],{...draft,pageIdentityVerified:false});
+    return {...draft,pageIdentityVerified:true};
+  }
+
+  return {env,request,sale,catalog,advertisingReadiness,facebookReadiness,creative:mediaExecutor(pool,env,request),
+    crm:crmExecutor(pool,env),actuals:ordersExecutor(env,request)};
 }
 
 module.exports = {makeConnectors};

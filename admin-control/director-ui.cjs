@@ -10,12 +10,15 @@ const costLabels = {
   packingVnd:'Đóng gói (₫/đơn vị)',deliveryVnd:'Giao hàng phân bổ (₫/đơn vị)',taxVnd:'Thuế phân bổ (₫/đơn vị)',
   paymentVnd:'Phí thanh toán (₫/đơn vị)',otherUnitVnd:'Chi phí khác (₫/đơn vị)',otherFixedVnd:'Chi phí cố định ngoài quảng cáo (₫)'
 };
-const versions = {Director:'V 1.0',Sale:'V 2.3',Analyst:'V 1.0'};
+const versions = {
+  Director:'V 1.0',Research:'V 0.1',Planner:'V 0.1',Content:'V 0.1',Creative:'V 0.1',
+  Social:'V 0.1',Ads:'V 0.1',Sale:'V 2.3',CRM:'V 0.1',Analyst:'V 1.0',Auditor:'V 0.1'
+};
 const reports = {
-  research:'Nghiên cứu',plan:'Chiến lược',forecast:'Dự kiến tài chính',audit:'Kiểm tra quyền và ngân sách',
+  research:'Nghiên cứu',plan:'Chiến lược',direction:'Chỉ đạo triển khai',forecast:'Dự kiến tài chính',audit:'Kiểm tra quyền và ngân sách',
   content:'Nội dung',creative:'Tư liệu',training:'Kiến thức Sale',sale_rehearsal:'Diễn tập Sale',
   crm:'Chăm sóc khách hàng',social:'Mạng xã hội',ads:'Quảng cáo',catalog:'Giá và tồn kho',
-  actuals:'Đối soát',report:'Báo cáo tổng hợp',brief:'Chỉ đạo'
+  actuals:'Đối soát',publication_checks:'Kiểm tra trước xuất bản',report:'Báo cáo tổng hợp',brief:'Chỉ đạo'
 };
 
 function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrfField,s,agents,saleLinkHtml,requestId}) {
@@ -45,6 +48,13 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
     const forecast = job.kind==='forecast' && job.result?.basis==='forecast' ? '<p>Biên gộp '+esc(money(job.result.grossMarginVnd))+
       ' / đơn vị · Hòa vốn chỉ tính giá vốn và quảng cáo: '+esc(job.result.subtotalBreakEvenUnits ?? '—')+
       ' · Hòa vốn đủ chi phí: '+esc(job.result.breakEvenUnits ?? '—')+'</p>' : '';
+    const report = job.kind==='report' && job.result?.actuals ? (() => {
+      const row=job.result.actuals;
+      const known = row.basis==='sapo_tagged_paid_orders';
+      return '<p>'+esc(known?'Đã đọc các đơn gắn thẻ từ Sapo. Tổng đã thanh toán '+money(row.grossPaidVnd)+
+        ' · '+row.orders+' đơn · '+row.units+' đơn vị.':'Chưa có số liệu thanh toán cho chiến dịch.')+
+        '</p><p>Doanh thu ròng và lợi nhuận chờ đối soát thuế, phí, khuyến mại và giá vốn thực tế.</p>';
+    })() : '';
     const reopen = ['accepted','blocked','failed'].includes(job.status) ? '<form action="/director/revise" method="post">'+csrfField(s)+
       '<input type="hidden" name="job_id" value="'+job.id+'"><label>Phản hồi cho Agent<input required name="feedback" maxlength="1000"></label>'+
       '<button>Yêu cầu làm lại</button></form>' : '';
@@ -57,7 +67,7 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
       (Number(job.budget_vnd) > 0 ? '<p>Hạn mức '+esc(money(job.budget_vnd))+'</p>' : '')+
       (missing.length ? '<p class="tag">'+missing.join(' · ')+'</p>' : '')+
       (awaiting.length ? '<p class="tag">Chờ tích hợp '+awaiting.join(' · ')+'</p>' : '')+
-      (job.feedback ? '<p>Phản hồi Director / chủ doanh nghiệp '+esc(job.feedback)+'</p>' : '')+forecast+
+      (job.feedback ? '<p>Phản hồi Director / chủ doanh nghiệp '+esc(job.feedback)+'</p>' : '')+forecast+report+
       (job.kind==='creative' && job.result?.asset ? '<p><a target="_blank" rel="noopener" href="/director/asset?id='+esc(job.id)+
         '&amp;revision='+esc(job.result.asset.revision)+'">Mở ảnh diễn tập</a></p>' : '')+
       (job.result ? '<details><summary>Kết quả và báo cáo</summary><pre class="director-result">'+esc(JSON.stringify(job.result,null,2))+'</pre></details>' : '')+

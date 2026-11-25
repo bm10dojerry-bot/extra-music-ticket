@@ -22,6 +22,8 @@ Dùng cơ sở dữ liệu riêng để chạy kiểm thử tích hợp. Các b�
 | Creative | `EXTRA24H_IMAGE_API_KEY`, tùy chọn `EXTRA24H_IMAGE_MODEL`. Preview PNG chỉ mở được từ admin. |
 | Drive | `EXTRA24H_DRIVE_FOLDER_ID`, `EXTRA_OS_DRIVE_CLIENT_ID`, `EXTRA_OS_DRIVE_CLIENT_SECRET`, `EXTRA_OS_DRIVE_REFRESH_TOKEN`. Cấp OAuth cho tài khoản có quyền thêm tệp trong thư mục riêng. Ảnh diễn tập chưa có quyền xuất bản. |
 | Messenger 24H | `EXTRA24H_MESSENGER_APP_SECRET`, `EXTRA24H_MESSENGER_VERIFY_TOKEN`, `EXTRA24H_CRM_HASH_KEY`. Callback `/api/24h/messenger/webhook` kiểm tra chữ ký, chỉ nhận tin inbound Page 1413936608477545, lưu phân loại và mã băm để chống trùng. |
+| Sapo Web đối soát | `EXTRA24H_SAPO_SHOP` và `EXTRA24H_SAPO_ORDERS_READ_TOKEN` đọc đơn của đúng cửa hàng. Đơn Sapo phải có thẻ `24h-<UUID chiến dịch không dấu gạch>` và trùng đúng biến thể giá đã xác minh trên website. |
+| Meta Page tiền kiểm | `EXTRA24H_META_PAGE_TOKEN` và `EXTRA24H_META_GRAPH_VERSION` để xác minh token trỏ tới Page 24h EXTRA. |
 | Meta Ads tiền kiểm | `EXTRA24H_META_GRAPH_VERSION` và `EXTRA24H_META_ADS_TOKEN` có quyền đọc tài khoản Lào Cai. Tiền kiểm chỉ đọc tiền tệ, trạng thái và ngân sách tối thiểu. |
 
 Website đọc danh mục, giá và tồn kho từ Sapo Web nếu đã cấu hình ở Render. Luồng nội bộ chờ các kết nối xuất bản Sapo, đặt đơn thật, phản hồi Messenger, đăng bài Facebook và vận hành quảng cáo. Phần tài chính giữ nguyên nguồn và thời điểm tính. Ô doanh thu hoặc lợi nhuận vẫn trống khi chưa có số đối soát.

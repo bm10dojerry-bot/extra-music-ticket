@@ -113,6 +113,7 @@ test('PostgreSQL runs real scheduling and reviews with controlled provider fixtu
         assert.equal(deps.research.sources[0].url,sources[0].url);
         return {playbook:long+' '+(job.feedback || 'Báo giá đã kiểm tra.'),objections:long,validation:long};
       }
+      if (kind==='direction') return {contentBrief:long,creativeBrief:long,saleBrief:long,channels:long,budget:long,acceptance:long};
       if (kind==='content') return {website:long,facebook:long,tiktok:long,ads:long,video:long};
       return {text:long,sources};
     },
@@ -143,6 +144,7 @@ test('PostgreSQL runs real scheduling and reviews with controlled provider fixtu
   state = await queue.listRuns(pool,id);
   assert.equal(state.versions.length,3);
   assert.equal(state.versions.find(version=>version.active).version,2);
+  assert.equal((await queue.knowledgeVersion(pool,id)).version,2);
   assert(state.jobs.find(job=>job.kind==='training').events.some(event=>event.event==='knowledge_restored'));
 });
 
@@ -217,4 +219,63 @@ test('Creative reserves one paid generation and keeps the preview private',usePg
   assert.deepEqual(replay.asset,first.asset);
   assert.equal(first.rights.publicationApproved,false);
   assert.deepEqual(first.remaining,['drive','asset_rights']);
+});
+
+test('Auditor detects copy with a different price and requires catalog and asset evidence',()=>{
+  const {checkPublication}=require('./director-program.cjs');
+  const audit=checkPublication(input,{website:'Giá 35.000 ₫',facebook:'Chỉ 31k',ads:'Giá ưu đãi 32 000 đồng'},{
+    source:'sapo_web',verifiedPriceVnd:35000
+  },{rights:{publicationApproved:false}});
+  assert.deepEqual(audit.wrongAmounts,[{channel:'facebook',amountVnd:31000},{channel:'ads',amountVnd:32000}]);
+  assert.equal(audit.verifiedCatalog,true);
+  assert.equal(audit.assetRightsVerified,false);
+  assert.equal(audit.publicationAllowed,false);
+});
+
+test('Analyst reports verified Sapo payments separately from revenue and excludes unrelated or refunded orders',async ()=>{
+  const {ordersExecutor}=require('./director-actuals.cjs');
+  const runId=randomUUID(),tag='24h-'+runId.replaceAll('-','');
+  const job={run_id:runId,run_created_at:new Date(Date.now()-15000)};
+  const order={id:1,tags:tag,currency:'VND',cancelled_on:null,financial_status:'paid',test:false,
+    total_price:'71000.00',created_on:new Date(Date.now()-3000).toISOString(),line_items:[{variant_id:'63',quantity:2}]};
+  const orders=[order,order,{...order,id:2,tags:'OTHER'},
+    {...order,id:3,financial_status:'partially_refunded'},{...order,id:4,test:true},
+    {...order,id:5,line_items:[{variant_id:'99',quantity:9}]}];
+  const execute=ordersExecutor({EXTRA24H_SAPO_SHOP:'retail.mysapo.net',EXTRA24H_SAPO_ORDERS_READ_TOKEN:'fixture'},
+    async (url,opts)=>{
+      assert.equal(new URL(url).pathname,'/admin/orders.json');
+      assert.equal(opts.method,undefined);
+      assert.equal(opts.headers['x-sapo-access-token'],'fixture');
+      assert(!new URL(url).searchParams.get('fields').includes('customer'));
+      return Response.json({orders});
+    });
+  const result=await execute(job,{source:'sapo_web',productId:'sapo-63'});
+  assert.equal(result.paidOrders,1);
+  assert.equal(result.paidUnits,2);
+  assert.equal(result.grossPaidVnd,71000);
+  assert.equal(result.excludedOrders,3);
+  assert.equal(result.revenueVnd,null);
+  assert.equal(result.profitVnd,null);
+});
+
+test('Meta preflight reads the exact Page and checks the reserved lifetime budget against the account minimum',async ()=>{
+  const {makeConnectors}=require('./director-connectors.cjs');
+  const paths=[];
+  const tokens={EXTRA24H_META_GRAPH_VERSION:'v27.0',EXTRA24H_META_PAGE_TOKEN:'page-fixture',EXTRA24H_META_ADS_TOKEN:'ads-fixture'};
+  const check=makeConnectors(null,tokens,async (url,opts)=>{
+    const path=new URL(url).pathname;
+    assert.equal(opts.method,undefined);
+    assert.equal(opts.redirect,'error');
+    paths.push(path);
+    if(path.endsWith('/me'))return Response.json({id:'1413936608477545'});
+    if(path.endsWith('/minimum_budgets'))return Response.json({data:[{currency:'VND',min_daily_budget_imp:150000}]});
+    return Response.json({account_id:'1915621506464312',currency:'VND',account_status:1});
+  });
+  const page=await check.facebookReadiness({mode:'rehearsal'});
+  assert.equal(page.pageIdentityVerified,true);
+  const ad=await check.advertisingReadiness(adsPlan(input));
+  assert.equal(ad.verifiedAdAccount,true);
+  assert.equal(ad.budgetAllowsImpressionsDay,false);
+  assert.deepEqual(paths.sort(),['/v27.0/act_1915621506464312','/v27.0/act_1915621506464312/minimum_budgets','/v27.0/me']);
+  assert.equal(ad.campaignId,null);
 });

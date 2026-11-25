@@ -160,7 +160,7 @@ function claim(pool) {
       update os_director_jobs j set status='running',attempts=j.attempts+1,
         lease_id=$3,lease_until=now()+interval '240 seconds',updated_at=now()
       from candidate c,os_director_runs r where j.id=c.id and r.id=j.run_id
-      returning j.*,r.input,r.platform
+      returning j.*,r.input,r.platform,r.created_at as run_created_at
     `, [maxAttempts,terminal,randomUUID()]);
     const job = rows[0];
     if (job) await event(db,job.id,'started',{attempt:job.attempts,revision:job.revision});
@@ -261,9 +261,15 @@ function reviewNext(pool, evaluate) {
 
 async function knowledgeVersion(pool, runId) {
   const {rows:[row]} = await pool.query(`
-    select k.version,k.bundle from os_director_knowledge k
-    join os_director_jobs j on j.id=k.task_id and j.revision=k.revision and j.status='accepted'
-    where k.run_id=$1 order by version desc limit 1
+    with candidate as (
+      select k.version,k.bundle,k.validated_at from os_director_knowledge k
+      join os_director_jobs j on j.id=k.task_id and j.revision=k.revision and j.status='accepted'
+      where k.run_id=$1 order by version desc limit 1
+    )
+    select k.version,k.bundle from os_director_knowledge k join candidate c on (
+      (c.validated_at is null and k.version=c.version) or
+      (c.validated_at is not null and k.active)
+    ) where k.run_id=$1
   `, [runId]);
   return row;
 }
