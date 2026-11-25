@@ -11,7 +11,7 @@ export async function generateMetadata({params}:Props):Promise<Metadata>{
  const date=show.date.split("-").reverse().join("/");
  const venue=show.venue==="moana"?"Moana Sa Pa":show.venue==="ccc"?"Không gian Văn hóa Sa Pa – CCC":"Lào Cai";
  const description=showName+" ngày "+date+" tại "+venue+". Xem sơ đồ ghế, giá vé, chọn chỗ và nhận vé điện tử QR trực tiếp từ +1 EXTRA MUSIC SHOW.";
- return {title,description,alternates:{canonical:"https://iextra.net/show/"+encodeURIComponent(id)},openGraph:{title,description,url:"https://iextra.net/show/"+encodeURIComponent(id),images:show.posterUrl?[{url:show.posterUrl}]:undefined}};
+ return {title,description,alternates:{canonical:"https://iextra.net/show/"+encodeURIComponent(id)},openGraph:{title,description,url:"https://iextra.net/show/"+encodeURIComponent(id),images:show.posterUrl?[{url:new URL(show.posterUrl,"https://iextra.net").href}]:undefined}};
 }
 export default async function Page({params}:Props){
  const {id}=await params;const show=(await loadShows()).find(s=>s.id===id);

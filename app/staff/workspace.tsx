@@ -7,7 +7,7 @@ type ShowOption={id:string;artist:string;date:string;time:string;venue:string};
 type Account={id:string;username:string;display_name:string;email:string|null;role:Role;active:boolean};
 type Report=StaffSaleReportResponse;
 const money=(n:number)=>new Intl.NumberFormat("vi-VN").format(n)+" đ";
-const roleNames:Record<Role,string>={admin:"Quản trị viên",sale:"Nhân viên Sale",show_manager:"Quản lý show",accountant:"Kế toán",checkin:"Nhân viên soát vé"};
+const roleNames:Record<Role,string>={admin:"Quản trị viên",sale:"Nhân viên Sale",show_manager:"Quản lý show",accountant:"Kế toán",checkin:"Nhân viên soát vé",extra_os:"Nhân sự EXTRA OS"};
 export default function StaffWorkspace({actor,embedded=false,initialTab}:{actor:Staff;embedded?:boolean;initialTab?:"overview"|"users"|"reports"|"sales"|"shows"}){
 const [tab,setTab]=useState<"overview"|"users"|"reports"|"sales"|"shows">(()=>{if(initialTab)return initialTab;if(typeof window==="undefined")return "overview";const value=new URLSearchParams(window.location.search).get("tab");return value==="users"||value==="reports"||value==="sales"||value==="shows"?value:"overview"});
 const [accounts,setAccounts]=useState<Account[]>([]),[report,setReport]=useState<Report|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);

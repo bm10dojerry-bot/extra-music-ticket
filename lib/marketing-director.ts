@@ -1,25 +1,88 @@
-// Pure planning layer: does not execute ads, publish content or modify ticketing.
-export type Agent = "Research" | "Planner" | "Content" | "Creative" | "Social" | "Ads" | "Sale" | "CRM" | "Analyst" | "Auditor";
-export type ShowSnapshot = { id: string; startsAt: string; capacity: number; paidTickets: number };
-export type MarketingTask = { id: string; showId: string; agent: Agent; action: string; dependsOn: string[]; approvalRequired: boolean; priority: number };
-export function planMarketing(show: ShowSnapshot, now: Date): MarketingTask[] {
-  const start = Date.parse(show.startsAt);
-  if (!show.id || !Number.isFinite(start) || !Number.isFinite(now.getTime()) || !Number.isSafeInteger(show.capacity) || !Number.isSafeInteger(show.paidTickets) || show.capacity < 1 || show.paidTickets < 0 || show.paidTickets > show.capacity) throw new Error("Invalid show snapshot");
-  if (start <= now.getTime() || show.paidTickets === show.capacity) return [];
-  const days = (start - now.getTime()) / 86400000;
+import type {Department} from "./marketing-workspace";
+import type {ShowFinancialPlan, ShowIntake} from "./marketing-show-intake";
+
+export const agents = {
+  Director: {label: "AI Director", responsibility: "Điều phối công việc và quyền thực thi", kpi: "Công việc đúng hạn"},
+  Research: {label: "AI Research", responsibility: "Nghiên cứu thị trường và nhu cầu", kpi: "Nguồn kiểm chứng được"},
+  Planner: {label: "AI Planner", responsibility: "Lập concept, kênh và lịch truyền thông", kpi: "Mức lấp đầy cần để đạt mục tiêu"},
+  Content: {label: "AI Content", responsibility: "Soạn nội dung chiến dịch", kpi: "Nội dung qua kiểm tra"},
+  Creative: {label: "AI Creative", responsibility: "Sản xuất poster, banner và video", kpi: "Tư liệu đủ quyền sử dụng"},
+  Social: {label: "AI Social", responsibility: "Đăng Facebook và điều phối TikTok", kpi: "Lượt chuyển đổi đã thanh toán"},
+  Ads: {label: "AI Ads", responsibility: "Vận hành quảng cáo trong hạn mức", kpi: "Chi phí trên mỗi vé đã thanh toán"},
+  Sale: {label: "AI Sale", responsibility: "Điều phối luồng bán vé và chuyển việc ngoại lệ", kpi: "Vé đã thanh toán"},
+  CRM: {label: "AI CRM", responsibility: "Theo dõi yêu cầu hỗ trợ và phản hồi", kpi: "Yêu cầu cần xử lý"},
+  Analyst: {label: "AI Analyst", responsibility: "Đối soát doanh thu, chi phí và lợi nhuận", kpi: "Chênh lệch so với mục tiêu"},
+  Auditor: {label: "AI Auditor", responsibility: "Kiểm tra quyền, dữ liệu và ngân sách", kpi: "Số vấn đề cần xử lý"},
+} as const;
+export type Agent = keyof typeof agents;
+
+export const jobDefinitions = {
+  research: {agent: "Research", title: "Nghiên cứu thị trường", dependencies: []},
+  analyst: {agent: "Analyst", title: "Đối soát doanh thu đã thanh toán", dependencies: []},
+  plan: {agent: "Planner", title: "Lập concept và kế hoạch marketing", dependencies: ["research", "analyst"]},
+  content: {agent: "Content", title: "Soạn nội dung chiến dịch", dependencies: ["plan"]},
+  drive: {agent: "Creative", title: "Xác minh và tổ chức tư liệu Drive", dependencies: []},
+  creative: {agent: "Creative", title: "Sản xuất poster và banner", dependencies: ["drive", "plan"]},
+  video: {agent: "Creative", title: "Sản xuất video quảng cáo", dependencies: ["creative"]},
+  sale: {agent: "Sale", title: "Kiểm tra sơ đồ ghế và kết nối bán vé", dependencies: []},
+  crm: {agent: "CRM", title: "Theo dõi yêu cầu tư vấn", dependencies: ["sale"]},
+  audit: {agent: "Auditor", title: "Kiểm tra quyền và phương án tài chính", dependencies: ["sale", "analyst"]},
+  website: {agent: "Director", title: "Đăng show lên website", dependencies: ["audit"]},
+  facebook: {agent: "Social", title: "Đăng Facebook", dependencies: ["website", "content", "audit"]},
+  tiktok: {agent: "Social", title: "Điều phối nội dung TikTok", dependencies: []},
+  ads: {agent: "Ads", title: "Khởi chạy quảng cáo", dependencies: ["website", "creative", "audit"]},
+  ads_monitor: {agent: "Ads", title: "Đối soát và tối ưu quảng cáo", dependencies: []},
+  close_sales: {agent:"Director", title:"Đóng bán khi show bắt đầu", dependencies:["website"]},
+  reminders: {agent: "Director", title: "Theo dõi báo cáo và hạn công việc", dependencies: []},
+} as const satisfies Record<string, {agent: Agent; title: string; dependencies: readonly string[]}>;
+export type JobKind = keyof typeof jobDefinitions;
+
+export function planMarketing(input: ShowIntake, now: Date) {
+  const days = (Date.parse(input.startsAt) - now.getTime()) / 86_400_000;
   const priority = days <= 3 ? 100 : days <= 7 ? 80 : days <= 14 ? 60 : 40;
-  const prefix = show.id + ":" + now.toISOString().slice(0,10) + ":";
-  const task = (agent: Agent, action: string, dependencies: Agent[] = [], approvalRequired = false): MarketingTask => ({id: prefix + agent, showId: show.id, agent, action, dependsOn: dependencies.map(a => prefix + a), approvalRequired, priority});
-  return [
-    task("Research", "Research relevant audiences and demand"),
-    task("Analyst", "Analyze verified paid ticket counts and campaign attribution"),
-    task("Planner", "Draft campaign for remaining seats", ["Research", "Analyst"]),
-    task("Content", "Draft factual show content", ["Planner"]),
-    task("Creative", "Draft creative briefs", ["Planner"]),
-    task("Sale", "Review existing sales funnel without changing ticketing", ["Analyst"]),
-    task("CRM", "Draft consent-compliant follow-up plan", ["Planner"]),
-    task("Auditor", "Review facts, permissions and proposed campaign", ["Content", "Creative", "Sale", "CRM"]),
-    task("Social", "Propose publication; require approval before publishing", ["Auditor"], true),
-    task("Ads", "Propose spend; require approval before any external ad mutation", ["Auditor"], true)
+  const omitted: JobKind[] = [];
+  if (!input.permissions.includes("website")) omitted.push("website", "close_sales");
+  if (!input.permissions.includes("facebook")) omitted.push("facebook");
+  if (!input.permissions.includes("ads") || !input.adsVnd) omitted.push("ads", "ads_monitor");
+  return (Object.keys(jobDefinitions) as JobKind[]).filter(kind => !omitted.includes(kind)).map(kind => ({
+    kind,
+    agent: jobDefinitions[kind].agent,
+    dependencies: jobDefinitions[kind].dependencies,
+    run_at: kind === "close_sales" ? input.startsAt : now.toISOString(),
+    priority: priority + (["sale", "analyst", "drive", "audit"].includes(kind) ? 5 : 0),
+  }));
+}
+
+export function workDue(startsAt: string, daysBefore: number, now = new Date()): string {
+  const start = Date.parse(startsAt);
+  return new Date(Math.min(start, Math.max(now.getTime() + 3_600_000, start - daysBefore * 86_400_000))).toISOString();
+}
+
+export type ManualWork = {
+  key: string; department: Department; title: string; requirements: string;
+  acceptance: string; due_at: string; budget_vnd: number; drive_links: string[];
+};
+
+export function manualHandoff(input: ShowIntake, task: Omit<ManualWork, "due_at" | "drive_links">, days: number, now?: Date): ManualWork {
+  return {...task, due_at: workDue(input.startsAt, days, now), drive_links: []};
+}
+
+export function planStaffWork(input: ShowIntake, finance: ShowFinancialPlan, now: Date): ManualWork[] {
+  const tasks = [
+    manualHandoff(input, {key:"venue", department:"operations", title:"Chốt địa điểm, âm thanh và ánh sáng",
+      requirements:"Xác nhận sức chứa, sơ đồ ghế, hợp đồng và lịch bàn giao sân khấu.",
+      acceptance:"Có xác nhận địa điểm, sơ đồ ghế và báo giá trong ngân sách.", budget_vnd:input.productionVnd}, 7, now),
+    manualHandoff(input, {key:"print", department:"operations", title:"In poster và banner",
+      requirements:"Nhận file in do AI Creative tạo, kiểm tra kích thước và tiến độ giao.",
+      acceptance:"Có file in, báo giá và biên nhận bàn giao.", budget_vnd:input.printingVnd}, 3, now),
+    manualHandoff(input, {key:"finance", department:"finance", title:"Xác nhận chi phí và đối soát",
+      requirements:"Kiểm tra đủ khoản chi và cập nhật chứng từ. Đối soát doanh thu với SePay.",
+      acceptance:"Có bảng chi phí thực tế, số tiền đã đối soát và các chênh lệch.", budget_vnd:0}, 3, now),
   ];
+  if (finance.feasibility === "loss" || finance.feasibility === "below_target") {
+    tasks.push(manualHandoff(input, {key:"viability", department:"finance", title:"Điều chỉnh mục tiêu kinh doanh",
+      requirements:"Doanh thu tối đa theo giá và sức chứa hiện tại hụt " + finance.adjustmentVnd.toLocaleString("vi-VN") + " đ. Đề xuất giảm chi phí, đổi cơ cấu giá, đổi địa điểm hoặc điều chỉnh lợi nhuận mục tiêu.",
+      acceptance:"Có phương án giá, chi phí và điểm hòa vốn mới.", budget_vnd:0}, 7, now));
+  }
+  return tasks;
 }

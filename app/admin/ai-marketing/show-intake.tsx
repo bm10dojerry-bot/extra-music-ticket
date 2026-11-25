@@ -1,31 +1,110 @@
 "use client";
-import {useState, type FormEvent} from "react";
-import {prepareShow} from "../../../lib/marketing-show-intake";
-import {planMarketing} from "../../../lib/marketing-director";
-export default function ShowIntakeForm(){
- const [result,setResult]=useState<ReturnType<typeof prepareShow>|null>(null);
- const [tasks,setTasks]=useState<ReturnType<typeof planMarketing>>([]);
- const [error,setError]=useState("");
- function submit(e:FormEvent<HTMLFormElement>){
-  e.preventDefault();setError("");setResult(null);setTasks([]);
-  try{
-   const f=new FormData(e.currentTarget);
-   const s=(k:string)=>String(f.get(k)||"");
-   const n=(k:string)=>Number(s(k));
-   const now=new Date();
-   const input=prepareShow({artist:s("artist"),venue:s("venue"),startsAt:s("startsAt")+":00+07:00",capacity:n("capacity"),bookingVnd:n("bookingVnd"),adsVnd:n("adsVnd"),printingVnd:n("printingVnd"),otherVnd:n("otherVnd"),startingPriceVnd:n("startingPriceVnd"),targetProfitVnd:n("targetProfitVnd"),mediaDriveUrl:s("mediaDriveUrl"),setlist:s("setlist"),artistConfirmed:f.has("artistConfirmed"),mediaRightsConfirmed:f.has("mediaRightsConfirmed")},now);
-   const planned=planMarketing({id:"preview",startsAt:input.startsAt,capacity:input.capacity,paidTickets:0},now);
-   setResult(input);setTasks(planned);
-  }catch{setError("Kiểm tra thông tin, ngày diễn, chi phí, xác nhận nghệ sĩ và đường dẫn Drive.");}
- }
- return <section><h2>Tạo show mới</h2><p>Bản thử nghiệm lập kế hoạch, chưa lưu show hoặc chạy quảng cáo.</p><form onSubmit={submit} style={{display:"grid",gap:12,maxWidth:650}}>
- {([["artist","Nghệ sĩ","text"],["venue","Địa điểm","text"],["startsAt","Ngày giờ diễn (Việt Nam)","datetime-local"],["mediaDriveUrl","Link Google Drive","url"]] as const).map(([key,label,type])=><label key={key}>{label}<input style={{display:"block",width:"100%"}} name={key} type={type} required/></label>)}
- {([["capacity","Sức chứa"],["bookingVnd","Booking (đ)"],["adsVnd","Quảng cáo (đ)"],["printingVnd","In ấn (đ)"],["otherVnd","Chi phí khác gồm thuế, hoa hồng dự kiến (đ)"],["startingPriceVnd","Giá vé khởi điểm (đ)"],["targetProfitVnd","Lợi nhuận mục tiêu (đ)"]] as const).map(([key,label])=><label key={key}>{label}<input style={{display:"block",width:"100%"}} name={key} type="number" min={key==="capacity"||key==="startingPriceVnd"?1:0} step="1" required/></label>)}
- <label>Danh sách bài hát<textarea name="setlist" required style={{display:"block",width:"100%"}}/></label>
- <label><input name="artistConfirmed" type="checkbox" required/> Đã xác nhận nghệ sĩ</label>
- <label><input name="mediaRightsConfirmed" type="checkbox" required/> Có quyền sử dụng media</label>
- <button type="submit">Khởi tạo kế hoạch AI</button></form>
- {error&&<p role="alert">{error}</p>}
- {result&&<section aria-live="polite"><h3>Kế hoạch thử nghiệm: {result.artist}</h3><p>Chi phí: {result.plannedCostVnd.toLocaleString("vi-VN")}đ</p><p>Doanh thu mục tiêu: {result.targetRevenueVnd.toLocaleString("vi-VN")}đ</p><p>Giá trung bình tối thiểu nếu bán hết: {result.minimumAverageAtFullCapacityVnd.toLocaleString("vi-VN")}đ</p><p>Chưa tính chi phí phát sinh ngoài dữ liệu nhập. Chưa xác minh quyền Drive.</p><ul>{tasks.map(t=><li key={t.id}>{t.agent}: {t.action}</li>)}</ul></section>}
- </section>
+
+import {useRef, useState, type FormEvent} from "react";
+import {useRouter} from "next/navigation";
+import {venues} from "../../../lib/venues";
+import styles from "./workspace.module.css";
+
+const fields = [
+  ["bookingVnd", "Booking nghệ sĩ"],
+  ["productionVnd", "Tổ chức show"],
+  ["adsVnd", "Hạn mức quảng cáo"],
+  ["printingVnd", "Banner, poster và in ấn"],
+  ["otherVnd", "Thuế, hoa hồng và chi phí khác"],
+  ["startingPriceVnd", "Giá vé khởi điểm"],
+  ["targetProfitVnd", "Lợi nhuận mục tiêu"],
+] as const;
+
+export default function ShowIntakeForm() {
+  const router = useRouter();
+  const pending = useRef(false);
+  const previous = useRef<{payload: string; key: string} | null>(null);
+  const [venueId, setVenueId] = useState("");
+  const [website, setWebsite] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const knownVenue = venues.find(venue => venue.id === venueId);
+
+  async function start(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending.current) return;
+    const data = new FormData(event.currentTarget);
+    const show = {
+      artist: data.get("artist"), startsAt: data.get("startsAt"),
+      venue: knownVenue?.name ?? data.get("venue"), venueId,
+      capacity: Number(data.get("capacity")), mediaDriveUrl: data.get("mediaDriveUrl"),
+      setlist: data.get("setlist"), artistConfirmed: data.has("artistConfirmed"),
+      mediaRightsConfirmed: data.has("mediaRightsConfirmed"),
+      permissions: ["website", "facebook", "ads"].filter(permission => data.has(permission)),
+      ...Object.fromEntries(fields.map(([name]) => [name, Number(data.get(name))])),
+    };
+    const payload = JSON.stringify(show);
+    if (previous.current?.payload !== payload) previous.current = {payload, key: crypto.randomUUID()};
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/extra-os", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({action: "start", requestId: previous.current.key, show}),
+      });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error);
+      router.push("/admin/ai-marketing?show=" + encodeURIComponent(result.id));
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Chưa khởi động được EXTRA OS.");
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+
+  return <form onSubmit={start} className={styles.intake}>
+    <fieldset>
+      <legend>Thông tin show</legend>
+      <div className={styles.formGrid}>
+        <label>Nghệ sĩ<input name="artist" maxLength={150} autoComplete="off" required /></label>
+        <label>Ngày giờ diễn · Việt Nam<input name="startsAt" type="datetime-local" required /></label>
+        <label>Địa điểm có sơ đồ bán vé
+          <select name="venueId" value={venueId} onChange={event => setVenueId(event.target.value)}>
+            <option value="">Địa điểm khác</option>
+            {venues.map(venue => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+          </select>
+        </label>
+        {knownVenue ? null : <label>Tên địa điểm<input name="venue" maxLength={150} required /></label>}
+        <label>Sức chứa<input key={venueId} name="capacity" type="number" min={1} max={100000} step="1"
+          defaultValue={knownVenue?.capacity} required /></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Ngân sách và mục tiêu</legend>
+      <div className={styles.formGrid}>
+        {fields.map(([key, label]) => <label key={key}>{label} · đ
+          <input name={key} type="number" min={key === "startingPriceVnd" ? 1 : 0} step="1"
+            max={key === "startingPriceVnd" ? 100000000 : 100000000000}
+            defaultValue={key === "startingPriceVnd" ? undefined : 0} required />
+        </label>)}
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Tư liệu và quyền sử dụng</legend>
+      <div className={styles.formGrid}>
+        <label>Link Google Drive<input name="mediaDriveUrl" type="url" maxLength={600}
+          placeholder="https://drive.google.com/…" required /></label>
+        <label>Danh sách bài hát<textarea name="setlist" rows={4} maxLength={6000} required /></label>
+      </div>
+      <label className={styles.check}><input name="artistConfirmed" type="checkbox" required /> Đã xác nhận nghệ sĩ</label>
+      <label className={styles.check}><input name="mediaRightsConfirmed" type="checkbox" required /> Có quyền sử dụng hình ảnh, video và tư liệu</label>
+    </fieldset>
+    <fieldset>
+      <legend>Quyền tự động cho show này</legend>
+      <label className={styles.check}><input name="website" type="checkbox" checked={website}
+        onChange={event => setWebsite(event.target.checked)} /> Đăng show và mở bán trên website</label>
+      <label className={styles.check}><input name="facebook" type="checkbox" disabled={!website} /> Đăng Facebook</label>
+      <label className={styles.check}><input name="ads" type="checkbox" disabled={!website} /> Chạy và tối ưu Meta Ads trong hạn mức đã nhập</label>
+    </fieldset>
+    {error && <p className={styles.error} role="alert">{error}</p>}
+    <button className={styles.primary} type="submit" disabled={busy}>{busy ? "Đang khởi động…" : "KHỞI ĐỘNG EXTRA OS"}</button>
+  </form>;
 }

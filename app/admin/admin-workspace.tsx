@@ -33,11 +33,12 @@ function MenuIcon({name}:{name:IconName}) {
  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{iconPaths[name]}</svg>;
 }
 
-function NavigationList({items,section,onSelect,prefix}:{items:readonly AdminNavItem[];section:AdminSection;onSelect:(id:AdminSection)=>void;prefix:string}) {
+function NavigationList({items,section,onSelect,prefix,extraOs}:{items:readonly AdminNavItem[];section:AdminSection;onSelect:(id:AdminSection)=>void;prefix:string;extraOs:boolean}) {
  return <>{adminGroups.map(group=>{
   const entries=items.filter(item=>item.group===group);
-  return entries.length?<div className={styles.navGroup} key={group}>
+  return entries.length||group==="Điều hành"&&extraOs?<div className={styles.navGroup} key={group}>
    <p className={styles.menuLabel}>{group}</p>
+   {group==="Điều hành"&&extraOs&&<a href="/admin/ai-marketing" className={styles.navButton}><MenuIcon name="activity"/><span>EXTRA OS</span><span className={styles.navArrow} aria-hidden="true">›</span></a>}
    {entries.map(item=><button key={item.id} id={prefix+item.id} type="button" className={section===item.id?styles.navActive:styles.navButton} aria-current={section===item.id?"page":undefined} aria-controls="admin-panel" onClick={()=>onSelect(item.id)}>
     <MenuIcon name={item.icon}/><span>{item.label}</span><span className={styles.navArrow} aria-hidden="true">›</span>
    </button>)}
@@ -114,7 +115,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
     <a href="https://iextra.net/" className={styles.brand}><span className={styles.brandMark}>+1</span><span><strong>EXTRA</strong><small>ADMIN WORKSPACE</small></span></a>
     <label className={styles.search}><MenuIcon name="search"/><span className={styles.srOnly}>Tìm mục quản trị</span><input type="search" placeholder="Tìm mục quản trị…" value={search} onChange={event=>setSearch(event.target.value)}/></label>
     <nav className={styles.navigation} aria-label="Menu Admin">
-     <NavigationList items={visibleItems} section={section} onSelect={select} prefix="admin-nav-"/>
+     <NavigationList items={visibleItems} section={section} onSelect={select} prefix="admin-nav-" extraOs={actor.role==="admin"&&"extra os".includes(search.trim().toLowerCase())}/>
      {!visibleItems.length?<p className={styles.noResults} role="status">Không tìm thấy mục phù hợp.</p>:null}
     </nav>
     <div className={styles.sidebarBottom}>
@@ -143,7 +144,7 @@ export default function AdminWorkspace({actor,section,onNavigate,children}:{acto
     <header className={styles.menuHeading}><div><p>+1 EXTRA · ADMIN</p><h2 id="admin-menu-title">Tất cả chức năng</h2></div><button type="button" ref={closeButton} className={styles.closeButton} aria-label="Đóng menu quản trị" onClick={closeMenu}><MenuIcon name="close"/></button></header>
     <label className={styles.search}><MenuIcon name="search"/><span className={styles.srOnly}>Tìm chức năng quản trị</span><input type="search" placeholder="Tìm show, khách hàng, hoa hồng…" value={menuSearch} onChange={event=>setMenuSearch(event.target.value)}/></label>
     <nav className={styles.menuList} aria-label="Tất cả mục Admin">
-     <NavigationList items={menuItems} section={section} onSelect={select} prefix="admin-menu-"/>
+     <NavigationList items={menuItems} section={section} onSelect={select} prefix="admin-menu-" extraOs={actor.role==="admin"&&"extra os".includes(menuSearch.trim().toLowerCase())}/>
      {!menuItems.length?<p className={styles.noResults} role="status">Không tìm thấy mục phù hợp. Thử từ khóa khác để tìm lại.</p>:null}
     </nav>
     <a href="https://iextra.net/" target="_blank" rel="noopener noreferrer" className={styles.websiteLink}>Xem website Extra <span aria-hidden="true">↗</span></a>
