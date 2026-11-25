@@ -1,0 +1,2 @@
+# EXTRA OS Admin staging
+Independent Railway application. Reuses existing planning domain. Admin-only login, PostgreSQL, show planning, manual task status and audit. No production keys, external jobs, live sales, payment or ads. Set DATABASE_URL to isolated private Railway PostgreSQL reference and ADMIN_BOOTSTRAP_PASSWORD (>=24 random characters). Use HTTPS. Run npm test and npm start. AI jobs remain blocked until scoped connectors and worker are implemented. No verified revenue or actual seat inventory.
