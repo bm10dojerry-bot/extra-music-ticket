@@ -9,6 +9,8 @@ import type {AdAllocation, DirectorPanel, OsAsset, OsJob, OsLog, OsReport, OsSho
 export class WorkBlocked extends Error {}
 
 export function deploymentAllowsExtraOs() {
+  // Railway migration is fail-closed until the independent data adapter is ready.
+  if (process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_ENVIRONMENT_ID) return false;
   if (process.env.VERCEL_ENV !== "preview") return true;
   const current = process.env.SUPABASE_URL?.replace(/\/$/, "");
   return Boolean(current && current === process.env.EXTRA_OS_PREVIEW_DATABASE_URL?.replace(/\/$/, ""));
