@@ -28,7 +28,11 @@ export function marketingAdminView(contract:unknown,now=Date.now()):AiMarketingA
  const rawShows=rows(source.shows),rawPosts=rows(source.posts),rawAllocations=rows(source.allocations),rawActions=rows(source.actions);
  const accountId=nullableText(settings.account_id),account=MARKETING_ACCOUNTS.find(item=>item.id===accountId);
  const publishingReady=settings.publishing_ready===true&&recentCheck(settings.publishing_checked_at,now);
- const advertisingReady=settings.advertising_ready===true&&!!account&&recentCheck(settings.advertising_checked_at,now);
+ const advertisingReady=!!account && settings.advertising_ready===true && (
+  typeof settings.advertising_authorization_valid==="boolean"
+   ? settings.advertising_authorization_valid
+   : recentCheck(settings.advertising_checked_at,now)
+ );
  const enabled=settings.enabled===true,pausePending=source.pause_pending===true;
  const reasons=(Array.isArray(settings.readiness_reasons)?settings.readiness_reasons:[]).filter((value):value is string=>typeof value==="string").map(value=>value.slice(0,1200));
  if(!publishingReady&&!reasons.some(value=>/đăng bài|Fanpage|Page/i.test(value)))reasons.push("Cần kết nối hoặc kiểm tra lại quyền đăng bài cho Page 1 EXTRA trong Facebook Pages / Windsor.ai.");
