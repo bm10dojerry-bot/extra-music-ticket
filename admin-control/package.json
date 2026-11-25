@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "node server.cjs",
-    "test": "node --test test.cjs",
+    "test": "node --test test.cjs director.test.cjs",
     "build": "npm test && node --check server.cjs"
   },
   "dependencies": {

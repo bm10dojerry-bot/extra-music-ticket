@@ -1,0 +1,220 @@
+'use strict';
+
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const {randomUUID} = require('node:crypto');
+const {Pool} = require('pg');
+const {
+  readRetailBrief,financialPlan,definitions,makeExecutor,review,adsPlan
+} = require('./director-program.cjs');
+const queue = require('./director-queue.cjs');
+
+const request = new URLSearchParams({
+  request_id:randomUUID(),product:'Đồ uống diễn tập',purchaseVnd:'28000',priceVnd:'35000',
+  budgetVnd:'100000',region:'Lào Cai',objective:'Bán hàng không thua lỗ'
+});
+const {input} = readRetailBrief(request);
+
+test('ONE CLICK preserves approved prices, budget and missing costs',()=>{
+  assert.equal(input.priceVnd,35000);
+  assert.equal(input.ageMin,18);
+  const base = financialPlan(input);
+  assert.equal(base.grossMarginVnd,7000);
+  assert.equal(base.subtotalBreakEvenUnits,15);
+  assert.equal(base.breakEvenUnits,null);
+  assert.equal(base.missingCosts.length,6);
+  assert.equal(base.actualProfitVnd,null);
+  const full = financialPlan({...input,packingVnd:1000,deliveryVnd:1000,taxVnd:500,paymentVnd:100,otherUnitVnd:400,otherFixedVnd:10000});
+  assert.equal(full.contributionVnd,4000);
+  assert.equal(full.breakEvenUnits,28);
+  assert.equal(financialPlan({...input,priceVnd:27000}).viability,'margin_non_positive');
+  const plan = adsPlan(input);
+  assert(plan.stopThresholdVnd < plan.proposedLifetimeVnd && plan.proposedLifetimeVnd < input.budgetVnd);
+  assert.equal(plan.campaignId,null);
+});
+
+test('Director assigns all 11 agents and waits for terminal evidence',()=>{
+  const jobs = definitions(input);
+  assert.equal(new Set(jobs.map(j=>j.agent)).size,11);
+  assert.equal(jobs.find(j=>j.kind==='ads').budgetVnd,100000);
+  assert.deepEqual(jobs.find(j=>j.kind==='sale_rehearsal').needs,['training']);
+  assert.equal(jobs.at(-1).observes.length,jobs.length-1);
+  assert.match(review({kind:'research',result:{text:'invented',sources:{}}}),/nguồn/);
+  assert.match(review({kind:'sale_rehearsal',result:{ordersCreated:1}}),/xác nhận/);
+});
+
+async function database(t) {
+  const owner = new Pool({connectionString:process.env.DIRECTOR_TEST_DATABASE_URL});
+  const schema = 'test_'+randomUUID().replaceAll('-','');
+  await owner.query('create schema '+schema);
+  const pool = new Pool({connectionString:process.env.DIRECTOR_TEST_DATABASE_URL, options:'-c search_path='+schema});
+  t.after(async ()=>{
+    await pool.end();
+    await owner.query('drop schema '+schema+' cascade');
+    await owner.end();
+  });
+  await queue.initDirectorQueue(pool);
+  return pool;
+}
+
+async function drain(pool, execute) {
+  for (let step=0;step<120;step++) {
+    if (await queue.reviewNext(pool,review)) continue;
+    const job = await queue.claim(pool);
+    if (!job) {
+      const {rows} = await pool.query("select count(*)::int n from os_director_jobs where status='queued'");
+      if (!rows[0].n) return;
+      continue;
+    }
+    try {
+      const result = await execute(job,await queue.jobContext(pool,job));
+      assert.equal(await queue.report(pool,job,{status:'reported',result}),true);
+    } catch (error) {
+      if (!error.permissions) throw error;
+      await queue.report(pool,job,{status:'blocked',issues:error.permissions,result:error.result});
+    }
+  }
+  assert.fail('Director did not reach a terminal state');
+}
+
+const usePg = {skip:!process.env.DIRECTOR_TEST_DATABASE_URL};
+
+test('PostgreSQL serializes duplicate intake, reclaims a lease, and rejects stale reports',usePg,async t=>{
+  const pool = await database(t);
+  const definitionsByRun = definitions(input);
+  const [left,right] = await Promise.all([
+    queue.queueDirector(pool,request.get('request_id'),input,definitionsByRun),
+    queue.queueDirector(pool,request.get('request_id'),input,definitionsByRun)
+  ]);
+  assert.equal(left,right);
+  const candidates = await Promise.all([queue.claim(pool),queue.claim(pool)]);
+  assert.equal(candidates.filter(Boolean).length,1);
+  const first = candidates.find(Boolean);
+  assert.equal(first.kind,'brief');
+  await pool.query("update os_director_jobs set lease_until=now()-interval '1 second' where id=$1",[first.id]);
+  const next = await queue.claim(pool);
+  assert.equal(next.id,first.id);
+  assert.equal(next.attempts,2);
+  assert.notEqual(next.lease_id,first.lease_id);
+  assert.equal(await queue.report(pool,first,{status:'reported',result:{stale:true}}),false);
+  assert.equal(await queue.report(pool,next,{status:'reported',result:{mode:'rehearsal'}}),true);
+  assert(await queue.reviewNext(pool,review));
+});
+
+test('PostgreSQL runs real scheduling and reviews with controlled provider fixtures',usePg,async t=>{
+  const pool = await database(t);
+  const id = await queue.queueDirector(pool,randomUUID(),input,definitions(input));
+  const sources = [{title:'Nguồn fixture độc lập',url:'https://example.com/fixture'}];
+  const long = 'Đây là nội dung kiểm thử để đo khả năng nhận dữ liệu, kiểm tra báo cáo và chuyển kết quả cùng phiên bản.';
+  let salesRehearsals = 0;
+  const execute = makeExecutor(pool,{
+    model:async (kind,job,deps)=>{
+      if (kind==='training') {
+        assert.equal(deps.research.sources[0].url,sources[0].url);
+        return {playbook:long+' '+(job.feedback || 'Báo giá đã kiểm tra.'),objections:long,validation:long};
+      }
+      if (kind==='content') return {website:long,facebook:long,tiktok:long,ads:long,video:long};
+      return {text:long,sources};
+    },
+    creative:async ()=>({asset:'fixture',remaining:['asset_rights']}),
+    sale:async (job,version)=>{
+      if (++salesRehearsals === 1) return {knowledgeVersion:version.version,passed:false};
+      return {knowledgeVersion:version.version,reply:long,objectionReply:long,ordersCreated:0,liveSales:false,
+        quote:{priceVerified:true,stockChecked:true,explicitConfirmation:true}};
+    }
+  });
+
+  await drain(pool,execute);
+  let state = await queue.listRuns(pool,id);
+  const report = state.jobs.find(job=>job.kind==='report');
+  assert.equal(report.status,'accepted');
+  assert.equal(report.result.actuals.revenueVnd,null);
+  assert.equal(new Set(report.result.work.map(job=>job.agent)).size,11);
+  assert.equal(state.jobs.find(job=>job.kind==='social').status,'blocked');
+  assert.equal(state.jobs.find(job=>job.kind==='ads').result.campaignId,null);
+  assert.equal(state.versions.length,2);
+  assert.equal(state.versions.find(version=>version.active).version,2);
+  assert.equal(await queue.restoreKnowledge(pool,id,1),false);
+
+  const training = state.jobs.find(job=>job.kind==='training');
+  assert.equal(await queue.revise(pool,training.id,'Xem lại phần chuyển đối thoại cho người phụ trách.'),true);
+  await drain(pool,execute);
+  assert.equal(await queue.restoreKnowledge(pool,id,2),true);
+  state = await queue.listRuns(pool,id);
+  assert.equal(state.versions.length,3);
+  assert.equal(state.versions.find(version=>version.active).version,2);
+  assert(state.jobs.find(job=>job.kind==='training').events.some(event=>event.event==='knowledge_restored'));
+});
+
+test('missing credentials block individual jobs, and Director still completes a partial report',usePg,async t=>{
+  const pool = await database(t);
+  const id = await queue.queueDirector(pool,randomUUID(),input,definitions(input));
+  await drain(pool,makeExecutor(pool,{env:{}}));
+  const {jobs} = await queue.listRuns(pool,id);
+  assert.equal(jobs.find(job=>job.kind==='research').status,'blocked');
+  assert.equal(jobs.find(job=>job.kind==='plan').status,'blocked');
+  assert.equal(jobs.find(job=>job.kind==='forecast').result.subtotalBreakEvenUnits,15);
+  assert.equal(jobs.find(job=>job.kind==='report').status,'accepted');
+});
+
+test('Messenger accepts signed 24H events only and deduplicates network retries',usePg,async t=>{
+  const {createHmac}=require('node:crypto');
+  const {createServer}=require('node:http');
+  const {once}=require('node:events');
+  const {initCrm,messengerWebhook,crmExecutor}=require('./director-crm.cjs');
+  const pool=await database(t);
+  await initCrm(pool);
+  const secret='fixture-app-secret-for-messenger-tests';
+  const verify='fixture-verification-token-for-tests';
+  const env={
+    EXTRA24H_MESSENGER_APP_SECRET:secret,EXTRA24H_MESSENGER_VERIFY_TOKEN:verify,
+    EXTRA24H_CRM_HASH_KEY:'fixture-hash-key-for-messenger-tests'
+  };
+  const server=createServer(messengerWebhook(pool,env)).listen(0,'127.0.0.1');
+  await once(server,'listening');
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const url='http://127.0.0.1:'+server.address().port;
+  const challenge=await fetch(url+'/?hub.mode=subscribe&hub.verify_token='+verify+'&hub.challenge=246');
+  assert.equal(await challenge.text(),'246');
+  const pageId='1413936608477545';
+  const event={sender:{id:'855555123456'},recipient:{id:pageId},timestamp:Date.now(),
+    message:{mid:'sample_msg_124',text:'Mình muốn mua thử.'}};
+  const other={...event,recipient:{id:'23452345'}};
+  const payload=JSON.stringify({object:'page',entry:[{id:pageId,messaging:[event,other,{...event,message:{...event.message,is_echo:true}}]}]});
+  const headers={'x-hub-signature-256':'sha256='+createHmac('sha256',secret).update(payload).digest('hex')};
+  assert.equal((await fetch(url,{method:'POST',body:payload})).status,403);
+  const send=()=>fetch(url,{method:'POST',body:payload,headers});
+  assert.deepEqual((await Promise.all([send(),send()])).map(response=>response.status),[200,200]);
+  const {rows:[stored]}=await pool.query('select * from os_24h_inbound_events');
+  assert.match(stored.thread_key,/^[a-f0-9]{64}$/);
+  assert(!JSON.stringify(stored).includes(event.sender.id));
+  const report=await crmExecutor(pool,env)({input},'blocked');
+  assert.equal(report.watch.events,1);
+  assert.equal(report.watch.sale_intents,1);
+  assert.equal(report.conversations,null);
+  assert.equal(report.outboundMessages,0);
+});
+
+test('Creative reserves one paid generation and keeps the preview private',usePg,async t=>{
+  const {initMedia,mediaExecutor}=require('./director-media.cjs');
+  const pool=await database(t);
+  await initMedia(pool);
+  const record={
+    kind:'creative',agent:'Creative',objective:'Ảnh diễn tập',needs:[],observes:[],permissions:['images'],budgetVnd:0
+  };
+  await queue.queueDirector(pool,randomUUID(),input,[record]);
+  const job=await queue.claim(pool);
+  const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/b9sAAAAASUVORK5CYII=';
+  let calls=0;
+  const execute=mediaExecutor(pool,{EXTRA24H_IMAGE_API_KEY:'fixture'},async ()=>{
+    calls++;
+    return Response.json({data:[{b64_json:png}]});
+  });
+  const brief={text:'Thiết kế trừu tượng dùng để kiểm thử.'};
+  const first=await execute(job,brief,{sources:[]});
+  const replay=await execute(job,brief,{sources:[]});
+  assert.equal(calls,1);
+  assert.deepEqual(replay.asset,first.asset);
+  assert.equal(first.rights.publicationApproved,false);
+  assert.deepEqual(first.remaining,['drive','asset_rights']);
+});
