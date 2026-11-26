@@ -3,7 +3,7 @@ type MapVenue="ccc"|"laocai";
 type MapSnapshot={seats:Seat[];taken:ReadonlySet<string>;title:string;checkedAt:string;showId?:string;tierLabels?:Record<string,string>};
 type Point={x:number;y:number};
 type Cell=Point&{id:string;row:string;w:number;h:number};
-export type MapMarks={venue:MapVenue;reference:string;points:Point[]};
+export type MapMarks={venue:MapVenue;reference:string;points:(Point&{w?:number;h?:number;bounds?:{left:number;right:number;top:number;bottom:number}})[]};
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
 // Original, small monoline vector alphabet. No OS font or remote font file is needed.
 // Base glyphs are 6 x 10 units. Vietnamese marks are composed from Unicode NFD.
@@ -94,7 +94,7 @@ export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},
  '</svg>';
 }
 function components(mask:Uint8Array,width:number,height:number,min:number){
- const out:{x:number;y:number;n:number;w:number;h:number}[]=[];
+ const out:{x:number;y:number;n:number;w:number;h:number;left:number;right:number;top:number;bottom:number}[]=[];
  const queue=new Int32Array(mask.length);
  for(let i=0;i<mask.length;i++){
   if(!mask[i])continue;
@@ -102,7 +102,7 @@ function components(mask:Uint8Array,width:number,height:number,min:number){
   while(head<tail){const j=queue[head++],x=j%width,y=Math.floor(j/width);sx+=x;sy+=y;l=Math.min(l,x);r=Math.max(r,x);t=Math.min(t,y);b=Math.max(b,y);
    for(const k of [x>0?j-1:-1,x<width-1?j+1:-1,y>0?j-width:-1,y<height-1?j+width:-1])if(k>=0&&mask[k]){mask[k]=0;queue[tail++]=k;}
   }
-  if(tail>=min)out.push({x:sx/tail,y:sy/tail,n:tail,w:r-l+1,h:b-t+1});
+  if(tail>=min)out.push({x:sx/tail,y:sy/tail,n:tail,w:r-l+1,h:b-t+1,left:l,right:r,top:t,bottom:b});
  }
  return out;
 }
@@ -138,18 +138,34 @@ export function readSeatMapMarks(rgb:Uint8Array,width:number,height:number):MapM
   if(blue||red||green)ink[i]=1;
  }
  const marks=components(ink,width,height,4);
- if(marks.length>20||marks.some(m=>m.w>dx*.08||m.h>dy*.08))return null;
- return {venue,reference:hash.toString(16).toUpperCase().padStart(8,"0"),points:marks.map(m=>fromPixel(m.x,m.y))};
+ if(marks.length>20||marks.some(m=>m.w>dx*.55||m.h>dy*.55))return null;
+ return {venue,reference:hash.toString(16).toUpperCase().padStart(8,"0"),points:marks.map(m=>{const a=fromPixel(m.left,m.top),b=fromPixel(m.right,m.bottom);return {...fromPixel(m.x,m.y),w:b.x-a.x,h:b.y-a.y,bounds:{left:a.x,right:b.x,top:a.y,bottom:b.y}};})};
 }
-export function verifySeatMapMarks(marks:MapMarks,venue:MapVenue,seats:readonly Seat[],showId:string):string[]|null{
+export function resolveSeatMapMarks(marks:MapMarks,venue:MapVenue,seats:readonly Seat[],showId:string):{ids:string[];needsSelection:boolean}|null{
  if(marks.venue!==venue||!marks.points.length||marks.points.length>20)return null;
  const g=seatMapGeometry(venue,seats,showId);
  if(marks.reference!==g.reference)return null;
- const found:string[]=[];
+ const found=new Set<string>();let needsSelection=false;
  for(const p of marks.points){
+  if(!Number.isFinite(p.x)||!Number.isFinite(p.y))return null;
   const inside=g.cells.filter(c=>Math.abs(p.x-c.x)<=c.w*.42&&Math.abs(p.y-c.y)<=c.h*.42);
-  if(inside.length!==1||found.includes(inside[0].id))return null;
-  found.push(inside[0].id);
+  const bounds=p.bounds;
+  const wide=!!bounds&&((p.w??0)>g.w*.85||(p.h??0)>g.h*.85);
+  if(!wide&&inside.length===1){if(found.has(inside[0].id))return null;found.add(inside[0].id);continue;}
+  if(!bounds)return null;
+  // A broad or off-center stroke is a candidate region, not booking consent.
+  // Include seat centers inside the mark's bounds, plus clearly intersected cells
+  // for an off-center single stroke. Always ask the customer to choose.
+  const region=g.cells.filter(c=>c.x>=bounds.left&&c.x<=bounds.right&&c.y>=bounds.top&&c.y<=bounds.bottom);
+  const candidates=region.length?region:g.cells.filter(c=>c.x+c.w*.42>=bounds.left&&c.x-c.w*.42<=bounds.right&&c.y+c.h*.42>=bounds.top&&c.y-c.h*.42<=bounds.bottom);
+  if(!candidates.length)return null;
+  needsSelection=true;for(const c of candidates)found.add(c.id);
  }
- return found;
+ if(!found.size)return null;
+ const ids=g.cells.filter(c=>found.has(c.id)).map(c=>c.id);
+ return {ids,needsSelection};
+}
+export function verifySeatMapMarks(marks:MapMarks,venue:MapVenue,seats:readonly Seat[],showId:string):string[]|null{
+ const resolved=resolveSeatMapMarks(marks,venue,seats,showId);
+ return resolved&&!resolved.needsSelection?resolved.ids:null;
 }
