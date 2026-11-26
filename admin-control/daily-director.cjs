@@ -169,6 +169,20 @@ function startDailyDirector(pool,{interval=3600000,onResult=()=>{},onError=()=>{
  timer=setTimeout(run,1000).unref();
  return async()=>{stopped=true;if(timer)clearTimeout(timer);if(pending)await pending;};
 }
+function renderProposalPreview(record,day,esc,approvals=[]){
+ if(!record)return '<section class="director-preview"><h2>Phương án AI Director</h2><p>Chưa có phương án lưu cho ngày '+esc(day)+'. Chọn ngày hiện tại để xem đề xuất tự động.</p><a href="#daily-director">Xem trạng thái AI Director</a></section>';
+ const p=record.plan,approved=approvals.find(a=>a.revision===record.revision),lead=p.evidence?.shows?.[0],portfolio=p.evidence?.upcomingShows??[];
+ const status=approved?'Đã phê duyệt · triển khai nội bộ':'Chờ anh phê duyệt';
+ const title=lead?'Ưu tiên bán vé '+lead.artist+' · '+lead.date:p.title;
+ const baseline=lead?'<p><strong>Căn cứ:</strong> '+esc(n(lead.inventory.sold)+'/'+n(lead.inventory.capacity)+' ghế đã bán theo API; '+n(lead.inventory.remaining)+' ghế còn theo API (chưa trừ giữ chỗ). '+(lead.daySales?'Trong ngày: '+n(lead.daySales.paidTickets)+' vé trả tiền, '+money(lead.daySales.revenueVnd)+'.':'Chưa có số thanh toán khớp mã show.'))+'</p>':'<p>'+esc(p.summary)+'</p>';
+ const measures=lead?[
+  'Sale / CRM: rà khách đã hỏi vé, ưu tiên xử lý nhu cầu chưa chốt, xác minh ghế trước khi tư vấn. Chưa tự gửi tin.',
+  'Content / Creative: soạn bài nhắc lịch và hướng dẫn chọn ghế, dùng poster đã xác minh quyền sử dụng.',
+  'Ads / Analyst: rà dữ liệu chi tiêu, số hội thoại và số vé thanh toán; chưa có căn cứ tăng ngân sách. So sánh kết quả ngày tiếp theo.'
+ ]:p.tasks.slice(0,3).map(t=>t.title+': '+t.deliverable);
+ const progress=approved?'<p>Tiến độ phiên bản đã duyệt: '+esc(n(approved.tasks.filter(t=>t.status==='draft_prepared').length))+' tài liệu nội bộ đã chuẩn bị · '+esc(n(approved.tasks.filter(t=>t.status==='blocked').length))+' việc bị chặn · '+esc(n(approved.tasks.filter(t=>t.status==='queued').length))+' việc chờ.</p>':'<p>Chưa tạo hàng đợi triển khai cho phiên bản này.</p>';
+ return '<section class="director-preview"><h2>Phương án AI Director</h2><p class="tag">'+esc(status)+' · Phiên bản '+esc(record.revision)+' · '+esc(day)+'</p><h3>'+esc(title)+'</h3>'+baseline+'<h4>Biện pháp đề xuất</h4><ol>'+measures.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'+(lead?'<p><strong>Đo kết quả:</strong> vé đã thanh toán, doanh thu xác nhận và số ghế bán; không quy kết cho quảng cáo khi chưa có dữ liệu phân bổ. '+esc(n(portfolio.length))+' show trong danh sách chuẩn bị.</p>':'')+progress+'<p>Ngân sách phát sinh: 0 đ. Chưa ghi Music, chưa đăng bài, chưa gửi tin.</p><p><a class="director-jump" href="#daily-director">Xem đầy đủ phương án, phê duyệt và kết quả →</a></p></section>';
+}
 function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new Date()}={}){
  const states={draft_ready:'Bản nháp đề xuất · chờ duyệt',needs_input:'Chờ dữ liệu / nhân sự',awaiting_approval:'Khóa thực thi bên ngoài'};
  const executionStates={queued:'Đã giao · đang chờ xử lý',draft_prepared:'Đã chuẩn bị tài liệu nội bộ',blocked:'Đang bị chặn'};
@@ -189,4 +203,4 @@ function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new 
   '<form method="post" action="/daily-director/approve"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="platform" value="'+esc(platform)+'"><input type="hidden" name="day" value="'+esc(day)+'"><input type="hidden" name="revision" value="'+esc(record.revision)+'"><input type="hidden" name="fingerprint" value="'+esc(record.fingerprint)+'"><p><strong>Chờ anh phê duyệt phương án '+esc(record.revision)+'.</strong> Phê duyệt chỉ cho phép giao nhiệm vụ và chuẩn bị tài liệu nội bộ, không mở quyền ghi Music hoặc chi tiêu.</p><button>Phê duyệt phương án nội bộ</button></form>':'<p>Chưa được phê duyệt. Chỉ có thể duyệt phương án ngày hiện tại bằng tài khoản quản trị.</p>';
  return '<section id="daily-director"><h2>AI Director</h2><p>Ngày '+esc(day)+' · Phiên bản '+esc(record.revision)+' · Cập nhật '+esc(new Date(record.updated_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+' (giờ Việt Nam).</p><h3>'+esc(p.title)+'</h3><p>'+esc(p.summary)+'</p>'+lifecycle+'<p>Đang thử nghiệm bộ quy tắc phân việc nội bộ. Bản nháp tạo tự động, không đồng nghĩa Agent đã chạy mô hình hoặc đã đăng bài. Không có quyền ghi Music, gửi tin hoặc chi ngân sách.</p><div class="scroll"><table><thead><tr><th>Agent</th><th>Nhiệm vụ / Đề xuất</th><th>Đầu ra dự kiến</th><th>Trạng thái đề xuất</th></tr></thead><tbody>'+p.tasks.map(t=>'<tr><td>'+esc(t.agent)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.deliverable)+'</td><td>'+esc(states[t.state]??'Chưa xác định')+'</td></tr>').join('')+'</tbody></table></div>'+controls+(history?'<h3>Tiến độ phương án đã duyệt</h3>'+history:'')+'</section>';
 }
-module.exports={musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
+module.exports={renderProposalPreview,musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
