@@ -295,4 +295,11 @@ test('A one-day allowance expires on the following reporting day',()=>{
  assert.equal(live.dailyCallLimit(env,'2030-01-02'),26);
  assert.equal(live.dailyCallLimit(env,'2030-01-03'),13);
  assert.equal(live.dailyCallLimit({...env,EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL:'90'},'2030-01-02'),13);
+ const unlimited={...env,EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL:'unlimited'};
+ assert.equal(live.dailyCallLimit(unlimited,'2030-01-02'),null);
+ assert.equal(live.dailyCallLimit(unlimited,'2030-01-03'),13);
+ assert.equal(live.dailyCallLimit({...unlimited,EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:''},'2030-01-02'),0);
+ const page=live.renderLiveDirector({day:'2030-01-02',calls_today:100,step_index:11,status:'queued'},escapeMusic,unlimited);
+ assert.match(page,/100 \/ không giới hạn/);
+ assert.doesNotMatch(page,/Đã dùng hết lượt gọi/);
 });
