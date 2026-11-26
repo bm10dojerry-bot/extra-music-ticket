@@ -181,3 +181,20 @@ test('Campaign proposal separates period-specific targets, cost scenarios and na
  const retail=proposalPlan('24h','month',day,null,null,{created:0,accepted:0,blocked:0,failed:0,crm:null,records:[]},now);
  assert.equal(retail.periodEnd,'2030-01-31');assert.equal(retail.evidence.retailObjective.revenueTargetVnd,null);
 });
+
+
+const {buildRetailStrategy}=require('./retail-strategy.cjs');
+test('24H proposals contain a concrete pilot and honest conversion assumptions rather than only a source checklist',()=>{
+ const day='2030-01-02',now=new Date('2030-01-02T05:00:00Z'),retail={created:0,accepted:0,blocked:0,failed:0,crm:null,records:[]};
+ const daily=proposalPlan('24h','day',day,null,null,retail,now);
+ const s=daily.evidence.retailStrategy;
+ assert.equal(s.budgetVnd,100000);assert.equal(s.budgetAuthorizedVnd,0);
+ assert.deepEqual([s.conversationsLow,s.conversationsHigh,s.ordersLow,s.ordersHigh],[10,20,2,6]);
+ assert.equal(s.revenueTargetVnd,null);assert.equal(s.minContribution,16667);assert.equal(s.maxContribution,50000);
+ assert(s.staff.some(a=>a.person==='Diệu'));assert(s.agents.some(a=>a.agent.includes('Creative')));
+ const week=buildRetailStrategy(day,'2030-01-08','week',now);assert.equal(week.budgetVnd,300000);assert.equal(week.days,3);assert.equal(week.milestones.length,3);
+ const month=buildRetailStrategy(day,'2030-01-31','month',now);assert.equal(month.budgetVnd,300000);
+ const page=renderProposalPage({plan:daily,revision:2,updated_at:now.toISOString(),fingerprint:'a'.repeat(64)},'24h','day',day,escapeMusic,{csrf:'test',now});
+ assert.match(page,/Tăng lượt khách mua tại cửa hàng 24H/);assert.match(page,/100\.000 đ/);assert.match(page,/2–6/);assert.match(page,/Điều kiện hòa vốn/);assert.match(page,/chưa có API doanh thu/);
+ assert(daily.tasks.some(t=>t.id==='strategy:Ads / Auditor'&&t.state==='awaiting_approval'));
+});
