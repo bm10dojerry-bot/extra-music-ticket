@@ -12,7 +12,7 @@ w=replace(w,'async function handleInbound(job:AiJob,chat:AiChat){', [
 '}',
 'async function handleInbound(job:AiJob,chat:AiChat){'
 ].join("\n"));
-w=replace(w,'import "server-only";','import "server-only";\nimport {asksForStaff,unableToAnswer,seatCodes,simpleSeatQuestion,exactSeatDetails,formatExactSeats,HANDOFF_REPLY} from "./ai-sales-24";');
+w=replace(w,'import "server-only";','import "server-only";\nimport {asksForStaff,unableToAnswer,seatCodes,simpleSeatQuestion,exactSeatDetails,verifiedMarkedSeatDetails,formatExactSeats,HANDOFF_REPLY} from "./ai-sales-24";');
 w=replace(w,'  const recognition=await recognizeInquiry(',[
 '  if(asksForStaff(latest.body)){',
 '    try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:HANDOFF_REPLY});}',
@@ -25,7 +25,7 @@ w=replace(w,'  const context:AiCheckoutContext=', '  const context:AiCheckoutCon
 w=replace(w,'  if(recognition.reply){',[
 '  const isNewImage=messages.some(m=>m.id===latest.id&&m.body.startsWith("[Khách gửi ảnh;"))||recognition.reading!==undefined;',
 '  const reading24=recognition.reading;',
-'  const exactCodes=reading24?.kind==="seat_map"?(reading24.seatSelectionCertain?reading24.selectedSeats||[]:[]):seatCodes(latest.body);',
+'  const exactCodes=reading24?.kind==="seat_map"?[]:seatCodes(latest.body);',
 '  if(isNewImage&&(!reading24||reading24.kind==="unreadable"||reading24.kind==="error"||reading24.kind==="other")){',
 '    await handoffToSale(job,"AI chưa đọc được nội dung khách gửi; Sale kiểm tra ảnh gốc.","Nội dung ảnh chưa xác định được.");return;',
 '  }',
@@ -33,13 +33,24 @@ w=replace(w,'  if(recognition.reply){',[
 '    const catalog=await listAiSalesShows().catch(()=>[]);',
 '    const mem=salesPreferences(messages,catalog,commentContext?.showId);',
 '    const choice=recognition.showId===null||mem.showSelectionUnresolved?undefined:catalog.find(s=>s.id===(recognition.showId||mem.showId||currentOrder?.showId||latestQuote?.showId));',
+'    if(isNewImage&&reading24?.kind==="seat_map"&&reading24.mapMarks){',
+'      const marks=reading24.mapMarks;',
+'      const candidates=catalog.filter(s=>s.venueId===marks.venue);',
+'      let verified:Awaited<ReturnType<typeof verifiedMarkedSeatDetails>>=null;',
+'      if(choice&&choice.venueId===marks.venue)verified=await verifiedMarkedSeatDetails(choice.id,marks).catch(()=>null);',
+'      if(!verified&&candidates.length<=12){',
+'        const matches=(await Promise.all(candidates.filter(s=>s.id!==choice?.id).map(s=>verifiedMarkedSeatDetails(s.id,marks).catch(()=>null)))).filter(v=>v!==null);',
+'        if(matches.length===1)verified=matches[0];',
+'      }',
+'      if(verified&&verified.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:"Em đã đối chiếu dấu bút xanh với sơ đồ chính thức.\\n"+formatExactSeats(verified)});return;}',
+'    }',
 '    if(exactCodes.length&&choice){',
 '      let details:Awaited<ReturnType<typeof exactSeatDetails>>|null=null;',
 '      try{details=await exactSeatDetails(choice.id,exactCodes);}catch{}',
 '      if(details&&details.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:formatExactSeats(details)});return;}',
 '      await handoffToSale(job,"Sale kiểm tra mã ghế trên ảnh hoặc tin nhắn.","Mã ghế chưa đối chiếu được với sơ đồ bán vé.");return;',
 '    }',
-'    if(isNewImage){await handoffToSale(job,"Sale kiểm tra vị trí khách đánh dấu trên sơ đồ.","Chưa xác định chắc chắn mã ghế hoặc show từ ảnh.");return;}',
+'    if(isNewImage){try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:"Mình gửi ảnh giữ đủ 4 mốc hồng, chấm bút xanh dương vào chính giữa ô ghế hoặc nhắn mã ghế giúp em nhé. Em chưa giữ ghế nào."});}finally{await handoffToSale(job,"Sale kiểm tra vị trí khách đánh dấu trên sơ đồ.","Chưa đối chiếu được mã sơ đồ hoặc dấu đánh ghế.");}return;}',
 '  }',
 '  if(recognition.reply){'
 ].join("\n"));
@@ -65,6 +76,16 @@ syntax(worker,w);
 const img="lib/ai-sales-inbound-image.ts";let i=read(img);
 i=replace(i,' multipleShows:z.boolean(),',' multipleShows:z.boolean(),\n selectedSeats:z.array(z.string().regex(/^[A-O][0-9]{2}$/)).max(20).optional(),\n seatSelectionCertain:z.boolean().optional(),');
 i=replace(i,'When no show text is legible return null. On receipts return null showText and false multipleShows.','When no show text is legible return null. On receipts return null showText and false multipleShows. For a seat map, selectedSeats contains ONLY complete seat codes that are explicitly circled, highlighted as selected, ticked or pointed at by the customer. Never copy all printed or available seats. Require clear row letter and number, pad number to two digits. If the mark, row or number is ambiguous, return empty selectedSeats and seatSelectionCertain false. For other images omit these fields. Never infer seat availability, prices or payment from an image.');
+i=replace(i,'import "server-only";','import "server-only";\nimport {readSeatMapMarks,type MapMarks} from "./seat-map-image";');
+i=replace(i,'type ImageReading=z.infer<typeof schema>;','type ImageReading=z.infer<typeof schema>&{mapMarks?:MapMarks};');
+i=replace(i,'  const sanitized=await sharp(bytes,',[
+'  try{',
+'   const {data,info}=await sharp(bytes,{limitInputPixels:18000000,animated:false}).rotate().resize({width:2000,height:2000,fit:"inside",withoutEnlargement:true}).flatten({background:"#ffffff"}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true});',
+'   const mapMarks=readSeatMapMarks(data,info.width,info.height);',
+'   if(mapMarks)return {kind:"seat_map",amount:null,reference:null,showText:null,multipleShows:false,mapMarks};',
+'  }catch{/* Fall back to existing image classification, never inferred seat codes. */}',
+'  const sanitized=await sharp(bytes,'
+].join("\n"));
 syntax(img,i);
 const inquiry="lib/messenger-recognize-inquiry.ts";let q=read(inquiry);
 q=replace(q,'  if(isImage)result.reading=reading;','  if(isImage)result.reading=reading;');
@@ -76,7 +97,7 @@ syntax(sm,m);
 const fb="lib/facebook-messenger.ts";let f=read(fb);
 f=replace(f,'(?:ccc|laocai)$/.test(imageUrl)','(?:ccc|laocai)(?:\\?show=[a-z0-9-]{3,100})?$/.test(imageUrl)');
 
-const uploadHelper="\ntype SeatMapUploadConfig={pageId:string;pageToken:string;apiVersion:string};\nfunction seatMapUploadTarget(imageUrl:string){\n const match=/^https:\\/\\/iextra\\.net\\/api\\/public\\/seat-map\\/(ccc|laocai)(?:\\?show=([a-z0-9-]{3,100}))?$/.exec(imageUrl);\n return match?{venue:match[1] as \"ccc\"|\"laocai\",showId:match[2]}:null;\n}\nfunction seatMapUploadForm(psid:string,png:Uint8Array){\n if(!/^[0-9]{5,80}$/.test(psid)||png.byteLength<24||png.byteLength>8*1024*1024||![137,80,78,71,13,10,26,10].every((v,i)=>png[i]===v))throw new MessengerSendError(false);\n const form=new FormData();\n form.set(\"recipient\",JSON.stringify({id:psid}));\n form.set(\"messaging_type\",\"RESPONSE\");\n form.set(\"message\",JSON.stringify({attachment:{type:\"image\",payload:{is_reusable:false}}}));\n form.set(\"filedata\",new Blob([new Uint8Array(png)],{type:\"image/png\"}),\"extra-seat-map.png\");\n return form;\n}\nasync function renderSeatMapForMessenger(imageUrl:string):Promise<Uint8Array>{\n const target=seatMapUploadTarget(imageUrl);if(!target)throw new MessengerSendError(false);\n const {venue,showId}=target;\n const [{renderSeatMapSvg},{getAiSeatSnapshot},{staffDb},{default:sharp}]=await Promise.all([import(\"./seat-map-image\"),import(\"./ai-sales-checkout\"),import(\"./staff-auth\"),import(\"sharp\")]);\n let svg:string;\n if(showId){\n  const snapshot=await getAiSeatSnapshot(showId);\n  if(snapshot.show.venueId!==venue)throw new MessengerSendError(false);\n  const taken=new Set([...snapshot.taken,...snapshot.seats.filter(s=>snapshot.show.prices[s.zone as \"A\"|\"B\"|\"C\"|\"D\"]===null).map(s=>s.id)]);\n  svg=renderSeatMapSvg(venue,{}, {seats:snapshot.seats,taken,title:snapshot.show.artist+\" · \"+snapshot.show.date,checkedAt:new Date().toLocaleString(\"vi-VN\",{timeZone:\"Asia/Ho_Chi_Minh\"})});\n }else{\n  const rows=await staffDb(\"venue_seat_rows?venue_id=eq.\"+venue+\"&select=row_code,seat_count&limit=1000\",{signal:AbortSignal.timeout(5000)}) as {row_code:string;seat_count:number}[];\n  if(!Array.isArray(rows))throw new MessengerSendError(false);\n  const counts:Record<string,number>={};\n  for(const row of rows){if(!/^[A-O]$/.test(row.row_code)||!Number.isSafeInteger(row.seat_count)||row.seat_count<2||row.seat_count>80)throw new MessengerSendError(false);counts[row.row_code]=row.seat_count;}\n  svg=renderSeatMapSvg(venue,counts);\n }\n return new Uint8Array(await sharp(Buffer.from(svg)).png().toBuffer());\n}\nasync function sendSeatMapFile(config:SeatMapUploadConfig,psid:string,imageUrl:string,render=renderSeatMapForMessenger,send=fetch):Promise<{messageId:string}>{\n if(!seatMapUploadTarget(imageUrl)||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);\n let form:FormData;\n try{form=seatMapUploadForm(psid,await render(imageUrl));}\n catch{console.warn(\"[seat-map-upload] render rejected\");throw new MessengerSendError(false);}\n let response:Response;\n try{response=await send(\"https://graph.facebook.com/\"+config.apiVersion+\"/\"+config.pageId+\"/messages\",{\n  method:\"POST\",headers:{Authorization:\"Bearer \"+config.pageToken},body:form,cache:\"no-store\",redirect:\"error\",signal:AbortSignal.timeout(15000)\n });}catch{console.warn(\"[seat-map-upload] delivery uncertain\");throw new MessengerSendError(true);}\n const data=await response.json().catch(()=>({})) as {message_id?:string;error?:{code?:number;error_subcode?:number}};\n if(!response.ok||typeof data.message_id!==\"string\"||data.message_id.length<4){\n  const known=!response.ok&&response.status>=400&&response.status<500&&response.status!==408;\n  console.warn(\"[seat-map-upload] rejected\",response.status,typeof data.error?.code===\"number\"?data.error.code:\"unknown\",typeof data.error?.error_subcode===\"number\"?data.error.error_subcode:\"unknown\");\n  throw new MessengerSendError(!known,response.status,data.error?.code);\n }\n console.info(\"[seat-map-upload] delivered\");\n return {messageId:data.message_id};\n}\n";
+const uploadHelper="\ntype SeatMapUploadConfig={pageId:string;pageToken:string;apiVersion:string};\nfunction seatMapUploadTarget(imageUrl:string){\n const match=/^https:\\/\\/iextra\\.net\\/api\\/public\\/seat-map\\/(ccc|laocai)(?:\\?show=([a-z0-9-]{3,100}))?$/.exec(imageUrl);\n return match?{venue:match[1] as \"ccc\"|\"laocai\",showId:match[2]}:null;\n}\nfunction seatMapUploadForm(psid:string,png:Uint8Array){\n if(!/^[0-9]{5,80}$/.test(psid)||png.byteLength<24||png.byteLength>8*1024*1024||![137,80,78,71,13,10,26,10].every((v,i)=>png[i]===v))throw new MessengerSendError(false);\n const form=new FormData();\n form.set(\"recipient\",JSON.stringify({id:psid}));\n form.set(\"messaging_type\",\"RESPONSE\");\n form.set(\"message\",JSON.stringify({attachment:{type:\"image\",payload:{is_reusable:false}}}));\n form.set(\"filedata\",new Blob([new Uint8Array(png)],{type:\"image/png\"}),\"extra-seat-map.png\");\n return form;\n}\nasync function renderSeatMapForMessenger(imageUrl:string):Promise<Uint8Array>{\n const target=seatMapUploadTarget(imageUrl);if(!target)throw new MessengerSendError(false);\n const {venue,showId}=target;\n const [{renderSeatMapSvg},{getAiSeatSnapshot},{staffDb},{default:sharp}]=await Promise.all([import(\"./seat-map-image\"),import(\"./ai-sales-checkout\"),import(\"./staff-auth\"),import(\"sharp\")]);\n let svg:string;\n if(showId){\n  const snapshot=await getAiSeatSnapshot(showId);\n  const {tierName}=await import(\"./poster-offers\");\n  if(snapshot.show.venueId!==venue)throw new MessengerSendError(false);\n  const taken=new Set([...snapshot.taken,...snapshot.seats.filter(s=>snapshot.show.prices[s.zone as \"A\"|\"B\"|\"C\"|\"D\"]===null).map(s=>s.id)]);\n  svg=renderSeatMapSvg(venue,{}, {seats:snapshot.seats,taken,title:snapshot.show.artist+\" · \"+snapshot.show.date,showId:snapshot.show.id,tierLabels:Object.fromEntries([\"A\",\"B\",\"C\",\"D\"].map(z=>[z,tierName(snapshot.show.id,z)])),checkedAt:new Date().toLocaleString(\"vi-VN\",{timeZone:\"Asia/Ho_Chi_Minh\"})});\n }else{\n  const rows=await staffDb(\"venue_seat_rows?venue_id=eq.\"+venue+\"&select=row_code,seat_count&limit=1000\",{signal:AbortSignal.timeout(5000)}) as {row_code:string;seat_count:number}[];\n  if(!Array.isArray(rows))throw new MessengerSendError(false);\n  const counts:Record<string,number>={};\n  for(const row of rows){if(!/^[A-O]$/.test(row.row_code)||!Number.isSafeInteger(row.seat_count)||row.seat_count<2||row.seat_count>80)throw new MessengerSendError(false);counts[row.row_code]=row.seat_count;}\n  svg=renderSeatMapSvg(venue,counts);\n }\n return new Uint8Array(await sharp(Buffer.from(svg)).png().toBuffer());\n}\nasync function sendSeatMapFile(config:SeatMapUploadConfig,psid:string,imageUrl:string,render=renderSeatMapForMessenger,send=fetch):Promise<{messageId:string}>{\n if(!seatMapUploadTarget(imageUrl)||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);\n let form:FormData;\n try{form=seatMapUploadForm(psid,await render(imageUrl));}\n catch{console.warn(\"[seat-map-upload] render rejected\");throw new MessengerSendError(false);}\n let response:Response;\n try{response=await send(\"https://graph.facebook.com/\"+config.apiVersion+\"/\"+config.pageId+\"/messages\",{\n  method:\"POST\",headers:{Authorization:\"Bearer \"+config.pageToken},body:form,cache:\"no-store\",redirect:\"error\",signal:AbortSignal.timeout(15000)\n });}catch{console.warn(\"[seat-map-upload] delivery uncertain\");throw new MessengerSendError(true);}\n const data=await response.json().catch(()=>({})) as {message_id?:string;error?:{code?:number;error_subcode?:number}};\n if(!response.ok||typeof data.message_id!==\"string\"||data.message_id.length<4){\n  const known=!response.ok&&response.status>=400&&response.status<500&&response.status!==408;\n  console.warn(\"[seat-map-upload] rejected\",response.status,typeof data.error?.code===\"number\"?data.error.code:\"unknown\",typeof data.error?.error_subcode===\"number\"?data.error.error_subcode:\"unknown\");\n  throw new MessengerSendError(!known,response.status,data.error?.code);\n }\n console.info(\"[seat-map-upload] delivered\");\n return {messageId:data.message_id};\n}\n";
 const imageStart=f.indexOf("export async function sendMessengerPageImage(");
 assert(imageStart>=0,"Image transport missing");
 const prefix=f.slice(0,imageStart),imageSource=f.slice(imageStart);
@@ -89,7 +110,7 @@ const notif="lib/ai-sales-notifications.ts";let n=read(notif);
 n=replace(n,'AI cần xử lý tiếp trường hợp này. Trạng thái thanh toán được giữ nguyên theo dữ liệu đối soát.','Nhân viên Sale/CSKH cần tiếp quản hội thoại. Mở liên kết nội bộ để xem đầy đủ nội dung. Trạng thái thanh toán không thay đổi.');
 syntax(notif,n);
 function load(p,mocks={}){const compiled=ts.transpileModule(read(p),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function("require","module","exports",compiled)(id=>Object.hasOwn(mocks,id)?mocks[id]:require(id),mod,mod.exports);return mod.exports;}
-const v=load("lib/venues.ts"),maps=load("lib/seat-map-image.ts",{"./venues":v}),policy=load("lib/ai-sales-24.ts",{"server-only":{},"./messenger-sale-memory":{customerRequestsHuman:s=>s==="Gặp nhân viên"},"./ai-sales-checkout":{},"./poster-offers":{}});
+const v=load("lib/venues.ts"),maps=load("lib/seat-map-image.ts",{"./venues":v}),policy=load("lib/ai-sales-24.ts",{"server-only":{},"./messenger-sale-memory":{customerRequestsHuman:s=>s==="Gặp nhân viên"},"./ai-sales-checkout":{},"./poster-offers":{},"./seat-map-image":maps});
 for(const msg of ["Cho anh gặp ban quản lý","Em muốn liên hệ với CSKH","Xin số hotline","Gặp nhân viên"])assert.equal(policy.asksForStaff(msg),true,msg);
 assert.equal(policy.asksForStaff("Không cần gặp ban quản lý"),false);
 assert.deepEqual(policy.seatCodes("Ghế C1, C02 và A15"),["C01","C02","A15"]);
@@ -97,7 +118,7 @@ assert.equal(policy.simpleSeatQuestion("C01 C02 còn trống không"),true);
 assert.equal(policy.simpleSeatQuestion("Chốt C01 C02"),false);
 assert.equal(policy.unableToAnswer("Em chưa đọc rõ nội dung ảnh"),true);
 assert.equal(policy.unableToAnswer("Ghế C01 đang trống"),false);
-for(const venue of ["ccc","laocai"]){const seats=v.seatsFor(venue),svg=maps.renderSeatMapSvg(venue,{}, {seats,taken:new Set([seats[0].id]),title:"<test>",checkedAt:"test"});for(const seat of seats)assert.ok(svg.includes(">"+seat.id+"</text>"),venue+" "+seat.id);assert.ok(svg.includes("#737984"));assert.ok(svg.includes("&lt;test&gt;"));}
+for(const venue of ["ccc","laocai"]){const seats=v.seatsFor(venue),svg=maps.renderSeatMapSvg(venue,{}, {seats,taken:new Set([seats[0].id]),title:"<test>",checkedAt:"test"});for(const seat of seats)assert.ok(svg.includes('data-seat="'+seat.id+'"'),venue+" "+seat.id);assert.ok(svg.includes("#737984"));assert.ok(svg.includes("&lt;test&gt;"));}
 console.log("[AI SALE 2.4] Handoff, exact seat codes, two real layout maps and safety checks passed.");
 
 
