@@ -208,6 +208,22 @@ async function handleDirector(res,path,f){
  }
  return invalid(404);
 }
+// Report only task counts and demo-receipt presence, never contact data or credentials.
+async function observeSampleRun(id){
+ let previous='';
+ for(let n=0;n<40;n++){
+  const snapshot=await listRuns(pool,id);
+  if(snapshot.selected?.input?.mode!=='sample')return;
+  const counts={queued:0,running:0,reported:0,accepted:0,blocked:0,failed:0};
+  for(const job of snapshot.jobs)if(Object.hasOwn(counts,job.status))counts[job.status]++;
+  const report=snapshot.jobs.find(job=>job.kind==='report'&&job.status==='accepted')?.result;
+  const state={...counts,total:snapshot.jobs.length,receipt:Boolean(report?.sample?.receipt)};
+  const line=JSON.stringify(state);
+  if(line!==previous){console.log('24H sample progress',id,line);previous=line;}
+  if(snapshot.jobs.length>0&&counts.queued+counts.running+counts.reported===0)return;
+  await new Promise(resolve=>setTimeout(resolve,15000).unref());
+ }
+}
 init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>initCrm(pool)).then(()=>initStaffWork(pool)).then(()=>initCrmFollowup(pool)).then(()=>initDirectorFinance(pool)).then(()=>{
  const stopWorker=startDirectorWorker(pool,makeExecutor(pool,makeConnectors(pool)),review,{
   onError:(kind,error)=>console.error('Director task error',kind,error.code||error.name),
@@ -222,7 +238,7 @@ init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>init
   startupSaleCheck().catch(()=>console.error('Sale connection check could not be recorded'));
   if(process.env.RAILWAY_ENVIRONMENT_NAME==='staging'&&process.env.RAILWAY_SERVICE_NAME==='admin-web'){
    queueDirector(pool,sampleReleaseRequestId,sampleBrief,definitions(sampleBrief))
-    .then(id=>console.log('24H sample run available',id))
+    .then(id=>{console.log('24H sample run available',id);return observeSampleRun(id)})
     .catch(error=>console.error('24H sample could not be scheduled',error.code||error.name));
   }
  });process.on('SIGTERM',()=>server.close(()=>stopWorker().finally(()=>pool.end()).finally(()=>process.exit(0))))}).catch(e=>{console.error('Database initialization failed',e.code||e.name);process.exit(1)});
