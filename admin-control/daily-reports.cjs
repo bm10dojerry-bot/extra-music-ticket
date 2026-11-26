@@ -64,7 +64,7 @@ const money=n=>n==null?'Chưa có':fmt(n)+' đ';
 const timeVN=t=>new Date(t).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'});
 const card=(label,value,esc)=>'<div class="tile">'+esc(label)+'<strong>'+esc(value)+'</strong></div>';
 function layout(title,day,body,esc){
- return '<main><nav><a href="/#reports">‹ EXTRA OS</a><a href="/reports/music?day='+esc(day)+'">Báo cáo +1 Music Show</a><a href="/reports/24h?day='+esc(day)+'">Báo cáo 24H</a><a href="/music">Lịch show, số ghế và giá</a></nav><section><h1>'+esc(title)+'</h1><form method="get"><label>Ngày báo cáo (giờ Việt Nam)<input type="date" name="day" value="'+esc(day)+'" min="2000-01-01" max="'+esc(todayVN())+'" required></label><button>Xem báo cáo</button></form></section>'+body+'</main>';
+ return '<main><section><h1>'+esc(title)+'</h1><form method="get"><label>Ngày báo cáo (giờ Việt Nam)<input type="date" name="day" value="'+esc(day)+'" min="2000-01-01" max="'+esc(todayVN())+'" required></label><button>Xem báo cáo</button></form></section>'+body+'</main>';
 }
 function renderMusicDaily(result,day,esc){
  if(result.status!=='available')return layout('Báo cáo +1 Music Show',day,'<section><h2>Chưa có dữ liệu tài chính</h2><p>'+esc(result.status==='not_configured'?'Chưa cấu hình token báo cáo chỉ đọc.':'API báo cáo chưa trả được dữ liệu.')+'</p><p>Không thay thế dữ liệu thiếu bằng số 0.</p><a href="/music">Xem lịch show, số ghế công khai</a></section>',esc);

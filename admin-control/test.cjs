@@ -91,16 +91,39 @@ test('24H daily reporting reads internal records only and excludes sample runs',
 });
 
 
-const {renderSidebar}=require('./workspace-sidebar.cjs');
+const {renderSidebar,renderPlatformTabs}=require('./workspace-sidebar.cjs');
 const {musicPlan,retailPlan,renderDailyDirector}=require('./daily-director.cjs');
-test('main menu shows both requested report labels and preserves navigation within reports',()=>{
- const html=renderSidebar();
- assert.match(html,/href="\/reports\/24h"/);assert.match(html,/>Báo cáo 24H</);
- assert.match(html,/href="\/reports\/music"/);assert.match(html,/>Báo cáo \+1 Music Show</);
- const selected=renderSidebar('/reports/music');
- assert.match(selected,/href="\/reports\/music" aria-current="page"/);
- assert.match(selected,/href="\/#overview"/);assert.match(selected,/href="\/#agents"/);
- assert.match(html,/>ONE CLICK MUSIC</);assert.match(html,/>ONE CLICK 24H</);
+test('sidebar groups reports and approvals and links dashboard sections correctly',()=>{
+ const paths=['/reports/24h','/reports/music','/proposals/24h','/proposals/music'];
+ for(const path of ['home',...paths]){
+  const sidebar=renderSidebar(path);
+  const menu=Array.from(sidebar.matchAll(/<a href="(\/[^"#]+)"[^>]*>.*?<span>([^<]+)<\/span>/g),m=>[m[1],m[2]]);
+  assert.deepEqual(menu,[['/reports/24h','Báo cáo'],['/proposals/24h','Phê duyệt đề xuất']]);
+  assert(!sidebar.includes('Tổng quan báo cáo'));
+  const current=Array.from(sidebar.matchAll(/href="([^"]+)" aria-current="location"/g),m=>m[1]);
+  assert.deepEqual(current,path==='home'?[]:[path.startsWith('/reports/')?'/reports/24h':'/proposals/24h']);
+  for(const anchor of ['overview','agents'])assert(sidebar.includes('href="'+(path==='home'?'':'/')+'#'+anchor+'"'));
+  assert.match(sidebar,/>ONE CLICK MUSIC</);assert.match(sidebar,/>ONE CLICK 24H</);
+ }
+});
+test('each workspace has exactly two platform tabs in order and keeps the relevant filters',()=>{
+ for(const [section,title] of [['/reports','Báo cáo'],['/proposals','Phê duyệt đề xuất']]){
+  for(const platform of ['24h','music']){
+   const path=section+'/'+platform;
+   const switcher=renderPlatformTabs(path,{day:'2026-11-27',period:'week',show:'test&show'});
+   const nav=switcher.match(/<nav[^>]*>.*?<\/nav>/)[0];
+   assert(nav.includes('aria-label="'+title+'"'));
+   assert.deepEqual(Array.from(nav.matchAll(/<a href="([^"]+)"( aria-current="page")?>([^<]+)<\/a>/g),
+    m=>[m[1],Boolean(m[2]),m[3]]),[
+    [section+'/24h?day=2026-11-27&amp;period=week',platform==='24h','24H'],
+    [section+'/music?day=2026-11-27&amp;period=week&amp;show=test%26show',platform==='music','Music'],
+   ]);
+   assert.equal(switcher.includes('href="/#reports"'),section==='/reports');
+  }
+ }
+ const overview=renderPlatformTabs('/reports');
+ assert(overview.includes('href="/reports/24h"')&&overview.includes('href="/reports/music"'));
+ assert(!overview.includes('aria-current'));
 });
 const planInventory={showsAvailable:true,inventoryAvailable:true,rows:[{id:'music-1',artist:'Nghệ sĩ mẫu',date:'2030-01-07',status:'announced',prices:{A:500000},inventory:{capacity:100,sold:20,remaining:75,held:1,blocked:2}}]};
 test('Daily Director turns the same Music report into grounded campaign drafts without live permissions',()=>{
@@ -154,11 +177,7 @@ test('Director uses historical shows and prepares the entire upcoming portfolio,
 
 
 const {proposalPlatform,proposalPlan,proposalUrl,proposalPeriodValue,renderProposalPage,buildCampaign}=require('./daily-director.cjs');
-test('Reports and proposals have separate menu routes, with One Click preserved',()=>{
- const html=renderSidebar('/proposals/music');
- for(const path of ['/reports/music','/reports/24h','/proposals/music','/proposals/24h'])assert(html.includes('href="'+path+'"'));
- assert.match(html,/>Đề xuất 24H</);assert.match(html,/>Đề xuất Music Show</);
- assert.match(html,/href="\/proposals\/music" aria-current="page"/);
+test('Music financial report keeps its financial summary separate from proposal actions',()=>{
  const report=renderMusicDaily({status:'available',data:parseMusicFinance(reportFixture)},'2030-01-02',escapeMusic);
  assert.doesNotMatch(report,/daily-director\/approve|Phương án AI Director/);
 });

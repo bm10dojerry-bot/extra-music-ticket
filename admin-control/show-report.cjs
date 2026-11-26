@@ -84,7 +84,7 @@ function renderShowPage({path,day,period,catalog,show,ended,report,snapshot,run,
     (catalog.ended.length?'<optgroup label="Doanh thu show đã kết thúc">'+options([...catalog.ended].reverse())+'</optgroup>':'');
   const periods='<label>Kỳ đề xuất<select name="period">'+[['day','Ngày'],['week','Tuần'],['month','Tháng']].map(([value,name])=>'<option value="'+value+'" '+(value===period?'selected':'')+'>'+name+'</option>').join('')+'</select></label>';
   const form=groups?'<form method="get" action="'+esc(path)+'"><div class="grid"><label>Chọn show<select name="show" required>'+(!show?'<option value="" selected disabled>Chọn show</option>':'')+groups+'</select></label><label>Ngày báo cáo<input type="date" name="day" required value="'+esc(day)+'"></label>'+periods+'</div><button>Xem</button></form>':'';
-  const nav='<section><h1>'+(path==='/reports/music'?'Báo cáo':'Đề xuất')+' Music theo show</h1>'+form+(!snapshot.showsAvailable?'<p>Chưa xác minh được lịch show hiện tại.</p>':'')+'</section>';
+  const nav='<section><h1>'+(path==='/reports/music'?'Báo cáo':'Đề xuất')+' Music theo show</h1>'+form+(path==='/reports/music'?'<p><a href="/music">Lịch show, số ghế và giá</a></p>':'')+(!snapshot.showsAvailable?'<p>Chưa xác minh được lịch show hiện tại.</p>':'')+'</section>';
   if(!show)return '<main>'+nav+'<p>'+(!catalog.active.length?'Chưa có show đang diễn hoặc sắp diễn để chọn.':'Chọn một show trong danh sách để xem báo cáo.')+'</p></main>';
   const decisionTitles=new Set(['Căn cứ và điều kiện dừng','Quyết định quảng cáo và bán vé','Việc của AI','Việc cần người hỗ trợ']);
   const renderSections=sections=>sections.map(s=>'<details><summary>'+esc(s.title)+'</summary>'+s.lines.map(line=>'<p>'+esc(line)+'</p>').join('')+'</details>').join('');
