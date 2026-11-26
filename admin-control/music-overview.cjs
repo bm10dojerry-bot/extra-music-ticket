@@ -14,7 +14,8 @@ function musicOverview(snapshot,finance,day,selectedId,esc) {
   const options=active.map(item=>'<option value="'+esc(item.id)+'"'+(item.id===show.id?' selected':'')+'>'+esc(item.artist+' · '+date(item))+'</option>').join('');
   const params=new URLSearchParams({show:show.id,day});
   const inv=show.inventory;
-  const seats=inv&&Number.isInteger(inv.remaining)?'Còn '+esc(inv.remaining)+'/'+esc(inv.capacity)+' ghế theo hệ thống'+(Number.isInteger(inv.held)?' · '+esc(inv.held)+' đang giữ':''):'Chưa có số ghế cập nhật';
+  const sellable=inv?.sellable??(inv?.held===0?inv.remaining:null);
+  const seats=Number.isInteger(sellable)?'Còn '+esc(sellable)+'/'+esc(inv.capacity)+' ghế bán được'+(Number.isInteger(inv.held)?' · '+esc(inv.held)+' đang giữ':''):'Chưa có số ghế cập nhật';
   const row=finance.data?.rows.find(item=>item.showId===show.id);
   const paid=row?' · '+esc(row.days[day]?.paidTickets??0)+' vé thanh toán hôm nay':'';
   return '<section id="music-overview"><h2>'+esc(show.artist)+'</h2><p>'+esc(date(show)+' · '+show.time+' · '+(venues[show.venue]??show.venue))+'</p><p>'+seats+paid+'</p>'+

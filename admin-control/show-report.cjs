@@ -27,6 +27,7 @@ function buildReport(show,day,finance,run,ended,context){
   const brief=[...moneyLines],sections=[],images=ended?[]:showMedia(show,run);
   if(ended)return {title:'Doanh thu '+label(show),brief,sections,images};
   if(row)brief.push('Trong ngày: '+(daily?.paidTickets??0)+' vé thanh toán, '+(daily?.complimentaryTickets??0)+' vé mời.');
+  const proposalStart=brief.length;
   const summary=run?.results?.DirectorFinal;
   const campaign=run?.status==='ready'?summary?.output?.campaigns?.find(c=>c.showId===show.id):null;
   if(campaign){
@@ -69,7 +70,7 @@ function buildReport(show,day,finance,run,ended,context){
   if(row)sections.push({title:'Đối soát vé',lines:['Số liệu theo đơn đã xác nhận thanh toán. Cập nhật lúc '+new Date(finance.data.checkedAt).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})+'.','Số đơn đã thanh toán trong ngày: '+(daily?.paidOrders??0)+'.','Vé thanh toán lũy kế tại kỳ cập nhật: '+row.total.paidTickets+'.','Chi phí đã khai báo: '+amount(row.recordedCostVnd)+'.']});
   sections.unshift(...economicSections(show,day,finance,run,context));
   if(images.length)sections.push({title:'Tư liệu được đề xuất',lines:images.map(a=>a.label)});
-  return {title:label(show),brief,sections,images};
+  return {title:label(show),brief,proposalStart,sections,images};
 }
 function reading(report,mode){
   const text=[report.title,...report.brief];
@@ -85,10 +86,11 @@ function renderShowPage({path,day,period,catalog,show,ended,report,snapshot,run,
   const form=groups?'<form method="get" action="'+esc(path)+'"><div class="grid"><label>Chọn show<select name="show" required>'+(!show?'<option value="" selected disabled>Chọn show</option>':'')+groups+'</select></label><label>Ngày báo cáo<input type="date" name="day" required value="'+esc(day)+'"></label>'+periods+'</div><button>Xem</button></form>':'';
   const nav='<section><h1>'+(path==='/reports/music'?'Báo cáo':'Đề xuất')+' Music theo show</h1>'+form+(!snapshot.showsAvailable?'<p>Chưa xác minh được lịch show hiện tại.</p>':'')+'</section>';
   if(!show)return '<main>'+nav+'<p>'+(!catalog.active.length?'Chưa có show đang diễn hoặc sắp diễn để chọn.':'Chọn một show trong danh sách để xem báo cáo.')+'</p></main>';
-  const sections=report.sections.map(s=>'<details><summary>'+esc(s.title)+'</summary>'+s.lines.map(line=>'<p>'+esc(line)+'</p>').join('')+'</details>').join('');
+  const decisionTitles=new Set(['Căn cứ và điều kiện dừng','Quyết định quảng cáo và bán vé','Việc của AI','Việc cần người hỗ trợ']);
+  const renderSections=sections=>sections.map(s=>'<details><summary>'+esc(s.title)+'</summary>'+s.lines.map(line=>'<p>'+esc(line)+'</p>').join('')+'</details>').join('');
   const media=report.images.length?'<section><h3>Poster và media</h3>'+report.images.map(a=>'<p><strong>'+esc(a.label)+'</strong> · <a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">Xem</a> · <a href="'+esc(a.downloadUrl)+'" download>Tải về</a></p>').join('')+'</section>':'';
   const other=ended?'':'<p><a href="'+esc(url(path==='/reports/music'?'/proposals/music':'/reports/music',show.id))+'">'+(path==='/reports/music'?'Đề xuất':'Báo cáo')+' của '+esc(show.artist)+'</a></p>';
   const progress=ended||!run?'':'<details><summary>Tiến độ Director của kỳ</summary><p>'+esc(({ready:'Đã tổng hợp',running:'Đang xử lý',queued:'Đang chờ',blocked:'Đang bị chặn'})[run.status]??run.status)+' · '+roles.filter(role=>run.results?.[role]?.responseId).length+'/11 báo cáo cho toàn kỳ.</p></details>';
-  return '<main>'+nav+'<section id="live-director"><h2>'+esc(report.title)+'</h2>'+player+report.brief.map(x=>'<p>'+esc(x)+'</p>').join('')+sections+media+progress+other+approvalPanel+'</section></main>';
+  return '<main>'+nav+'<section id="live-director"><h2>'+esc(report.title)+'</h2>'+player+report.brief.map((x,i)=>(i===report.proposalStart?'<h3>Phương án của Director</h3>':'')+'<p>'+esc(x)+'</p>').join('')+renderSections(report.sections.filter(s=>decisionTitles.has(s.title)))+approvalPanel+renderSections(report.sections.filter(s=>!decisionTitles.has(s.title)))+media+progress+other+'</section></main>';
 }
 module.exports={showCatalog,buildReport,reading,renderShowPage};

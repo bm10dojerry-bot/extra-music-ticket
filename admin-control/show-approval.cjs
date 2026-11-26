@@ -1,6 +1,6 @@
 'use strict';
 
-const {roleNames}=require('./live-director.cjs');
+const {roleNames,reportErrors}=require('./live-director.cjs');
 const {computeShowEconomics,adIncreaseBlockReason}=require('./show-economics.cjs');
 const {uuid}=require('./director-program.cjs');
 const {reportDay}=require('./daily-reports.cjs');
@@ -8,6 +8,7 @@ const {proposalPlatform}=require('./daily-director.cjs');
 
 const periods=new Set(['day','week','month']);
 const causes={
+  ...reportErrors,
   invalid_model_report:'Kết quả mô hình chưa qua kiểm tra.',
   invalid_campaign_fields:'Chỉ tiêu, phân công hoặc thời hạn cần được sửa.',
   invalid_review:'Director chưa đối chiếu đủ báo cáo của từng Agent.',
@@ -30,7 +31,7 @@ function proposalState(run,show,now=new Date(),sources={}){
   const results=run.results??{};
   const count=roleNames.filter(role=>results[role]?.responseId).length;
   const completed=count+'/11 Agent đã gửi báo cáo.';
-  if(run.status==='blocked')return {reason:'Director đang bị chặn. '+(causes[run.reason]??'Phiên phân tích chưa đạt kiểm tra.')+' '+completed};
+  if(run.status==='blocked')return {reason:'Director đang bị chặn. '+(causes[run.reason]??'Director cần rà lại dữ liệu và gửi lại phương án.')+' '+completed};
   if(run.status!=='ready'||count!==roleNames.length)return {reason:'Đang chờ Director tổng hợp và kiểm tra. '+completed};
   const final=results.DirectorFinal;
   if(!final?.responseId||final.analysisVersion!==1)return {reason:'Đang chờ Director phân tích lại sức bán và hiệu quả chi phí của show.'};

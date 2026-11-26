@@ -572,7 +572,10 @@ test('Live Director persists all 13 distinct provider response checkpoints and b
   const args=JSON.parse(JSON.parse(opts.body).input);
   const output=args.role==='DirectorBrief'?{summary:'Giao việc kiểm thử',assignments:live.roleNames.map(agent=>({agent,mission:'Phân tích nguồn kiểm thử',deadline,deliverable:'Báo cáo',metric:'Số liệu đúng'})),blockers:[]}:args.role==='DirectorFinal'?{title:'Phương án fixture',reportReview:live.roleNames.map(agent=>({agent,reportId:args.reportIds[agent],decisionImpact:'Đối chiếu trong bài kiểm thử'})),summary:'Tổng hợp fixture',decision:'Duyệt nội bộ',blockers:[],campaigns:[{showId:show.id,title:'Chiến dịch kiểm thử',rationale:'Đọc dữ liệu fixture',target:'Mục tiêu thử nghiệm',deadline,proposedBudgetVnd:0,expectedLow:1,expectedHigh:2,budgetBasis:'Giả định fixture',assetIds:['poster:'+show.id],actions:[{agent:'Creative',action:'Chọn poster',deadline,deliverable:'Ảnh nguồn',metric:'Đúng show'}],staff:[],stopRule:'Không chi',missing:['Chưa có video']}]}:{summary:'Kết quả fixture '+args.role,sourceIds:['finance:'+show.id],actions:[action],assetIds:args.role==='Creative'?['poster:'+show.id]:[],assumptions:[],blockers:[]};
   if(args.role==='DirectorFinal'){
-   output.campaigns[0].economicReview={adAction:'hold',paidChannelPlan:'Giữ chi khi thiếu nguồn quy đổi.',followUpPlan:'Rà hội thoại chưa chốt.',forecastBasis:'Theo số vé ghi nhận hôm nay.',gapResponse:'Đánh giá số ghế còn với tốc độ bán.',checkpoint:deadline};
+   const selected=output.campaigns[0];
+   assert(args.saleTimes[show.id]['75%']>args.saleTimes[show.id]['25%']);
+   selected.deadline='75%'; selected.actions[0].deadline='50%';
+   output.campaigns[0].economicReview={adAction:'hold',paidChannelPlan:'Giữ chi khi thiếu nguồn quy đổi.',followUpPlan:'Rà hội thoại chưa chốt.',forecastBasis:'Theo số vé ghi nhận hôm nay.',gapResponse:'Đánh giá số ghế còn với tốc độ bán.',checkpoint:'25%'};
    assert(live.roleNames.every(role=>args.completed[role]));
    const schema=JSON.parse(opts.body).text.format.schema.properties.reportReview;
    for(const role of live.roleNames)assert.deepEqual(schema.properties[role].properties.reportId.enum,[args.reportIds[role]]);

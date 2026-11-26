@@ -14,7 +14,7 @@ const {getMusicSnapshot,renderMusicSnapshot}=require('./music-readonly.cjs');
 const {renderSidebar}=require('./workspace-sidebar.cjs');
 const {musicOverview}=require('./music-overview.cjs');
 const {initDailyDirector,readApprovals,startApprovedWorker,proposalPlatform,proposalUrl,proposalPeriodValue}=require('./daily-director.cjs');
-const {initLiveDirector,readLiveRun,startLiveDirector,renderLiveDirector}=require('./live-director.cjs');
+const {initLiveDirector,readLiveRun,startLiveDirector,renderLiveDirector,roleNames}=require('./live-director.cjs');
 const {reportDay,getMusicFinance,readRetailDaily,renderMusicDaily,renderRetailDaily,verifyMusicFinance}=require('./daily-reports.cjs');
 const {initMedia}=require('./director-media.cjs');
 const {initCrm,messengerWebhook}=require('./director-crm.cjs');
@@ -166,9 +166,11 @@ async function verifyMusicReportPage(){
   dailyEconomics:markup.includes('Hiệu quả quảng cáo trong ngày'),showEconomics:markup.includes('Kinh tế lũy kế của show'),
   review:markup.includes('Sale 2.3'),mediaLinks:markup.includes('Tải về')};
  const listening=markup.indexOf('data-report-player'),approval=markup.indexOf('Phê duyệt đề xuất');
- checks.listenBeforeApproval=listening>=0&&approval>listening&&approval>markup.indexOf('Kinh tế lũy kế của show');
+ checks.listenBeforeApproval=listening>=0&&approval>listening&&approval<markup.indexOf('Kinh tế lũy kế của show');
  checks.approvalEnabled=markup.includes('action="/proposals/music/approve"');
  const run=await readLiveRun(pool,'music',reportDay(null));
+ checks.runStatus=run?.status??null;
+ checks.agentReports=Object.keys(run?.results??{}).filter(role=>roleNames.includes(role)&&run.results[role].responseId).length;
  const campaign=run?.results?.DirectorFinal?.output?.campaigns?.find(item=>item.showId===show.id);
  if(run?.status==='ready'&&campaign)checks.director={adAction:campaign.economicReview?.adAction,budgetVnd:campaign.proposedBudgetVnd,deadline:campaign.deadline};
 
@@ -302,7 +304,12 @@ async function observeSampleRun(id,once=false){
 }
 init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>initCrm(pool)).then(()=>initStaffWork(pool)).then(()=>initCrmFollowup(pool)).then(()=>initDirectorFinance(pool)).then(()=>initDailyDirector(pool)).then(()=>initLiveDirector(pool)).then(()=>initShowApprovals(pool)).then(()=>initAudio(pool)).then(()=>{
  const stopApproved=startApprovedWorker(pool,{onResult:result=>console.log('Approved daily Director task',JSON.stringify(result)),onError:error=>console.error('Approved daily task error',error.code||error.name)});
- const stopDaily=startLiveDirector(pool,{onResult:result=>console.log('Live Director cycle',JSON.stringify(result)),onError:error=>console.error('Live Director cycle unavailable',error.code||error.name)});
+ const stopDaily=startLiveDirector(pool,{onResult:result=>{
+  console.log('Live Director cycle',JSON.stringify(result));
+  if(result.platform==='music'&&result.stage==='DirectorFinal'&&result.status==='ready'&&process.env.RAILWAY_ENVIRONMENT_NAME==='staging'){
+   verifyMusicReportPage().catch(error=>console.error('Music admin release check failed',error.code||error.name));
+  }
+ },onError:error=>console.error('Live Director cycle unavailable',error.code||error.name)});
  const stopWorker=startDirectorWorker(pool,makeExecutor(pool,makeConnectors(pool)),review,{
   onError:(kind,error)=>console.error('Director task error',kind,error.code||error.name),
   onReport:({runId,mode,report})=>{
