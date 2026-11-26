@@ -498,3 +498,39 @@ test('CRM assigns only existing conversations, scopes staff updates and honors o
   assert.equal(await saveFollowup(pool,{...owner,revision:2}),false);
   assert.equal((await pool.query('select * from os_audit')).rowCount,2);
 });
+
+
+test('Daily Director approval gates queue, rejects stale version, deduplicates clicks and never unlocks external actions',usePg,async t=>{
+ const {initDailyDirector,savePlan,readPlan,approvePlan,executeNextApprovedTask,readApprovals}=require('./daily-director.cjs');
+ const pool=await database(t);await initDailyDirector(pool);
+ const day='2030-01-02',now=new Date('2030-01-02T03:00:00Z');
+ const p={title:'Test approved plan',summary:'Test',evidence:{},tasks:[
+  {id:'draft',agent:'Content',title:'Prepare draft',deliverable:'Internal material',state:'draft_ready'},
+  {id:'missing',agent:'Auditor',title:'Missing data',deliverable:'Verify data',state:'needs_input'},
+  {id:'ads',agent:'Ads',title:'Ads',deliverable:'Do not spend',state:'awaiting_approval'}
+ ]};
+ await savePlan(pool,'music',day,p);
+ const initial=await readPlan(pool,'music',day);
+ assert.equal(await executeNextApprovedTask(pool,now),null);
+ await savePlan(pool,'music',day,{...p,title:'Updated proposal'});
+ const current=await readPlan(pool,'music',day);
+ assert.equal((await approvePlan(pool,{platform:'music',day,revision:initial.revision,fingerprint:initial.fingerprint},now)).status,'stale');
+ const request={platform:'music',day,revision:current.revision,fingerprint:current.fingerprint};
+ const result=await Promise.all([approvePlan(pool,request,now),approvePlan(pool,request,now)]);
+ assert.deepEqual(result.map(r=>r.status).sort(),['already_approved','approved']);
+ let history=await readApprovals(pool,'music',day);
+ assert.equal(history.length,1);assert.equal(history[0].tasks.length,3);
+ assert(history[0].tasks.every(t=>t.status==='queued'));
+ const outcomes=[];for(let i=0;i<3;i++)outcomes.push(await executeNextApprovedTask(pool,now));
+ assert.deepEqual(outcomes.map(r=>r.status),['draft_prepared','blocked','blocked']);
+ assert(outcomes.every(r=>r.externalActions===0));
+ assert.equal(await executeNextApprovedTask(pool,now),null);
+ await savePlan(pool,'music',day,{...p,title:'New proposal requiring separate approval'});
+ history=await readApprovals(pool,'music',day);
+ assert.equal(history[0].plan.title,'Updated proposal');
+ assert.equal(history[0].tasks[0].result.content,'Internal material');
+ assert.equal(history[0].tasks[2].result.externalActions,0);
+ assert.equal((await readPlan(pool,'music',day)).revision,3);
+ assert.equal(await executeNextApprovedTask(pool,now),null);
+ assert.equal((await approvePlan(pool,request,new Date('2030-01-03T03:00:00Z'))).status,'invalid');
+});
