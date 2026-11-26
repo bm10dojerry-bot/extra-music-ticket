@@ -89,3 +89,39 @@ test('24H daily reporting reads internal records only and excludes sample runs',
  assert.match(renderRetailDaily(report,'2030-01-02',escapeMusic),/Chưa kết nối/);
  assert.deepEqual(report.records,[]);
 });
+
+
+const {renderSidebar}=require('./workspace-sidebar.cjs');
+const {musicPlan,retailPlan,renderDailyDirector}=require('./daily-director.cjs');
+test('main menu shows both requested report labels and preserves navigation within reports',()=>{
+ const html=renderSidebar();
+ assert.match(html,/href="\/reports\/24h"/);assert.match(html,/>Báo cáo 24H</);
+ assert.match(html,/href="\/reports\/music"/);assert.match(html,/>Báo cáo \+1 Music Show</);
+ const selected=renderSidebar('/reports/music');
+ assert.match(selected,/href="\/reports\/music" aria-current="page"/);
+ assert.match(selected,/href="\/#overview"/);assert.match(selected,/href="\/#agents"/);
+});
+const planInventory={showsAvailable:true,inventoryAvailable:true,rows:[{id:'music-1',artist:'Nghệ sĩ mẫu',date:'2030-01-07',status:'announced',prices:{A:500000},inventory:{capacity:100,sold:20,remaining:75,held:1,blocked:2}}]};
+test('Daily Director turns the same Music report into grounded campaign drafts without live permissions',()=>{
+ const plan=musicPlan('2030-01-02',{status:'available',data:parseMusicFinance(reportFixture)},planInventory);
+ assert.equal(plan.evidence.daily.revenueVnd,1500000);
+ assert(plan.tasks.some(t=>t.agent==='Content'&&t.state==='draft_ready'&&t.deliverable.includes('Nghệ sĩ mẫu')));
+ assert(plan.tasks.some(t=>t.agent==='Sale'&&t.state==='draft_ready'));
+ assert(plan.tasks.some(t=>t.agent==='Ads'&&t.state==='awaiting_approval'&&t.deliverable.includes('0 đ')));
+ const body=renderDailyDirector({plan,revision:1,updated_at:'2030-01-02T00:00:00Z'},'2030-01-02',escapeMusic);
+ assert.match(body,/AI Director/);assert.match(body,/Bản nháp nội bộ/);assert.match(body,/không đồng nghĩa/);
+ const missing=musicPlan('2030-01-02',{status:'unavailable',data:null},planInventory);
+ assert(missing.tasks.every(t=>t.state==='needs_input'));
+ assert.equal(missing.evidence.finance,'missing');
+ const past=musicPlan('2030-02-01',{status:'available',data:parseMusicFinance(reportFixture)},planInventory);
+ assert(!past.tasks.some(t=>t.agent==='Ads'));
+});
+test('Daily Director 24H gates product strategy on actual FnB data and never substitutes sample numbers',()=>{
+ const plan=retailPlan({created:0,accepted:0,blocked:0,failed:0,crm:null,records:[]});
+ assert(plan.tasks.some(t=>t.id==='sapo'&&t.state==='needs_input'));
+ assert(plan.tasks.some(t=>t.agent==='Planner'&&t.state==='needs_input'));
+ assert(plan.tasks.some(t=>t.agent==='Ads'&&t.state==='awaiting_approval'));
+ assert(plan.tasks.some(t=>t.agent==='Content'&&t.state==='draft_ready'));
+ assert(!plan.tasks.some(t=>t.state==='completed'));
+ assert.match(renderDailyDirector(null,'2030-01-01',escapeMusic),/Chưa có bản phân tích/);
+});
