@@ -10,7 +10,7 @@ npm run build
 DIRECTOR_TEST_DATABASE_URL=postgresql://... npm test
 ```
 
-Dùng cơ sở dữ liệu riêng để chạy kiểm thử tích hợp. Các bài này tạo và dọn schema kiểm thử, sử dụng fixture cho dịch vụ bên ngoài. Hàng đợi, kiểm thử và các báo cáo diễn tập không kích hoạt thanh toán hay tạo chiến dịch quảng cáo.
+Dùng cơ sở dữ liệu riêng để chạy kiểm thử tích hợp. Trên Railway staging/admin-web, lệnh `npm run test:staging-integration` được dùng làm bước tiền triển khai. Lệnh từ chối chạy ngoài đúng môi trường staging, sử dụng schema `test_...` riêng và dọn schema đó sau mỗi bài kiểm thử. Không trỏ `DIRECTOR_TEST_DATABASE_URL` vào cơ sở dữ liệu Music Production. Các bài này tạo và dọn schema kiểm thử, sử dụng fixture cho dịch vụ bên ngoài. Hàng đợi, kiểm thử và các báo cáo diễn tập không kích hoạt thanh toán hay tạo chiến dịch quảng cáo.
 
 ## Biến môi trường
 
@@ -34,7 +34,7 @@ Khi cấp quyền còn thiếu, mở nhiệm vụ bị chặn và chọn **Yêu 
 
 Trong **ONE CLICK 24H**, bấm **Chạy dữ liệu mẫu** để kiểm tra hàng đợi của 11 Agent, đọc danh mục mẫu ở Render, chạy bộ quy tắc mẫu của Sale V 2.3 và lấy mã biên nhận `DEMO-`. Lượt này dùng nội dung và số liệu thử nghiệm. Chi tiêu và lãi/lỗ mô phỏng nằm trong báo cáo mẫu riêng. Bạn có thể mở bảng **AI Director** hoặc tải báo cáo JSON sau khi lượt chạy kết thúc.
 
-Railway `staging/admin-web` tự tạo một lượt kiểm thử mẫu khi triển khai phiên bản này, dựa trên mã yêu cầu cố định để tránh tạo trùng khi khởi động lại.
+Railway `staging/admin-web` tự tạo hoặc tiếp tục một lượt kiểm thử mẫu khi triển khai phiên bản này, dựa trên mã yêu cầu cố định để tránh tạo trùng khi khởi động lại. Nhật ký `24H sample progress` chỉ ghi số lượng nhiệm vụ theo trạng thái và cờ có biên nhận mẫu; không ghi dữ liệu liên hệ.
 
 Trong **Show và công việc**, người quản trị chọn người phụ trách trên nhiệm vụ có sẵn. Trang **Quản lý truy cập nhân sự** cấp mã dùng một lần cho cổng `/staff`. Nhân sự xem việc được giao, bắt đầu và gửi báo cáo. Admin có thể duyệt hoặc chuyển về **Đang làm** để yêu cầu cập nhật. Cổng này dùng cơ sở dữ liệu EXTRA OS staging.
 
