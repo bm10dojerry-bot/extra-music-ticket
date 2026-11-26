@@ -551,3 +551,34 @@ test('Daily, weekly and monthly proposal approvals are isolated in PostgreSQL',u
  const result=await executeNextApprovedTask(pool,now);assert.equal(result.platform,'music_week');assert.equal(result.externalActions,0);
  assert.equal(await executeNextApprovedTask(pool,now),null);
 });
+
+
+test('Live Director persists all 13 distinct provider response checkpoints and blocks without credentials',usePg,async t=>{
+ const live=require('./live-director.cjs');
+ const pool=await database(t);await live.initLiveDirector(pool);
+ const now=new Date('2030-01-02T05:00:00Z'),day='2030-01-02',deadline=day+'T22:00:00+07:00';
+ const asset='https://fokntdvgzfldxbaglrdc.supabase.co/storage/v1/object/public/extra-media/test-poster.png';
+ const show={id:'fixture-show',artist:'Nghệ sĩ kiểm thử',date:'2030-01-03',time:'19:30',venue:'ccc',status:'announced',prices:{A:500000,B:null,C:null,D:null},posterUrl:asset,inventory:{capacity:100,sold:20,remaining:75,held:1,blocked:4}};
+ const sources={now,music:async()=>({status:'available',data:{checkedAt:now.toISOString(),rows:[{showId:show.id,artist:show.artist,date:show.date,total:{paidOrders:1,paidTickets:2,revenueVnd:1000000,complimentaryTickets:0},recordedCostVnd:null,costUpdatedAt:null,days:{[day]:{paidOrders:1,paidTickets:2,revenueVnd:1000000,complimentaryTickets:0}}}]}}),inventory:async()=>({showsAvailable:true,inventoryAvailable:true,checkedAt:now.toISOString(),rows:[show]}),media:async()=>({available:true,assets:[]}),retail:async()=>({records:[],crm:null})};
+ await live.seedLiveRuns(pool,{...sources,env:{}});
+ assert.equal((await live.readLiveRun(pool,'music',day)).reason,'missing_model_key');
+ assert.equal(await live.runNext(pool,{env:{},now}),null);
+ const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture-only',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13'};
+ await live.seedLiveRuns(pool,{...sources,env});
+ const action={showId:show.id,action:'Đối chiếu nguồn',deadline,deliverable:'Báo cáo kiểm thử',metric:'Có căn cứ'};
+ let calls=0;
+ const request=async(url,opts)=>{
+  assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(opts.method,'POST');
+  const args=JSON.parse(JSON.parse(opts.body).input);
+  const output=args.role==='DirectorBrief'?{summary:'Giao việc kiểm thử',assignments:live.roleNames.map(agent=>({agent,mission:'Phân tích nguồn kiểm thử',deadline,deliverable:'Báo cáo',metric:'Số liệu đúng'})),blockers:[]}:args.role==='DirectorFinal'?{title:'Phương án fixture',summary:'Tổng hợp fixture',decision:'Duyệt nội bộ',blockers:[],campaigns:[{showId:show.id,title:'Chiến dịch kiểm thử',rationale:'Đọc dữ liệu fixture',target:'Mục tiêu thử nghiệm',deadline,proposedBudgetVnd:0,expectedLow:1,expectedHigh:2,budgetBasis:'Giả định fixture',assetIds:['poster:'+show.id],actions:[{agent:'Creative',action:'Chọn poster',deadline,deliverable:'Ảnh nguồn',metric:'Đúng show'}],staff:[],stopRule:'Không chi',missing:['Chưa có video']}]}:{summary:'Kết quả fixture '+args.role,actions:[action],assetIds:args.role==='Creative'?['poster:'+show.id]:[],assumptions:[],blockers:[]};
+  if(args.role==='DirectorFinal')assert(live.roleNames.every(role=>args.completed[role]));
+  return Response.json({id:'resp_fixture_'+(++calls),status:'completed',model:'fixture',output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]});
+ };
+ for(let n=0;n<13;n++){const result=await live.runNext(pool,{env,request,now});assert(result);assert.equal(result.externalActions,0);}
+ assert.equal(calls,13);
+ const run=await live.readLiveRun(pool,'music',day);
+ assert.equal(run.status,'ready');assert.equal(Object.keys(run.results).length,13);
+ assert.equal(new Set(Object.values(run.results).map(r=>r.responseId)).size,13);
+ assert.equal(await live.runNext(pool,{env,request,now}),null);
+ const other=await live.readLiveRun(pool,'24h',day);assert.equal(other.step_index,0);
+});
