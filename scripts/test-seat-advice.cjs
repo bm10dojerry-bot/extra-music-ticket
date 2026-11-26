@@ -29,15 +29,22 @@ function prepare(a,body,prior=[]){
   const messages=['Cho mình hỏi show Nghệ sĩ',...prior,body].map(body=>({sender:'customer',body}));
   return a.prepareSeatAdvice('chat','job',body,messages,null);
 }
-test('confirmed sends remembered per chat and venue, explicit re-request allowed, failed attempt eligible',async()=>{
-  for(const state of ['sent','sending','uncertain']){
-    const r=await prepare(advisor(state),'Cho mình xem sơ đồ CCC');
-    assert.equal(r.sendImage,false); assert.match(r.text,/chính diện/);assert.match(r.text,/250.000đ\/vé/);
+test('each new explicit image request is honored even with a historical send or unavailable history',async()=>{
+  for(const state of ['sent','sending','uncertain',null]){
+    for(const request of ['Cho mình xem sơ đồ CCC','cho anh xem sơ đồ nghế','có cái ảnh sơ đồ thực tế không','Gửi lại ảnh sơ đồ CCC']){
+      const r=await prepare(advisor(state),request);
+      assert.equal(r.sendImage,true,request);
+      assert.equal(r.selected.venue,'ccc');
+      assert.equal(r.selected.show.id,'sample');
+      assert.equal(r.text,undefined,'image-only request must not substitute advice');
+    }
   }
-  assert.equal((await prepare(advisor(null),'Cho mình xem sơ đồ CCC')).sendImage,true);
-  assert.equal((await prepare(advisor('sent'),'Gửi lại ảnh sơ đồ CCC')).sendImage,true);
   assert.equal((await prepare(advisor('sent'),'Gửi lại ảnh nhé',['Cho xem sơ đồ CCC'])).sendImage,true);
-  assert.equal((await prepare(advisor(null,true),'Cho mình xem sơ đồ CCC')).sendImage,false);
+  assert.equal((await prepare(advisor(null,true),'Cho mình xem sơ đồ CCC')).sendImage,true);
+  const advice=await prepare(advisor('sent'),'Góc nhìn nào chính diện?');
+  assert.equal(advice.sendImage,false);
+  assert.match(advice.text,/chính diện/);
+  assert.equal((await prepare(advisor('sent'),'Đừng gửi lại sơ đồ, tư vấn cho chị ghế rẻ hơn')).sendImage,false);
 });
 test('an explicit first image and a question can share one reply',async()=>{
   const r=await prepare(advisor(null),'Gửi sơ đồ CCC và tư vấn ghế gần ca sĩ');
