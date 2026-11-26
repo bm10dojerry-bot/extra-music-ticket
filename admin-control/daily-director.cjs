@@ -7,7 +7,60 @@ const money=v=>n(v)+' đ';
 const validCount=v=>Number.isSafeInteger(v)&&v>=0;
 const hoursToDay=(a,b)=>(Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/86400000;
 const task=(id,agent,title,deliverable,state='draft_ready')=>({id,agent,title,deliverable,state});
-function musicPlan(day,finance,inventory){
+const shiftDay=(day,delta)=>new Date(Date.parse(day+'T00:00:00Z')+delta*86400000).toISOString().slice(0,10);
+const timeOf=(day,time='22:00')=>day+'T'+time+':00+07:00';
+function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00'))){
+ const i=show.inventory,daysToShow=hoursToDay(show.date,day);
+ if(show.status!=='announced'||!financeRow||!i||!validCount(i.capacity)||!validCount(i.remaining)||!validCount(i.held)||i.remaining<=i.held||daysToShow<0)return null;
+ const available=Math.max(0,i.remaining-i.held);
+ const last7=Array.from({length:7},(_,k)=>financeRow.days?.[shiftDay(day,-k-1)]?.paidTickets??0).reduce((a,b)=>a+b,0);
+ const rate=last7/7;
+ // Explicit trial-policy targets, not a statistical sales prediction.
+ // Urgent shows: propose 10/day or 1.5x recent pace, limited to 20/day.
+ // Other shows: propose 5/day or 1.5x recent pace, limited to 20/day.
+ const dailyGoal=Math.min(20,Math.max(daysToShow<=3?10:5,Math.ceil(rate*1.5)));
+ const slots=[];
+ for(let k=0;k<=1;k++){
+  const date=shiftDay(day,k);if(date>show.date)break;
+  let deadline=timeOf(date);
+  if(date===show.date){
+   if(!/^\d{2}:\d{2}$/.test(show.time??''))break;
+   const showTime=Date.parse(timeOf(date,show.time));if(!Number.isFinite(showTime))break;
+   const cutoff=showTime-2*3600000;
+   const local=new Date(cutoff+7*3600000).toISOString();
+   if(local.slice(0,10)!==date)break;
+   deadline=timeOf(date,local.slice(11,16));
+  }
+  if(Date.parse(deadline)<=now.getTime())continue;
+  const remainingGoal=available-slots.reduce((total,s)=>total+s.targetNewPaidTickets,0);
+  if(remainingGoal<=0)break;
+  slots.push({day:date,deadline,targetNewPaidTickets:Math.min(remainingGoal,dailyGoal)});
+  // Do not assume seats remain for an additional slot on the show date.
+  if(date===show.date)break;
+ }
+ if(!slots.length)return null;
+ const goal=slots.reduce((total,s)=>total+s.targetNewPaidTickets,0),deadline=slots.at(-1).deadline;
+ const started=now.getTime();
+ const firstDeadline=Date.parse(slots[0].deadline);
+ // Use fixed milestone times for saved proposals to avoid pointless versions on each refresh.
+ const firstDay=slots[0].day;
+ const prepDeadline=timeOf(firstDay,'16:00');
+ const initialDeadline=Date.parse(prepDeadline)>started&&Date.parse(prepDeadline)<=firstDeadline?prepDeadline:slots[0].deadline;
+ const baseline=financeRow.total?.paidTickets??null;
+ const paceScenario=Math.min(available,Math.floor(rate*slots.length+0.5));
+ return {showId:show.id,artist:show.artist,showDate:show.date,baselinePaidTickets:baseline,last7PaidTickets:last7,
+  ratePerDay:Math.round(rate*100)/100,availableForPlanning:available,scenarioNewPaidTickets:paceScenario,
+  targetNewPaidTickets:goal,targetTotalPaidTickets:baseline===null?null:baseline+goal,deadline,slots,
+  budgetNewVnd:0,forecastBasis:'Kịch bản tham chiếu = nhịp bán 7 ngày hoàn tất × số ngày kế hoạch; ngày đầu có thể không đủ 24 giờ. Không phải dự báo xác suất.',
+  targetBasis:'Chỉ tiêu thử nghiệm: '+(daysToShow<=3?'tối thiểu 10':'tối thiểu 5')+' vé mới/ngày hoặc 1,5 lần nhịp bán 7 ngày, tối đa 20 vé/ngày và không vượt số ghế còn sau khi trừ ghế giữ theo API. Cần kiểm lại ghế khi thực hiện.',
+  steps:[
+   {agent:'Sale / CRM',deadline:initialDeadline,action:'Rà khách đã chủ động hỏi vé và đơn đang chờ; lập danh sách ưu tiên, xác minh chỗ trống và giá. Đội bán vé thực hiện tư vấn trên hệ thống hiện hành nếu được phép; EXTRA OS không gửi tin hoặc giữ ghế.',metric:'Danh sách nhu cầu đủ căn cứ; báo cáo số hội thoại, số vé đã thanh toán và vướng mắc.'},
+   {agent:'Content / Creative',deadline:initialDeadline,action:'Chuẩn bị 2 bản nội dung: nhắc lịch diễn và hướng dẫn chọn khu ghế; dùng poster đã được xác minh. Chưa đăng bài.',metric:'2 nội dung và brief hình ảnh để duyệt, đúng ngày, giá và nguồn ghế.'},
+   {agent:'Ads / Auditor',deadline:initialDeadline,action:'Đối chiếu chi tiêu và hội thoại theo chiến dịch; chỉ đề xuất điều chỉnh khi có số liệu, giới hạn và quyền riêng. Không tăng chi hoặc chạy quảng cáo.',metric:'Báo cáo dữ liệu thiếu, chi phí trên vé nếu có phân bổ; ngân sách mới 0 đ.'},
+   {agent:'Analyst / Director',deadline,action:'Đối chiếu số vé thanh toán tăng thêm so với mốc đầu, kiểm tra từng deadline; nếu hụt mục tiêu, nêu nguyên nhân có bằng chứng và trình phương án mới để chủ duyệt.',metric:'So sánh kết quả thật với '+n(goal)+' vé mới, và từng mốc trong kế hoạch.'}
+  ]};
+}
+function musicPlan(day,finance,inventory,now=new Date(timeOf(day,'00:00'))){
  const source=finance?.status==='available'&&finance.data;
  const current=inventory?.showsAvailable===true&&inventory?.inventoryAvailable===true;
  if(!source||!current){
@@ -37,6 +90,9 @@ function musicPlan(day,finance,inventory){
  });
  const candidates=upcoming.filter(r=>hoursToDay(r.date,day)<=7&&r.status==='announced'&&r.inventory&&r.inventory.capacity>0&&r.inventory.remaining>0&&validCount(r.inventory.sold)&&r.inventory.sold<=r.inventory.capacity).slice(0,2);
  const facts={daily:report.daily,previousDay,previous:previous.daily,historicalShows:past,upcomingShows:portfolio,shows:candidates.map(s=>({id:s.id,artist:s.artist,date:s.date,inventory:s.inventory,daySales:byId.get(s.id)?.daily??null,previousSales:previousById.get(s.id)?.daily??null})),adAttribution:null};
+ const financeById=new Map(finance.data.rows.map(row=>[row.showId,row]));
+ const campaigns=upcoming.map(show=>buildCampaign(day,show,financeById.get(show.id),now)).filter(Boolean);
+ facts.campaigns=campaigns;
  const base=[task('daily-analysis','Analyst','Đọc và so sánh kết quả báo cáo ngày','Theo ngày thanh toán: '+n(report.daily.paidOrders)+' đơn trả tiền, '+n(report.daily.paidTickets)+' vé trả tiền, '+money(report.daily.revenueVnd)+'. Ngày trước ('+previousDay+'): '+n(previous.daily.paidTickets)+' vé, '+money(previous.daily.revenueVnd)+'. Chênh lệch đến thời điểm đọc: '+signed(report.daily.paidTickets-previous.daily.paidTickets)+' vé, '+signed(report.daily.revenueVnd-previous.daily.revenueVnd)+' đ; ngày hiện tại có thể chưa kết thúc. Chưa coi doanh thu xác nhận là tiền đã đối soát ngân hàng, không quy kết cho chiến dịch quảng cáo khi chưa có dữ liệu phân bổ.')];
  const retrospective=past.length?'Có '+n(past.length)+' show đã qua ngày diễn trong nguồn tài chính. So sánh vé trả tiền, doanh thu xác nhận, vé mời và chi phí khai báo từng show; cần kiểm tra trạng thái kết thúc, hoàn trả, chi phí thực và dữ liệu quảng cáo trước khi kết luận hiệu quả. Rút bài học về tốc độ bán, cơ cấu khách và truyền thông chỉ khi có chứng cứ.':'Chưa có show đã qua ngày diễn trong nguồn tài chính. Không tạo kết quả lịch sử giả; thu thập báo cáo show cũ và chứng từ để học.';
  const tasks=[...base,task('historical-review','Analyst','Tổng kết show đã qua và bài học cho show mới',retrospective,past.length?'draft_ready':'needs_input'),task('portfolio-plan','Planner','Phương án toàn bộ show chưa diễn','Đã lập danh sách '+n(portfolio.length)+' show theo ngày diễn và mức ưu tiên. Áp dụng bài học đã xác minh của show cũ; rà đối tượng khách, nội dung, giá, sức chứa và KPI từng show. Danh sách riêng bên dưới. Chờ chủ duyệt; không tự mở bán hoặc tăng ngân sách.',portfolio.length?'draft_ready':'needs_input')];
@@ -56,6 +112,16 @@ function musicPlan(day,finance,inventory){
    task(id+':ads','Ads','Phương án quảng cáo '+s.artist,'Đề xuất kiểm tra chi phí mỗi vé và chất lượng hội thoại; so sánh quảng cáo nhắc lịch với nội dung tư vấn ghế. Chưa có số liệu chi tiêu hay hạn mức được duyệt; ngân sách mới 0 đ. Không tạo hay sửa quảng cáo.','awaiting_approval'),
    task(id+':social','Social','Chuẩn bị lịch đăng '+s.artist,'Dùng bản nháp Content sau khi duyệt poster, giá và ngày; lên lịch dự kiến theo giờ Việt Nam. Chưa đăng lên Facebook hoặc TikTok.','awaiting_approval')
   );
+ }
+ for(const campaign of campaigns){
+  const deadline=campaign.deadline;
+  const attached=tasks.find(t=>t.id===campaign.showId+':planner');
+  const goal='Mục tiêu đề xuất: thêm '+n(campaign.targetNewPaidTickets)+' vé trả tiền trước '+deadline.replace('T',' ').slice(0,16)+' (giờ VN); kịch bản theo nhịp 7 ngày: '+n(campaign.scenarioNewPaidTickets)+' vé mới. Chưa cam kết đạt. '+campaign.slots.map(s=>s.deadline.replace('T',' ').slice(0,16)+': '+n(s.targetNewPaidTickets)+' vé mới').join('; ')+'.';
+  if(attached){attached.deliverable+=' '+goal;attached.deadline=deadline;}
+  else tasks.push({...task(campaign.showId+':target','Planner','Chỉ tiêu và deadline '+campaign.artist,goal+' Chuẩn bị và đo kết quả theo số liệu thật; chưa triển khai bên ngoài.'),deadline});
+  for(const t of tasks.filter(t=>t.id.startsWith(campaign.showId+':')&&t!==attached&&!t.deadline)){
+   t.deadline=campaign.steps[0].deadline;
+  }
  }
  tasks.push(task('audit','Auditor','Kiểm tra quyền và nghiệm thu','Tất cả đầu ra là bản nháp nội bộ, nguồn Music chỉ đọc. Chưa có quyền đăng bài, tạo đơn, sửa dữ liệu hay chi tiền; không xác nhận thực thi bên ngoài.'));
  return {title:'Phương án kinh doanh Music theo vòng đời show',summary:'Tổng kết show đã qua, chuẩn bị toàn bộ show chưa diễn và lập bản nháp chiến dịch chi tiết cho tối đa hai show đủ điều kiện gần ngày diễn nhất. Đo hiệu quả bằng báo cáo tiếp theo; chưa có dữ liệu phân bổ theo quảng cáo nên không kết luận hiệu quả từng chiến dịch. Cần đối chiếu số ghế và ngân sách trước khi chạy thật.',evidence:facts,tasks};
@@ -102,7 +168,7 @@ async function approvePlan(pool,{platform,day,revision,fingerprint},now=new Date
   const inserted=await client.query("insert into os_daily_approvals(platform,day,revision,fingerprint,plan) values($1,$2::date,$3,$4,$5::jsonb) on conflict(platform,day,revision) do nothing returning revision",[platform,day,revision,fingerprint,JSON.stringify(proposal.plan)]);
   if(inserted.rowCount===0){await client.query('commit');return {status:'already_approved'};}
   const tasks=proposal.plan.tasks;
-  if(!Array.isArray(tasks)||!tasks.length||tasks.length>40||new Set(tasks.map(t=>t.id)).size!==tasks.length)throw Error('invalid tasks');
+  if(!Array.isArray(tasks)||!tasks.length||tasks.length>650||new Set(tasks.map(t=>t.id)).size!==tasks.length)throw Error('invalid tasks');
   for(let index=0;index<tasks.length;index++){
    const t=tasks[index];
    if(typeof t.id!=='string'||!t.id||!['draft_ready','needs_input','awaiting_approval'].includes(t.state)||typeof t.deliverable!=='string')throw Error('invalid task');
@@ -114,6 +180,7 @@ async function approvePlan(pool,{platform,day,revision,fingerprint},now=new Date
 }
 function executeApprovedTask(task,day,now=new Date()){
  if(day!==reportDay(null,now))return {status:'blocked',result:{reason:'Đã qua ngày hiệu lực; cần phương án mới.',externalActions:0}};
+ if(task.deadline&&(!Number.isFinite(Date.parse(task.deadline))||Date.parse(task.deadline)<=now.getTime()))return {status:'blocked',result:{reason:'Đã quá deadline nhiệm vụ; cần trình phương án mới.',externalActions:0}};
  if(task.state==='needs_input')return {status:'blocked',result:{reason:'Thiếu dữ liệu hoặc cần người phụ trách xác minh.',handoff:task.deliverable,externalActions:0}};
  if(task.state==='awaiting_approval')return {status:'blocked',result:{reason:'Quyền thực thi ngoài EXTRA OS chưa được cấp; không chi ngân sách hoặc đăng bài.',handoff:task.deliverable,externalActions:0}};
  if(task.state!=='draft_ready')return {status:'blocked',result:{reason:'Trạng thái đầu việc không hợp lệ.',externalActions:0}};
@@ -151,7 +218,7 @@ async function runDailyDirector(pool,{now=new Date(),music=getMusicFinance,inven
  const day=reportDay(null,now);
  const [f,i,r]=await Promise.allSettled([music(),inventory(),retail(day)]);
  const musicResult=f.status==='fulfilled'?f.value:null,inventoryResult=i.status==='fulfilled'?i.value:null,retailResult=r.status==='fulfilled'?r.value:null;
- const plans=[['music',musicPlan(day,musicResult,inventoryResult)],['24h',retailPlan(retailResult)]];
+ const plans=[['music',musicPlan(day,musicResult,inventoryResult,now)],['24h',retailPlan(retailResult)]];
  const outcomes=[];
  for(const [platform,plan] of plans){
   const saved=await savePlan(pool,platform,day,plan);
@@ -203,4 +270,4 @@ function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new 
   '<form method="post" action="/daily-director/approve"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="platform" value="'+esc(platform)+'"><input type="hidden" name="day" value="'+esc(day)+'"><input type="hidden" name="revision" value="'+esc(record.revision)+'"><input type="hidden" name="fingerprint" value="'+esc(record.fingerprint)+'"><p><strong>Chờ anh phê duyệt phương án '+esc(record.revision)+'.</strong> Phê duyệt chỉ cho phép giao nhiệm vụ và chuẩn bị tài liệu nội bộ, không mở quyền ghi Music hoặc chi tiêu.</p><button>Phê duyệt phương án nội bộ</button></form>':'<p>Chưa được phê duyệt. Chỉ có thể duyệt phương án ngày hiện tại bằng tài khoản quản trị.</p>';
  return '<section id="daily-director"><h2>AI Director</h2><p>Ngày '+esc(day)+' · Phiên bản '+esc(record.revision)+' · Cập nhật '+esc(new Date(record.updated_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+' (giờ Việt Nam).</p><h3>'+esc(p.title)+'</h3><p>'+esc(p.summary)+'</p>'+lifecycle+'<p>Đang thử nghiệm bộ quy tắc phân việc nội bộ. Bản nháp tạo tự động, không đồng nghĩa Agent đã chạy mô hình hoặc đã đăng bài. Không có quyền ghi Music, gửi tin hoặc chi ngân sách.</p><div class="scroll"><table><thead><tr><th>Agent</th><th>Nhiệm vụ / Đề xuất</th><th>Đầu ra dự kiến</th><th>Trạng thái đề xuất</th></tr></thead><tbody>'+p.tasks.map(t=>'<tr><td>'+esc(t.agent)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.deliverable)+'</td><td>'+esc(states[t.state]??'Chưa xác định')+'</td></tr>').join('')+'</tbody></table></div>'+controls+(history?'<h3>Tiến độ phương án đã duyệt</h3>'+history:'')+'</section>';
 }
-module.exports={renderProposalPreview,musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
+module.exports={buildCampaign,renderProposalPreview,musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
