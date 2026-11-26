@@ -19,3 +19,34 @@ test('Director dispatches internal analyst plan but does not claim actual reconc
  const result=executeAnalystPlan(s,f);assert.equal(result.status,'succeeded');assert.equal(result.analysis.actualRevenue,null);assert.match(result.note,/không phải doanh thu thực tế/);
  assert.equal(executeAnalystPlan(s,{}).status,'blocked');
 });
+
+
+const {readMusicSnapshot,renderMusicSnapshot}=require('./music-readonly.cjs');
+const publicShow={id:'show-1',artist:'<Nghệ sĩ>',date:'2030-01-08',time:'19:30',venue:'ccc',status:'announced',posterUrl:'ignored',buyer_email:'not-for-admin'};
+const fixedTime=()=>new Date('2030-01-01T00:00:00Z');
+const escapeMusic=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+test('Music snapshot reads public GET APIs, keeps counts and excludes unrelated data',async()=>{
+ const calls=[];
+ const data=await readMusicSnapshot(async(url,opts)=>{
+  calls.push(url);assert.equal(opts.method,'GET');assert.equal(opts.redirect,'error');assert(!opts.headers.authorization);
+  if(url.endsWith('/shows'))return Response.json({shows:[publicShow]});
+  return Response.json({available:true,inventory:[{showId:'show-1',capacity:100,sold:20,remaining:75,soldSeats:['A01'],heldSeats:['B01']}]});
+ },fixedTime);
+ assert.deepEqual(calls.sort(),['https://iextra.net/api/public/show-inventory','https://iextra.net/api/public/shows']);
+ assert.equal(data.showsAvailable,true);assert.equal(data.inventoryAvailable,true);
+ assert.deepEqual(data.rows[0].inventory,{capacity:100,sold:20,remaining:75});
+ assert(!JSON.stringify(data).includes('not-for-admin'));assert(!JSON.stringify(data).includes('A01'));
+ const rendered=renderMusicSnapshot(data,escapeMusic);
+ assert.match(rendered,/&lt;Nghệ sĩ&gt;/);assert(!rendered.includes('<Nghệ sĩ>'));assert.match(rendered,/chưa trừ ghế đang giữ/);
+});
+test('Music snapshot leaves inventory unknown when upstream unavailable or counts invalid',async()=>{
+ for(const inventory of [new Response('{}',{status:503}),Response.json({available:true,inventory:[{showId:'show-1',capacity:10,sold:20,remaining:0}]})]){
+  const data=await readMusicSnapshot(async url=>url.endsWith('/shows')?Response.json({shows:[publicShow]}):inventory,fixedTime);
+  assert.equal(data.showsAvailable,true);assert.equal(data.inventoryAvailable,false);assert.equal(data.rows[0].inventory,null);
+ }
+});
+test('Music snapshot never invents show data when public schedule fails',async()=>{
+ const data=await readMusicSnapshot(async url=>url.endsWith('/shows')?Response.json({shows:[publicShow,publicShow]}):Response.json({available:true,inventory:[]}),fixedTime);
+ assert.equal(data.showsAvailable,false);assert.deepEqual(data.rows,[]);
+ assert.match(renderMusicSnapshot(data,escapeMusic),/Chưa có lịch/);
+});
