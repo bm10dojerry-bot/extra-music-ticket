@@ -250,3 +250,24 @@ test('Live Director retains only the allowlisted provider failure code and honor
   await assert.rejects(live.callRole('DirectorBrief',facts,{},env,request),e=>e.message===reason&&e.retrySeconds===seconds);
  }
 });
+
+test('Music signals separate quoted conversations from verified linked buyers and isolate show-specific ad spend',()=>{
+ const {parseSignals}=require('./music-signals.cjs');
+ const input={source:'music_sales_signals_v1',checkedAt:'2030-01-02T08:00:00Z',fromDay:'2029-12-27',toDay:'2030-01-02',
+  messenger:[{showId:'music-1',quotedChats:4,linkedPaidChats:2,phone:'not allowed'}],
+  adDays:[{day:'2030-01-02',fetchedAt:'2030-01-02T08:00:00Z',rows:[{showId:'music-1',accountId:'1915621506464312',spendVnd:100,campaigns:1}]}]};
+ const data=parseSignals(input);
+ assert.equal(data.messenger[0].linkedPaidChats,2);
+ assert.equal(data.messenger[0].phone,undefined);
+ assert.throws(()=>parseSignals({...input,messenger:[{showId:'music-1',quotedChats:1,linkedPaidChats:2}]}));
+ assert.throws(()=>parseSignals({...input,adDays:[{...input.adDays[0],rows:[{...input.adDays[0].rows[0],accountId:'unrelated'}]}]}));
+ assert.equal(live.makeFacts('24h','2030-01-02',null,null,null,null,data).musicSignals,undefined);
+ assert.deepEqual(live.makeFacts('music','2030-01-02',null,null,null,null,data).musicSignals,data);
+});
+
+test('A one-day allowance expires on the following reporting day',()=>{
+ const env={EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13',EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL:'26',EXTRA_OS_DIRECTOR_OVERRIDE_DAY:'2030-01-02'};
+ assert.equal(live.dailyCallLimit(env,'2030-01-02'),26);
+ assert.equal(live.dailyCallLimit(env,'2030-01-03'),13);
+ assert.equal(live.dailyCallLimit({...env,EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL:'90'},'2030-01-02'),13);
+});
