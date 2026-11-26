@@ -23,7 +23,7 @@ const reports = {
   actuals:'Đối soát',publication_checks:'Kiểm tra trước xuất bản',report:'Báo cáo tổng hợp',brief:'Chỉ đạo'
 };
 
-function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrfField,s,agents,saleLinkHtml,requestId,sampleRequestId}) {
+function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrfField,s,agents,saleLinkHtml,requestId,sampleRequestId,financeHtml=''}) {
   const field = (key,label,max) => '<label>'+esc(label)+'<input required name="'+key+'" maxlength="'+max+'"></label>';
   const amount = (key,label,required) => '<label>'+esc(label)+'<input type="number" name="'+key+
     '" min="'+(key==='priceVnd'?'1':'0')+'" max="1000000000" step="1"'+(required?' required':'')+'></label>';
@@ -101,10 +101,10 @@ function renderDirector({runs,selected,jobs,versions:knowledge}, {esc,money,csrf
   const current = selected ? '<div class="director-run"><h3>'+esc(selected.input.product)+'</h3><p>'+esc(selected.input.objective)+'</p>'+
     '<p>'+esc(selected.input.region)+' · 18+ · '+esc(money(selected.input.priceVnd))+' · '+esc(runMode(selected))+'</p>'+
     '<p class="director-links"><a href="'+runUrl(selected.id)+'">Cập nhật trạng thái</a>'+
-      (reported?'<a href="/director/report?run='+esc(selected.id)+'">Tải báo cáo JSON</a>':'')+'</p>'+jobs.map(renderJob).join('')+history+'</div>' : '';
+      (reported?'<a href="/director/report?run='+esc(selected.id)+'">Tải báo cáo JSON</a>':'')+'</p>'+financeHtml+jobs.map(renderJob).join('')+history+'</div>' : '';
   const retail = sampleForm+brief+'<h3>Chiến dịch 24H</h3>'+(runLinks?'<ul class="director-runs">'+runLinks+'</ul>':'<p>Chưa có chiến dịch.</p>')+current;
 
-  const panel = '<section class="os-panel" id="agents"><h2>AI Director</h2>'+
+  const panel = '<section class="os-panel" id="agents"><h2>AI Director</h2><p><a href="/crm">Mở hàng đợi CRM 24H</a></p>'+
     (selected?'<p>Hiển thị từ lượt điều hành <a href="'+runUrl(selected.id)+'">'+esc(selected.input.product)+'</a>.</p>':'')+
     '<div class="scroll"><table class="director-agents"><thead><tr><th scope="col">Agent</th>'+
     '<th scope="col">Tiến độ lượt chạy</th><th scope="col">Kết quả / Việc còn chờ</th></tr></thead><tbody>'+

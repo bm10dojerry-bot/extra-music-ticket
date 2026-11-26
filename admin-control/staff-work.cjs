@@ -128,13 +128,13 @@ function staffAccessPage({csrfField,esc},session,issued) {
     options(null,esc)+'</select><button>Tạo mã truy cập</button></form></main>';
 }
 
-function makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField}) {
+function makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField,crm}) {
   const signInPage=(message='')=>'<main class="login"><section><h1>Cổng nhân sự</h1><p>EXTRA OS staging</p>'+
     (message?'<p role="alert">'+esc(message)+'</p>':'')+
     '<form action="/staff/login" method="post"><label>Mã truy cập<input type="password" name="code" required maxlength="64" autocomplete="one-time-code"></label>'+
     '<button>Vào cổng nhân sự</button></form></section></main>';
 
-  function displayTasks(session,tasks){
+  function displayTasks(session,tasks,crmHtml){
     const articles=tasks.map(task=>{
       const {definition}=task;
       const start=['pending','blocked'].includes(task.status);
@@ -153,7 +153,7 @@ function makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField}
     }).join('');
     return '<main><h1>Công việc của '+esc(staff[session.staff_id])+'</h1><p>EXTRA OS staging</p>'+
       '<form action="/staff/logout" method="post">'+csrfField(session)+'<button>Đăng xuất</button></form>'+
-      (articles||'<p>Chưa có công việc được giao.</p>')+'</main>';
+      (articles||'<p>Chưa có công việc được giao.</p>')+crmHtml+'</main>';
   }
 
   return async (req,res,path)=>{
@@ -167,7 +167,8 @@ function makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField}
     const session=await currentSession(pool,req);
     if(req.method==='GET'&&path==='/staff'){
       if(!session)return html(res,signInPage());
-      return html(res,displayTasks(session,await listStaffTasks(pool,session.staff_id)));
+      const [tasks,crmHtml]=await Promise.all([listStaffTasks(pool,session.staff_id),crm.display(req,session)]);
+      return html(res,displayTasks(session,tasks,crmHtml));
     }
     if(!session)return html(res,signInPage(),401);
     if(req.method!=='POST')return html(res,'<main>Không tìm thấy.</main>',404);
@@ -177,6 +178,7 @@ function makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField}
       await pool.query('delete from os_staff_sessions where token_hash=$1',[session.token_hash]);
       return redirect(res,'/staff',getCookie('',0));
     }
+    if(path==='/staff/crm')return crm.update(res,session,fields);
     if(path==='/staff/task'){
       const updated=await reportStaffTask(pool,session.staff_id,{
         id:fields.get('id'),key:fields.get('key'),action:fields.get('action'),note:(fields.get('note') ?? '').trim(),
@@ -189,4 +191,4 @@ function makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField}
   };
 }
 
-module.exports = {initStaffWork,issueCode,signIn,listStaffTasks,reportStaffTask,updateShowTask,assigneeField,staffAccessPage,makeStaffPortal};
+module.exports = {staff,initStaffWork,issueCode,signIn,listStaffTasks,reportStaffTask,updateShowTask,assigneeField,staffAccessPage,makeStaffPortal};

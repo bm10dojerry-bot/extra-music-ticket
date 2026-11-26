@@ -37,3 +37,11 @@ Trong **ONE CLICK 24H**, bấm **Chạy dữ liệu mẫu** để kiểm tra hà
 Railway `staging/admin-web` tự tạo một lượt kiểm thử mẫu khi triển khai phiên bản này, dựa trên mã yêu cầu cố định để tránh tạo trùng khi khởi động lại.
 
 Trong **Show và công việc**, người quản trị chọn người phụ trách trên nhiệm vụ có sẵn. Trang **Quản lý truy cập nhân sự** cấp mã dùng một lần cho cổng `/staff`. Nhân sự xem việc được giao, bắt đầu và gửi báo cáo. Admin có thể duyệt hoặc chuyển về **Đang làm** để yêu cầu cập nhật. Cổng này dùng cơ sở dữ liệu EXTRA OS staging.
+
+### Đối soát nội bộ
+
+Mở một chiến dịch ngoài chế độ mẫu trong **ONE CLICK 24H → Đối soát nội bộ 24H**. Ghi số lũy kế theo mã chứng từ hoặc bảng tổng hợp. Ô trống là chưa có số liệu và 0 là khoản đã được xác định bằng 0. Lãi/lỗ hiện khi đủ doanh thu, giảm giá, hoàn trả và các chi phí. Mỗi lần lưu tạo một phiên bản. Báo cáo JSON giữ mục `manualFinance` riêng với số đọc từ Sapo.
+
+### Hàng đợi CRM 24H
+
+**AI Director → Mở hàng đợi CRM 24H** hiển thị các hội thoại được ghi nhận qua webhook 24H để quản trị phân công, ghi chú và thay đổi trạng thái. Cổng nhân sự chỉ hiển thị hội thoại được giao. Hội thoại đã xử lý trở về hàng chờ khi có tín hiệu mua hàng hoặc hỗ trợ mới. Sự kiện yêu cầu ngừng liên hệ giữ hội thoại trong mục **Ngừng liên hệ**, kể cả khi có tin đến sau. Cổng xử lý nội bộ dùng mã băm của hội thoại.

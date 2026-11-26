@@ -398,3 +398,103 @@ test('staff assignment preserves old show data, scopes access, and rejects stale
   const {rows:events}=await pool.query('select event from os_audit order by id');
   assert.deepEqual(events.map(row=>row.event),['task.updated','staff.task.in_progress','staff.task.submitted','task.updated']);
 });
+
+test('manual reconciliation keeps unknown values empty and recognizes explicit zero expenses',()=>{
+  const {parseFinance,calculateFinance}=require('./director-finance.cjs');
+  const form=new URLSearchParams({
+    request_id:randomUUID(),run_id:randomUUID(),version:'0',as_of:'2026-11-26',reference:'Bảng nội bộ M-01',
+    grossSalesVnd:'1000000',discountsVnd:'50000',refundsVnd:'100000',
+    cogsVnd:'400000',adsVnd:'100000',shippingVnd:'10000',packingVnd:'5000',
+    paymentVnd:'0',taxVnd:'25000',otherVnd:'20000',unitsSold:'30',unitsReturned:'2'
+  });
+  const now=new Date('2026-11-25T19:00:00Z');
+  const entry=parseFinance(form,now);
+  assert(entry);
+  const result=calculateFinance(entry.data,75000);
+  assert.equal(result.basis,'operator_recorded');
+  assert.equal(result.netRevenueVnd,850000);
+  assert.equal(result.expenseVnd,560000);
+  assert.equal(result.profitVnd,290000);
+  assert.equal(result.unitsNet,28);
+  assert.equal(result.adBudgetRemainingVnd,-25000);
+
+  form.set('paymentVnd','');
+  const partial=calculateFinance(parseFinance(form,now).data);
+  assert.equal(partial.expenseVnd,null);
+  assert.equal(partial.profitVnd,null);
+  assert(partial.missingAmounts.includes('paymentVnd'));
+  assert.equal(partial.grossProfitVnd,450000);
+  form.set('as_of','2025-02-29');
+  assert.equal(parseFinance(form,now),null);
+  form.set('as_of','2026-11-27');
+  assert.equal(parseFinance(form,now),null);
+});
+
+test('manual reconciliation keeps versions, dedupes retry and rejects edits from stale tabs',usePg,async t=>{
+  const {initDirectorFinance,saveFinance,listFinance}=require('./director-finance.cjs');
+  const {sampleBrief}=require('./director-sample.cjs');
+  const pool=await database(t);
+  await pool.query('create table os_audit(id bigint generated always as identity,event text,details jsonb)');
+  await initDirectorFinance(pool);
+  await initDirectorFinance(pool);
+  const runId=await queue.queueDirector(pool,randomUUID(),input,[]);
+  const sampleId=await queue.queueDirector(pool,randomUUID(),sampleBrief,[]);
+  const submission={runId,requestId:randomUUID(),baseVersion:0,asOf:'2026-11-26',reference:'Biên nhận 24H',note:'',
+    data:{grossSalesVnd:1000000,discountsVnd:0,refundsVnd:0}};
+  assert.deepEqual(await saveFinance(pool,{...submission,runId:sampleId}),{status:'unavailable'});
+  assert.deepEqual(await saveFinance(pool,submission),{status:'saved',version:1});
+  assert.deepEqual(await saveFinance(pool,submission),{status:'saved',version:1});
+  assert.deepEqual(await saveFinance(pool,{...submission,note:'Đã sửa'}),{status:'conflict'});
+  const results=await Promise.all(['Bảng chi phí A','Bảng chi phí B'].map(reference=>
+    saveFinance(pool,{...submission,reference,baseVersion:1,requestId:randomUUID()})));
+  assert.deepEqual(results.map(result=>result.status).sort(),['conflict','saved']);
+  const versions=await listFinance(pool,runId);
+  assert.deepEqual(versions.map(row=>row.version),[2,1]);
+  assert.equal(versions[1].reference,'Biên nhận 24H');
+  assert.equal(versions[0].metrics.netRevenueVnd,1000000);
+  assert.equal(versions[0].metrics.profitVnd,null);
+  assert.equal((await pool.query('select * from os_audit')).rowCount,2);
+});
+
+test('CRM assigns only existing conversations, scopes staff updates and honors opt-outs after later messages',usePg,async t=>{
+  const {initCrm}=require('./director-crm.cjs');
+  const {initCrmFollowup,listFollowups,saveFollowup,readFollowup}=require('./crm-followup.cjs');
+  const pool=await database(t);
+  await pool.query('create table os_audit(id bigint generated always as identity,event text,details jsonb)');
+  await initCrm(pool);
+  await initCrmFollowup(pool);
+  const threadKey='a'.repeat(64),supportKey='b'.repeat(64);
+  const inbound=(key,category)=>pool.query(
+    'insert into os_24h_inbound_events(event_id,thread_key,occurred_at,category) values($1,$2,now(),$3)',
+    [randomUUID(),key,category]
+  );
+  await inbound(threadKey,'sales');
+  await inbound(supportKey,'support');
+  assert.deepEqual((await listFollowups(pool)).rows.map(row=>row.thread_key),[supportKey,threadKey]);
+  assert.deepEqual((await listFollowups(pool,{staffId:'dieu'})).rows,[]);
+  const owner=readFollowup(new URLSearchParams({thread_key:threadKey,status:'new',assignee:'dieu',revision:'0',note:'Vào hàng đợi Sale'}));
+  assert(owner);
+  assert.equal(await saveFollowup(pool,{...owner,threadKey:'c'.repeat(64)}),false);
+  assert(await saveFollowup(pool,owner));
+  assert.equal(await saveFollowup(pool,owner),false);
+  assert.deepEqual((await listFollowups(pool,{staffId:'dieu'})).rows.map(row=>row.thread_key),[threadKey]);
+  const close={...owner,assignee:null,revision:1,status:'resolved',note:'Đã phân loại'};
+  assert.equal(await saveFollowup(pool,close,'trang'),false);
+  assert.equal(await saveFollowup(pool,{...close,assignee:'trang'},'dieu'),false);
+  assert(await saveFollowup(pool,close,'dieu'));
+  await inbound(threadKey,'general');
+  assert.deepEqual((await listFollowups(pool,{view:'resolved'})).rows.map(row=>row.thread_key),[threadKey]);
+  await inbound(threadKey,'support');
+  assert((await listFollowups(pool,{staffId:'dieu'})).rows.some(row=>row.thread_key===threadKey&&row.status==='new'));
+
+  await inbound(threadKey,'opt_out');
+  await inbound(threadKey,'sales');
+  assert.deepEqual((await listFollowups(pool,{staffId:'dieu'})).rows,[]);
+  assert((await listFollowups(pool)).rows.every(row=>row.thread_key!==threadKey));
+  const [suppressed]=(await listFollowups(pool,{view:'opt_out'})).rows;
+  assert.equal(suppressed.thread_key,threadKey);
+  assert.equal(suppressed.assignee,null);
+  assert.equal(suppressed.note,null);
+  assert.equal(await saveFollowup(pool,{...owner,revision:2}),false);
+  assert.equal((await pool.query('select * from os_audit')).rowCount,2);
+});

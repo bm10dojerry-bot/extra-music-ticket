@@ -381,6 +381,6 @@ function startDirectorWorker(pool, execute, evaluate, options = {}) {
 }
 
 module.exports = {
-  initDirectorQueue,queueDirector,claim,jobContext,report,reviewNext,revise,
+  initDirectorQueue,queueDirector,claim,jobContext,report,reviewNext,revise,transaction,
   knowledgeVersion,restoreKnowledge,listRuns,startDirectorWorker
 };

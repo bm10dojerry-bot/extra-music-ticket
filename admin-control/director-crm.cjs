@@ -111,7 +111,7 @@ function crmExecutor(pool,env=process.env) {
     const base = {
       mode:job.input.mode,conversations:null,orders:null,outboundMessages:0,
       policy:['Chỉ xử lý hội thoại inbound 24H','Ghi nhận yêu cầu ngừng liên hệ','Chuyển nhân viên khi cần hỗ trợ'],
-      saleStatus,remaining:['messenger']
+      saleStatus,followupInbox:'/crm',remaining:['messenger']
     };
     if (!settings) return base;
     const {rows:[results]} = await pool.query(`
