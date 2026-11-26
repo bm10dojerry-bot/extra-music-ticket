@@ -9,7 +9,7 @@ const hoursToDay=(a,b)=>(Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/
 const task=(id,agent,title,deliverable,state='draft_ready')=>({id,agent,title,deliverable,state});
 const shiftDay=(day,delta)=>new Date(Date.parse(day+'T00:00:00Z')+delta*86400000).toISOString().slice(0,10);
 const timeOf=(day,time='22:00')=>day+'T'+time+':00+07:00';
-function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00'))){
+function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00')),period='day'){
  const i=show.inventory,daysToShow=hoursToDay(show.date,day);
  if(show.status!=='announced'||!financeRow||!i||!validCount(i.capacity)||!validCount(i.remaining)||!validCount(i.held)||i.remaining<=i.held||daysToShow<0)return null;
  const available=Math.max(0,i.remaining-i.held);
@@ -20,8 +20,10 @@ function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00'))){
  // Other shows: propose 5/day or 1.5x recent pace, limited to 20/day.
  const dailyGoal=Math.min(20,Math.max(daysToShow<=3?10:5,Math.ceil(rate*1.5)));
  const slots=[];
- for(let k=0;k<=1;k++){
-  const date=shiftDay(day,k);if(date>show.date)break;
+ const horizon=period==='week'?7:period==='month'?31:2;
+ const month=day.slice(0,7);
+ for(let k=0;k<horizon;k++){
+  const date=shiftDay(day,k);if(date>show.date||(period==='month'&&date.slice(0,7)!==month))break;
   let deadline=timeOf(date);
   if(date===show.date){
    if(!/^\d{2}:\d{2}$/.test(show.time??''))break;
@@ -74,7 +76,7 @@ function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00'))){
    {agent:'Analyst / Director',deadline,action:'Đối chiếu số vé thanh toán tăng thêm so với mốc đầu, kiểm tra từng deadline; nếu hụt mục tiêu, nêu nguyên nhân có bằng chứng và trình phương án mới để chủ duyệt.',metric:'So sánh kết quả thật với '+n(goal)+' vé mới, và từng mốc trong kế hoạch.'}
   ]};
 }
-function musicPlan(day,finance,inventory,now=new Date(timeOf(day,'00:00'))){
+function musicPlan(day,finance,inventory,now=new Date(timeOf(day,'00:00')),period='day'){
  const source=finance?.status==='available'&&finance.data;
  const current=inventory?.showsAvailable===true&&inventory?.inventoryAvailable===true;
  if(!source||!current){
@@ -105,7 +107,7 @@ function musicPlan(day,finance,inventory,now=new Date(timeOf(day,'00:00'))){
  const candidates=upcoming.filter(r=>hoursToDay(r.date,day)<=7&&r.status==='announced'&&r.inventory&&r.inventory.capacity>0&&r.inventory.remaining>0&&validCount(r.inventory.sold)&&r.inventory.sold<=r.inventory.capacity).slice(0,2);
  const facts={daily:report.daily,previousDay,previous:previous.daily,historicalShows:past,upcomingShows:portfolio,shows:candidates.map(s=>({id:s.id,artist:s.artist,date:s.date,inventory:s.inventory,daySales:byId.get(s.id)?.daily??null,previousSales:previousById.get(s.id)?.daily??null})),adAttribution:null};
  const financeById=new Map(finance.data.rows.map(row=>[row.showId,row]));
- const campaigns=upcoming.map(show=>buildCampaign(day,show,financeById.get(show.id),now)).filter(Boolean);
+ const campaigns=upcoming.map(show=>buildCampaign(day,show,financeById.get(show.id),now,period)).filter(Boolean);
  facts.campaigns=campaigns;
  const base=[task('daily-analysis','Analyst','Đọc và so sánh kết quả báo cáo ngày','Theo ngày thanh toán: '+n(report.daily.paidOrders)+' đơn trả tiền, '+n(report.daily.paidTickets)+' vé trả tiền, '+money(report.daily.revenueVnd)+'. Ngày trước ('+previousDay+'): '+n(previous.daily.paidTickets)+' vé, '+money(previous.daily.revenueVnd)+'. Chênh lệch đến thời điểm đọc: '+signed(report.daily.paidTickets-previous.daily.paidTickets)+' vé, '+signed(report.daily.revenueVnd-previous.daily.revenueVnd)+' đ; ngày hiện tại có thể chưa kết thúc. Chưa coi doanh thu xác nhận là tiền đã đối soát ngân hàng, không quy kết cho chiến dịch quảng cáo khi chưa có dữ liệu phân bổ.')];
  const retrospective=past.length?'Có '+n(past.length)+' show đã qua ngày diễn trong nguồn tài chính. So sánh vé trả tiền, doanh thu xác nhận, vé mời và chi phí khai báo từng show; cần kiểm tra trạng thái kết thúc, hoàn trả, chi phí thực và dữ liệu quảng cáo trước khi kết luận hiệu quả. Rút bài học về tốc độ bán, cơ cấu khách và truyền thông chỉ khi có chứng cứ.':'Chưa có show đã qua ngày diễn trong nguồn tài chính. Không tạo kết quả lịch sử giả; thu thập báo cáo show cũ và chứng từ để học.';
@@ -157,13 +159,15 @@ function retailPlan(report){
 }
 function initDailyDirector(pool){
  return pool.query(
-  "create table if not exists os_daily_director (platform text not null check(platform in ('music','24h')), day date not null, fingerprint text not null, plan jsonb not null, revision integer not null default 1, updated_at timestamptz not null default now(), primary key(platform,day));"+
+  "create table if not exists os_daily_director (platform text not null check(platform in ('music','24h','music_week','music_month','24h_week','24h_month')), day date not null, fingerprint text not null, plan jsonb not null, revision integer not null default 1, updated_at timestamptz not null default now(), primary key(platform,day));"+
+  "alter table os_daily_director drop constraint if exists os_daily_director_platform_check;"+
+  "alter table os_daily_director add constraint os_daily_director_platform_check check(platform in ('music','24h','music_week','music_month','24h_week','24h_month'));"+
   "create table if not exists os_daily_approvals (platform text not null, day date not null, revision integer not null, fingerprint text not null, plan jsonb not null, approved_at timestamptz not null default now(), primary key(platform,day,revision));"+
   "create table if not exists os_daily_execution (platform text not null, day date not null, revision integer not null, task_id text not null, ordinal integer not null, task jsonb not null, status text not null check(status in ('queued','draft_prepared','blocked')), result jsonb, updated_at timestamptz not null default now(), primary key(platform,day,revision,task_id), foreign key(platform,day,revision) references os_daily_approvals(platform,day,revision));"+
   "create index if not exists os_daily_execution_queue on os_daily_execution(day,ordinal) where status='queued';");
 }
 async function savePlan(pool,platform,day,plan){
- if(!['music','24h'].includes(platform))throw Error('platform');
+ if(!validProposalPlatform(platform))throw Error('platform');
  const fingerprint=createHash('sha256').update(JSON.stringify(plan)).digest('hex');
  const {rows}=await pool.query("insert into os_daily_director(platform,day,fingerprint,plan) values($1,$2::date,$3,$4::jsonb) on conflict(platform,day) do update set fingerprint=excluded.fingerprint,plan=excluded.plan,revision=os_daily_director.revision+1,updated_at=now() where os_daily_director.fingerprint<>excluded.fingerprint returning revision",[platform,day,fingerprint,JSON.stringify(plan)]);
  return {changed:rows.length===1,revision:rows[0]?.revision??null};
@@ -172,7 +176,7 @@ async function readPlan(pool,platform,day){
  const {rows}=await pool.query("select day::text as day,plan,revision,updated_at,fingerprint from os_daily_director where platform=$1 and day=$2::date",[platform,day]);
  return rows[0]??null;
 }
-const validApproval=(platform,day,revision,fingerprint,now)=>['music','24h'].includes(platform)&&typeof day==='string'&&day===reportDay(null,now)&&Number.isSafeInteger(revision)&&revision>0&&typeof fingerprint==='string'&&/^[a-f0-9]{64}$/.test(fingerprint);
+const validApproval=(platform,day,revision,fingerprint,now)=>validProposalPlatform(platform)&&typeof day==='string'&&day===reportDay(null,now)&&Number.isSafeInteger(revision)&&revision>0&&typeof fingerprint==='string'&&/^[a-f0-9]{64}$/.test(fingerprint);
 async function approvePlan(pool,{platform,day,revision,fingerprint},now=new Date()){
  if(!validApproval(platform,day,revision,fingerprint,now))return {status:'invalid'};
  const client=await pool.connect();
@@ -229,11 +233,35 @@ function startApprovedWorker(pool,{interval=2000,onError=()=>{},onResult=()=>{}}
  timer=setTimeout(run,1000).unref();
  return async()=>{stopped=true;if(timer)clearTimeout(timer);if(pending)await pending;};
 }
+// Three planning horizons, each stored under a separate approval identity.
+// Day plan covers today and tomorrow; week means the next 7 days;
+// month means the remaining days in the selected calendar month, VN time.
+const periods=['day','week','month'];
+function proposalPlatform(platform,period='day'){
+ if(!['music','24h'].includes(platform)||!periods.includes(period))throw Error('proposal scope');
+ return period==='day'?platform:platform+'_'+period;
+}
+function periodLabel(period){return period==='week'?'Kế hoạch tuần (7 ngày tới)':period==='month'?'Kế hoạch tháng (đến cuối tháng)':'Kế hoạch ngày (hôm nay và ngày mai)';}
+function proposalPlan(platform,period,day,finance,inventory,retail,now){
+ const base=platform==='music'?musicPlan(day,finance,inventory,now,period):retailPlan(retail);
+ const end=period==='week'?shiftDay(day,6):period==='month'?new Date(Date.UTC(Number(day.slice(0,4)),Number(day.slice(5,7)),0)).toISOString().slice(0,10):shiftDay(day,1);
+ return {...base,period,periodStart:day,periodEnd:end,title:periodLabel(period)+' · '+base.title};
+}
+function validProposalPlatform(platform){return ['music','24h','music_week','music_month','24h_week','24h_month'].includes(platform);}
+function proposalBase(platform){return platform.startsWith('music')?'music':'24h';}
+function proposalPeriod(platform){return platform.endsWith('_week')?'week':platform.endsWith('_month')?'month':'day';}
+function proposalUrl(platform,day){return '/proposals/'+proposalBase(platform)+'?period='+proposalPeriod(platform)+'&day='+encodeURIComponent(day);}
+function proposalPeriodValue(raw){return periods.includes(raw)?raw:'day';}
+function renderProposalPage(record,platform,period,day,esc,options={}){
+ const base=proposalBase(platform),route='/proposals/'+base,links=periods.map(p=>'<a class="period-link" '+(p===period?'aria-current="page" ':'')+'href="'+route+'?period='+p+'&day='+esc(day)+'">'+esc(p==='day'?'Kế hoạch ngày':p==='week'?'Kế hoạch tuần':'Kế hoạch tháng')+'</a>').join(' ');
+ const form='<form method="get" action="'+route+'"><input type="hidden" name="period" value="'+esc(period)+'"><label>Ngày lập đề xuất <input type="date" name="day" value="'+esc(day)+'" required></label><button>Xem</button></form>';
+ return '<main><section><h1>Đề xuất '+(base==='music'?'Music Show':'24H')+'</h1><nav>'+links+'</nav>'+form+'<p>'+esc(periodLabel(period))+' · Dữ liệu báo cáo ngày '+esc(day)+'. Mỗi kỳ là phương án riêng; không cộng dồn các kỳ trùng nhau.</p><a href="/reports/'+base+'?day='+esc(day)+'">Xem báo cáo nguồn</a></section>'+renderProposalPreview(record,day,esc,options.approvals??[])+renderDailyDirector(record,day,esc,{...options,platform})+'</main>';
+}
 async function runDailyDirector(pool,{now=new Date(),music=getMusicFinance,inventory=getMusicSnapshot,retail=day=>readRetailDaily(pool,day)}={}){
  const day=reportDay(null,now);
  const [f,i,r]=await Promise.allSettled([music(),inventory(),retail(day)]);
  const musicResult=f.status==='fulfilled'?f.value:null,inventoryResult=i.status==='fulfilled'?i.value:null,retailResult=r.status==='fulfilled'?r.value:null;
- const plans=[['music',musicPlan(day,musicResult,inventoryResult,now)],['24h',retailPlan(retailResult)]];
+ const plans=periods.flatMap(period=>['music','24h'].map(platform=>[proposalPlatform(platform,period),proposalPlan(platform,period,day,musicResult,inventoryResult,retailResult,now)]));
  const outcomes=[];
  for(const [platform,plan] of plans){
   const saved=await savePlan(pool,platform,day,plan);
@@ -293,11 +321,11 @@ function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new 
  const prior=p.evidence?.historicalShows??[],next=p.evidence?.upcomingShows??[];
  const retrospective=prior.length?'<div class="scroll"><table><thead><tr><th>Show đã qua ngày diễn</th><th>Ngày diễn</th><th>Vé trả tiền</th><th>Doanh thu xác nhận</th><th>Chi phí khai báo</th></tr></thead><tbody>'+prior.map(r=>'<tr><td>'+esc(r.artist)+'</td><td>'+esc(r.date)+'</td><td>'+esc(n(r.paidTickets))+'</td><td>'+esc(money(r.revenueVnd))+'</td><td>'+esc(r.recordedCostVnd==null?'Chưa có':money(r.recordedCostVnd))+'</td></tr>').join('')+'</tbody></table></div>':'<p>Chưa có dữ liệu show đã qua trong nguồn hiện tại.</p>';
  const portfolio=next.length?'<div class="scroll"><table><thead><tr><th>Show chưa diễn / đang diễn</th><th>Ngày</th><th>Ưu tiên</th><th>Ghế đã bán / sức chứa</th><th>Vé bán trong ngày</th><th>Phương án</th></tr></thead><tbody>'+next.map(r=>'<tr><td>'+esc(r.artist)+'</td><td>'+esc(r.date)+'</td><td>'+esc(priorityLabels[r.priority]??'Chưa xác định')+'</td><td>'+esc(r.inventory?n(r.inventory.sold)+'/'+n(r.inventory.capacity):'Chưa có')+'</td><td>'+esc(r.daily?n(r.daily.paidTickets):'Chưa có')+'</td><td>'+esc(r.policy)+'</td></tr>').join('')+'</tbody></table></div>':'<p>Chưa có show đủ dữ liệu lịch trong nguồn hiện tại.</p>';
- const lifecycle=platform==='music'||p.evidence?.upcomingShows?'<h3>Học từ kết quả show trước</h3>'+retrospective+'<p>Show qua ngày diễn chưa đồng nghĩa đã quyết toán. Không suy diễn lợi nhuận hay hiệu quả quảng cáo.</p><h3>Kế hoạch toàn bộ show chưa diễn</h3>'+portfolio+'<p>Ưu tiên đề xuất nội dung chi tiết cho tối đa hai show gần nhất đủ điều kiện; các show còn lại vẫn có phương án chuẩn bị riêng.</p>':'';
+ const lifecycle=platform?.startsWith('music')||p.evidence?.upcomingShows?'<h3>Học từ kết quả show trước</h3>'+retrospective+'<p>Show qua ngày diễn chưa đồng nghĩa đã quyết toán. Không suy diễn lợi nhuận hay hiệu quả quảng cáo.</p><h3>Kế hoạch toàn bộ show chưa diễn</h3>'+portfolio+'<p>Ưu tiên đề xuất nội dung chi tiết cho tối đa hai show gần nhất đủ điều kiện; các show còn lại vẫn có phương án chuẩn bị riêng.</p>':'';
 
  const canApprove=!approved&&typeof csrf==='string'&&validApproval(platform,day,record.revision,record.fingerprint,now);
  const controls=approved?'<p><strong>Phương án hiện tại đã được duyệt.</strong></p>':canApprove?
   '<form method="post" action="/daily-director/approve"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="platform" value="'+esc(platform)+'"><input type="hidden" name="day" value="'+esc(day)+'"><input type="hidden" name="revision" value="'+esc(record.revision)+'"><input type="hidden" name="fingerprint" value="'+esc(record.fingerprint)+'"><p><strong>Chờ anh phê duyệt phương án '+esc(record.revision)+'.</strong> Phê duyệt chỉ cho phép giao nhiệm vụ và chuẩn bị tài liệu nội bộ, không mở quyền ghi Music hoặc chi tiêu.</p><button>Phê duyệt phương án nội bộ</button></form>':'<p>Chưa được phê duyệt. Chỉ có thể duyệt phương án ngày hiện tại bằng tài khoản quản trị.</p>';
  return '<section id="daily-director"><h2>AI Director</h2><p>Ngày '+esc(day)+' · Phiên bản '+esc(record.revision)+' · Cập nhật '+esc(new Date(record.updated_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+' (giờ Việt Nam).</p><h3>'+esc(p.title)+'</h3><p>'+esc(p.summary)+'</p>'+controls+'<details><summary>Chi tiết phân việc và dữ liệu đối chiếu</summary>'+lifecycle+'<p>Đang thử nghiệm bộ quy tắc phân việc nội bộ. Bản nháp tạo tự động, không đồng nghĩa Agent đã chạy mô hình hoặc đã đăng bài. Không có quyền ghi Music, gửi tin hoặc chi ngân sách.</p><div class="scroll"><table><thead><tr><th>Agent</th><th>Nhiệm vụ / Đề xuất</th><th>Đầu ra dự kiến</th><th>Trạng thái đề xuất</th></tr></thead><tbody>'+p.tasks.map(t=>'<tr><td>'+esc(t.agent)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.deliverable)+'</td><td>'+esc(states[t.state]??'Chưa xác định')+'</td></tr>').join('')+'</tbody></table></div></details>'+(history?'<h3>Tiến độ phương án đã duyệt</h3>'+history:'')+'</section>';
 }
-module.exports={buildCampaign,renderCampaign,renderProposalPreview,musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
+module.exports={proposalPlatform,proposalPlan,proposalUrl,proposalPeriodValue,renderProposalPage,buildCampaign,renderCampaign,renderProposalPreview,musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
