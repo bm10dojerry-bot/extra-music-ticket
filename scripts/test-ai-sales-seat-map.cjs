@@ -22,6 +22,25 @@ test("plain image no link",()=>assert.ok(!policy.seatMapCaption({venue:"ccc",sho
 test("availability stays in chat",()=>{assert.equal(policy.wantsSeatAvailability("Sơ đồ ghế còn trống"),true);assert.ok(!policy.seatMapCaption({venue:"laocai",show:l},true).includes(l.url));});
 test("no specific show no made-up link",()=>assert.ok(!policy.seatMapCaption({venue:"ccc"},true).includes("https://")));
 test("asset links only intended venues",()=>assert.equal(policy.SEAT_MAP_URL("ccc"),"https://iextra.net/api/public/seat-map/ccc"));
-for(const [v,count] of [["ccc",550],["laocai",600]])test(v+" geometry and image decode",async()=>{const svg=renderer.renderSeatMapSvg(v);const codes=[...svg.matchAll(/>([A-O][0-9]{2})<\/text>/g)].map(m=>m[1]);assert.equal(codes.length,count);assert.deepEqual(codes,venues.seatsFor(v).map(s=>s.id));assert.match(svg,/Chưa thể hiện ghế trống/);assert.match(svg,v==="ccc"?/rotate\(90 2720 1150\)/:/x="620" y="300"/);const png=await sharp(Buffer.from(svg)).png().toBuffer();const meta=await sharp(png).metadata();assert.equal(meta.width,3000);assert.equal(meta.height,2520);});
-test("layout overrides applied",()=>{const svg=renderer.renderSeatMapSvg("ccc",{A:40});const codes=[...svg.matchAll(/>([A-O][0-9]{2})<\/text>/g)].map(m=>m[1]);assert.equal(codes.length,540);assert.deepEqual(codes,venues.seatsFor("ccc",{A:40}).map(s=>s.id));});
+for(const [v,count] of [["ccc",550],["laocai",600]])test(v+" geometry and image decode",async()=>{const svg=renderer.renderSeatMapSvg(v);const codes=[...svg.matchAll(/data-seat="([A-O][0-9]{2})"/g)].map(m=>m[1]);assert.equal(codes.length,count);assert.deepEqual(codes,venues.seatsFor(v).map(s=>s.id));assert.match(svg,/Chưa thể hiện ghế trống/);assert.match(svg,v==="ccc"?/rotate\(90 2255 1875\)/:/x="740" y="395"/);assert.ok(!svg.includes("<text"));for(const row of new Set(venues.seatsFor(v).map(s=>s.row)))assert.ok(svg.includes(`data-row="${row}"`));const png=await sharp(Buffer.from(svg)).png().toBuffer();const meta=await sharp(png).metadata();assert.equal(meta.width,v==="ccc"?2400:3600);assert.equal(meta.height,v==="ccc"?3600:2400);});
+test("layout overrides applied",()=>{const svg=renderer.renderSeatMapSvg("ccc",{A:40});const codes=[...svg.matchAll(/data-seat="([A-O][0-9]{2})"/g)].map(m=>m[1]);assert.equal(codes.length,540);assert.deepEqual(codes,venues.seatsFor("ccc",{A:40}).map(s=>s.id));});
 test("worker uses guarded outbox before quick reply",()=>{const w=fs.readFileSync("lib/ai-sales.ts","utf8");assert.match(w,/seatMapUrl\?"seat-map":action\.purpose/);assert.match(w,/seatMapUrl\?await sendMessengerPageImage/);assert.ok(w.indexOf("isSeatMapRequest(latest.body)")<w.indexOf("const quickReply="));assert.match(w,/error\.ambiguous\)throw error/);assert.match(w,/await extraSendPaymentQr/);});
+
+test("independent registration and blue mark verification through resized JPEG",async()=>{
+ for(const venue of ["ccc","laocai"]){
+  const seats=venues.seatsFor(venue),showId=venue==="ccc"?"dinh-dung-2811":"ho-quang-hieu-2412";
+  const g=renderer.seatMapGeometry(venue,seats,showId);
+  const expected=venue==="ccc"?["C26","C27"]:["B10","D31"];
+  const dots=g.cells.filter(c=>expected.includes(c.id)).map(c=>'<circle cx="'+c.x+'" cy="'+c.y+'" r="10" fill="#0044ff"/>').join("");
+  const svg=renderer.renderSeatMapSvg(venue,{}, {seats,taken:new Set(),title:"Đình Dũng · 28/11/2026",checkedAt:"04:30",showId});
+  const jpg=await sharp(Buffer.from(svg.replace("</svg>",dots+"</svg>"))).resize({width:1800,height:1800,fit:"inside"}).jpeg({quality:76}).toBuffer();
+  const {data,info}=await sharp(jpg).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true});
+  const marks=renderer.readSeatMapMarks(data,info.width,info.height);
+  assert.ok(marks,venue+" registration");
+  assert.deepEqual(renderer.verifySeatMapMarks(marks,venue,seats,showId)?.sort(),expected.sort());
+  assert.equal(renderer.verifySeatMapMarks(marks,venue,seats,"different-show"),null);
+  assert.equal(renderer.verifySeatMapMarks({...marks,points:[{x:0,y:0}]},venue,seats,showId),null);
+  assert.equal(renderer.verifySeatMapMarks({...marks,points:[marks.points[0],marks.points[0]]},venue,seats,showId),null);
+  assert.equal(renderer.verifySeatMapMarks({...marks,reference:"00000000"},venue,seats,showId),null);
+ }
+});
