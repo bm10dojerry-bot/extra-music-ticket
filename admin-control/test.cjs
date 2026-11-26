@@ -151,3 +151,33 @@ test('Director uses historical shows and prepares the entire upcoming portfolio,
  const body=renderDailyDirector({plan,revision:1,updated_at:'2030-01-02T00:00:00Z'},'2030-01-02',escapeMusic,{platform:'music'});
  assert.match(body,/Học từ kết quả show trước/);assert.match(body,/Show đã qua/);assert.match(body,/Show xa/);assert.match(body,/Kế hoạch toàn bộ show chưa diễn/);
 });
+
+
+const {proposalPlatform,proposalPlan,proposalUrl,proposalPeriodValue,renderProposalPage,buildCampaign}=require('./daily-director.cjs');
+test('Reports and proposals have separate menu routes, with One Click preserved',()=>{
+ const html=renderSidebar('/proposals/music');
+ for(const path of ['/reports/music','/reports/24h','/proposals/music','/proposals/24h'])assert(html.includes('href="'+path+'"'));
+ assert.match(html,/>Đề xuất 24H</);assert.match(html,/>Đề xuất Music Show</);
+ assert.match(html,/href="\/proposals\/music" aria-current="page"/);
+ const report=renderMusicDaily({status:'available',data:parseMusicFinance(reportFixture)},'2030-01-02',escapeMusic);
+ assert.doesNotMatch(report,/daily-director\/approve|Phương án AI Director/);
+});
+test('Campaign proposal separates period-specific targets, cost scenarios and named human roles',()=>{
+ const day='2030-01-02',now=new Date('2030-01-02T05:00:00Z');
+ const show={...planInventory.rows[0],date:'2030-01-20',time:'19:30'};
+ const finance={...parseMusicFinance(reportFixture).rows[0],total:{...reportTotals,paidTickets:2}};
+ const d=buildCampaign(day,show,finance,now,'day'),w=buildCampaign(day,show,finance,now,'week'),m=buildCampaign(day,show,finance,now,'month');
+ assert.equal(d.slots.length,2);assert.equal(w.slots.length,7);assert(m.slots.length>w.slots.length);
+ assert(m.targetNewPaidTickets<=show.inventory.remaining-show.inventory.held);
+ assert(d.staffPlan.some(t=>t.person==='Diệu'));assert(d.mediaPlan.some(t=>t.channel.includes('TikTok')));
+ assert.equal(d.budgetNewVnd,0);assert(d.paidScenario.budgetVnd>0);assert.match(d.paidScenario.basis,/giả định/i);
+ const week=proposalPlan('music','week',day,{status:'available',data:parseMusicFinance(reportFixture)},{...planInventory,rows:[show]},null,now);
+ assert.equal(week.periodEnd,'2030-01-08');
+ const page=renderProposalPage({plan:week,revision:1,updated_at:now.toISOString(),fingerprint:'a'.repeat(64)},'music_week','week',day,escapeMusic,{csrf:'test',now});
+ assert.match(page,/Đề xuất Music Show/);assert.match(page,/name="platform" value="music_week"/);assert.match(page,/Kế hoạch tuần/);assert.match(page,/Nhân sự đề xuất/);assert.match(page,/Media & marketing/);assert.match(page,/Phê duyệt phương án nội bộ/);
+ assert.equal(proposalPlatform('music','month'),'music_month');
+ assert.equal(proposalUrl('music_week',day),'/proposals/music?period=week&day=2030-01-02');
+ assert.equal(proposalPeriodValue('bad'),'day');
+ const retail=proposalPlan('24h','month',day,null,null,{created:0,accepted:0,blocked:0,failed:0,crm:null,records:[]},now);
+ assert.equal(retail.periodEnd,'2030-01-31');assert.equal(retail.evidence.retailObjective.revenueTargetVnd,null);
+});
