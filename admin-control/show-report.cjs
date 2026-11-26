@@ -89,6 +89,6 @@ function renderShowPage({path,day,period,catalog,show,ended,report,snapshot,run,
   const media=report.images.length?'<section><h3>Poster và media</h3>'+report.images.map(a=>'<p><strong>'+esc(a.label)+'</strong> · <a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">Xem</a> · <a href="'+esc(a.downloadUrl)+'" download>Tải về</a></p>').join('')+'</section>':'';
   const other=ended?'':'<p><a href="'+esc(url(path==='/reports/music'?'/proposals/music':'/reports/music',show.id))+'">'+(path==='/reports/music'?'Đề xuất':'Báo cáo')+' của '+esc(show.artist)+'</a></p>';
   const progress=ended||!run?'':'<details><summary>Tiến độ Director của kỳ</summary><p>'+esc(({ready:'Đã tổng hợp',running:'Đang xử lý',queued:'Đang chờ',blocked:'Đang bị chặn'})[run.status]??run.status)+' · '+roles.filter(role=>run.results?.[role]?.responseId).length+'/11 báo cáo cho toàn kỳ.</p></details>';
-  return '<main>'+nav+'<section id="live-director"><h2>'+esc(report.title)+'</h2>'+approvalPanel+player+report.brief.map(x=>'<p>'+esc(x)+'</p>').join('')+sections+media+progress+other+'</section></main>';
+  return '<main>'+nav+'<section id="live-director"><h2>'+esc(report.title)+'</h2>'+player+report.brief.map(x=>'<p>'+esc(x)+'</p>').join('')+sections+media+progress+other+approvalPanel+'</section></main>';
 }
 module.exports={showCatalog,buildReport,reading,renderShowPage};

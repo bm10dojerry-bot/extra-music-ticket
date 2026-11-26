@@ -383,7 +383,9 @@ test('Show picker scopes dates, nearest-first options and blocked approval to th
  assert.equal(show.id,'soon');
  const run={status:'blocked',reason:'invalid_model_report',results:{}};
  const panel=approvalPanel({run,show,state:proposalState(run,show),esc});
- const html=renderShowPage({path:'/proposals/music',day:'2030-01-01',period:'week',catalog,show,report:{title:'Gần',brief:[],sections:[],images:[]},snapshot,run,esc,player:'',approvalPanel:panel});
+ const html=renderShowPage({path:'/proposals/music',day:'2030-01-01',period:'week',catalog,show,report:{title:'Gần',brief:['Phần đầu'],sections:[{title:'Phương án',lines:['Hạn xử lý']}],images:[{label:'Tệp thử',url:'/show-media/test/poster',downloadUrl:'/show-media/test/poster?download=1'}]},snapshot,run,esc,player:'<button data-mode="full">Nghe toàn bộ báo cáo</button>',approvalPanel:panel});
+ const order=['<h2>Gần</h2>','data-mode="full"','Phần đầu','Hạn xử lý','Tải về','Phê duyệt đề xuất'].map(label=>html.indexOf(label));
+ assert(order.every((index,i)=>index>=0&&(i===0||order[i-1]<index)));
  assert.match(html,/<select name="show" required><optgroup[^>]*><option value="soon" selected/);
  assert.match(html,/name="period"/);assert.match(html,/name="day"/);
  assert.match(html,/disabled[^>]*>Phê duyệt đề xuất/);assert.match(html,/0\/11 Agent/);

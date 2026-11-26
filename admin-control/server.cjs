@@ -165,6 +165,13 @@ async function verifyMusicReportPage(){
   selector:markup.includes('name="show"'),approval:markup.includes('Phê duyệt đề xuất')||markup.includes('Đã phê duyệt đề xuất'),
   dailyEconomics:markup.includes('Hiệu quả quảng cáo trong ngày'),showEconomics:markup.includes('Kinh tế lũy kế của show'),
   review:markup.includes('Sale 2.3'),mediaLinks:markup.includes('Tải về')};
+ const listening=markup.indexOf('data-report-player'),approval=markup.indexOf('Phê duyệt đề xuất');
+ checks.listenBeforeApproval=listening>=0&&approval>listening&&approval>markup.indexOf('Kinh tế lũy kế của show');
+ checks.approvalEnabled=markup.includes('action="/proposals/music/approve"');
+ const run=await readLiveRun(pool,'music',reportDay(null));
+ const campaign=run?.results?.DirectorFinal?.output?.campaigns?.find(item=>item.showId===show.id);
+ if(run?.status==='ready'&&campaign)checks.director={adAction:campaign.economicReview?.adAction,budgetVnd:campaign.proposedBudgetVnd,deadline:campaign.deadline};
+
  console.log('Music admin release check',JSON.stringify(checks));
 }
 async function handle(req,res){const path=new URL(req.url,'http://localhost').pathname;if(['/staff','/staff/login','/staff/task','/staff/crm','/staff/logout'].includes(path))return handleStaff(req,res,path);if(path==='/api/24h/messenger/webhook')return handleMessenger24(req,res);if(path==='/health'&&req.method==='GET'){await pool.query('select 1');res.writeHead(200,{'Content-Type':'text/plain','Cache-Control':'no-store'});return res.end('ok')}if(path==='/login'&&req.method==='POST')return login(req,res);const s=await session(req);if(!s)return html(res,loginPage(),path==='/'?200:401);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/show-media/'))return serveShowMedia(req,res);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/report-audio/')){
