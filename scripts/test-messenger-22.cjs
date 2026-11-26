@@ -45,6 +45,8 @@ test('private comment replies keep prices in Messenger by default',()=>{
 async function inbox(body,prior=[],paid=false,scenario={}){
  const rows=[...(scenario.fresh?[]:['Show Đình Dũng']),...prior,body].map((text,i,all)=>({id:i+1,body:text,external_message_id:'m_fixture_'+i,sender:i===0&&!scenario.fresh?'staff':'customer',staff_name:i===0?'EXTRA AI':null,created_at:new Date().toISOString()})).reverse();
  const posted=[];
+ const directOrder={code:'EX0000000000000001',status:'pending',showId:'dinh-dung-2811',venueId:'ccc',seats:['C19','C20'],amount:663100,expiresAt:new Date(Date.now()+900000).toISOString(),paidAt:null,payment:{bank:'ACB',account:'123456',holder:'FIXTURE',qr:'https://img.vietqr.io/image/ACB-123456-compact2.png?amount=663100&addInfo=EX0000000000000001&accountName=FIXTURE'}};
+ const directQuote={id:'fixture-quote',artist:'Đình Dũng',date:'2026-11-28',time:'19:30',venueName:'CCC Sa Pa',showId:'dinh-dung-2811',seats:['C19','C20'],giftSeats:[],amount:663100};
  const show={id:'dinh-dung-2811',url:page,artist:'Đình Dũng',title:'Đêm Đình Dũng',date:'2026-11-28',time:'19:30',venueId:'ccc',venueName:'CCC Sa Pa',prices:load("poster-offers").posterPrices["dinh-dung-2811"]};
  const modules={'server-only':{},'./staff-auth':{staffDb:async(path,options)=>{
    if(path.startsWith('show_landing_content?'))return [{setlist:scenario.setlist??''}];
@@ -64,8 +66,8 @@ async function inbox(body,prior=[],paid=false,scenario={}){
  './ai-comment-context':{getCommentContextForChat:async()=>scenario.fresh?null:({showId:show.id})},
  './ai-sales-checkout':{listAiSalesShows:async()=>[show,{...show,id:'thai-hoc-3112',artist:'Thái Học',venueId:'laocai',venueName:'Sân khấu Lào Cai',date:'2026-12-31'}, {...show,id:'khac-viet-2612',artist:'Khắc Việt',date:'2026-12-26',prices:load('poster-offers').posterPrices['khac-viet-2612']}],getAiLatestQuote:async()=>null,isAiPurchaseConfirmation:()=>false,
  getAiSeatSnapshot:async()=>({show,seats:load('venues').seatsFor('ccc'),taken:new Set()}),
- getAiOrderStatus:async()=>({code:'EX0000000000000000',status:'paid'}),getAiPaidTicketDelivery:async()=>({message:'Vé QR: https://iextra.net/ve?code=FIXTURE'})},
- 'ai':{ToolLoopAgent:class{async generate(){return {text:'Hạng C giá 399.000đ/vé. Mình xem ghế tại '+other+' nhé.'}}},tool:x=>x,isStepCount:()=>()=>false}};
+ getAiOrderStatus:async()=>scenario.direct?directOrder:({code:'EX0000000000000000',status:'paid'}),getAiPaidTicketDelivery:async()=>({message:'Vé QR: https://iextra.net/ve?code=FIXTURE'}),buildAiQuote:async()=>directQuote,reserveAiQuote:async(_context,_id,mode)=>{scenario.calls?.push(mode);if(scenario.direct==='not-ready')throw Error('AI_DETAILS_NOT_READY');return directOrder;},renderAiPaymentMessage:order=>'Em đã giữ ghế '+order.seats.join(', ')+' trong 15 phút. Tổng thanh toán: 663.100đ\nMã đơn: '+order.code+'\nQR: '+order.payment.qr},
+ 'ai':{ToolLoopAgent:class{constructor(opts){this.opts=opts;}async generate(){if(scenario.direct)await this.opts.tools.prepare_quote.execute({showId:'dinh-dung-2811',seats:['C19','C20'],name:'Khách mẫu',phone:'0900000000',email:'fixture@example.com',promotion:'couple5'});return {text:'Hạng C giá 399.000đ/vé. Mình xem ghế tại '+other+' nhé.'}}},tool:x=>x,isStepCount:()=>()=>false}};
  if(scenario.image)modules["./ai-sales-inbound-image"]={readMessengerImage:async()=>scenario.image};
  function dependency(id){
    if(Object.hasOwn(modules,id))return modules[id];
@@ -251,4 +253,17 @@ test('native reply points at a message; only explicit invalid targets permit a g
   failure='disconnect';await assert.rejects(sender.sendMessengerPageMessage('10000001','Answer',quote));assert.equal(received.length,4);
   failure={code:190,message:'Token invalid'};await assert.rejects(sender.sendMessengerPageMessage('10000001','Answer',quote));assert.equal(received.length,5);
  }finally{global.fetch=old;for(const [key,value] of Object.entries(originalEnv)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});
+
+test('direct checkout sends payment in the same turn after verified booking details, without a second confirmation',async()=>{
+ const calls=[];
+ const result=await inbox('fixture@example.com',['Chốt ghế C19 C20','Khách mẫu 0900000000'],false,{direct:true,calls});
+ assert.deepEqual(calls,['details']);
+ assert.match(result.join('\n'),/Thông tin đặt vé EXTRA[\s\S]*663\.100đ[\s\S]*EX0000000000000001/);
+ assert.doesNotMatch(result.join('\n'),/trả lời.*ĐỒNG Ý|chờ khách xác nhận|báo giá để xác nhận/iu);
+ const rejected=[];
+ const no=await inbox('fixture@example.com',[],false,{direct:'not-ready',calls:rejected});
+ assert.deepEqual(rejected,['details']);
+ assert.doesNotMatch(no.join('\n'),/Mã đơn:|img\.vietqr\.io|đã giữ ghế/iu);
+ assert.match(no.join('\n'),/muốn đặt đúng các ghế này/);
 });
