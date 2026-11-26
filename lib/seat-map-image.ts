@@ -61,8 +61,9 @@ export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},
  const {W,H,anchors,reference,rows,cells,w,h}=g;
  const name=venue==="ccc"?"CCC SA PA":"+1 EXTRA LÀO CAI";
  const size=Math.min(35,h*.62,w/2.45);
+ const mapColors={...zoneColors,A:"#f6b6be"}; // Pale red avoids confusing pen strokes with the seat fill.
  const labels=cells.map((c,i)=>{
-  const s=seats[i],blocked=snapshot?.taken.has(s.id),fill=blocked?"#737984":zoneColors[s.zone]||"#cbd5e1",fg=blocked||s.zone==="A"?"#ffffff":"#162032";
+  const s=seats[i],blocked=snapshot?.taken.has(s.id),fill=blocked?"#737984":mapColors[s.zone]||"#cbd5e1",fg=blocked?"#ffffff":"#162032";
   return '<g data-seat="'+esc(s.id)+'">'+rect(c.x-w/2,c.y-h/2,w,h,fill,'rx="5"')+vectorLabel(s.id,c.x,c.y-size/2,size,fg,"middle",w-8,1.25)+'</g>';
  }).join("");
  const rowLabels=rows.map(row=>{
@@ -78,7 +79,7 @@ export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},
  const bits=Array.from({length:32},(_,i)=>rect(bitStart+i*bitWidth,305,bitWidth,20,(parseInt(reference,16)>>> (31-i))&1?"#101010":"#ffffff")).join("");
  const legend=["A","B","C","D",...(snapshot?["X"]:[])].map((z,i,all)=>{
   const step=(W-160)/all.length,x=80+i*step,tag=z==="X"?"KHÔNG KHẢ DỤNG":(snapshot?.tierLabels?.[z]??"HẠNG "+z);
-  return rect(x,H-163,48,36,z==="X"?"#737984":zoneColors[z],'rx="4"')+vectorLabel(tag,x+60,H-156,27,"#162032","start",step-72);
+  return rect(x,H-163,48,36,z==="X"?"#737984":mapColors[z],'rx="4"')+vectorLabel(tag,x+60,H-156,27,"#162032","start",step-72);
  }).join("");
  const footer=snapshot?"TRẠNG THÁI LÚC "+snapshot.checkedAt+" · KIỂM TRA LẠI TRƯỚC KHI ĐẶT":"SƠ ĐỒ BỐ TRÍ GHẾ · Chưa thể hiện ghế trống";
  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" data-map-reference="'+reference+'">'+
@@ -89,7 +90,7 @@ export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},
  markers+bits+vectorLabel("MAP "+reference,W/2,276,24,"#162032","middle")+
  stage+labels+rowLabels+legend+
  vectorLabel(footer,W/2,H-92,25,"#526076","middle",W-120)+
- vectorLabel("CHẤM BÚT XANH DƯƠNG VÀO Ô GHẾ · GIỮ 4 MỐC HỒNG TRONG ẢNH",W/2,H-43,24,"#162032","middle",W-120)+
+ vectorLabel("CHẤM HOẶC KHOANH GHẾ MUỐN CHỌN",W/2,H-43,24,"#162032","middle",W-120)+
  '</svg>';
 }
 function components(mask:Uint8Array,width:number,height:number,min:number){
@@ -106,7 +107,7 @@ function components(mask:Uint8Array,width:number,height:number,min:number){
  return out;
 }
 // Independent pixel verification: the reference is decoded from the image itself;
-// blue marks are located relative to four printed magenta registration markers.
+// Colored dots and closed single-seat circles are located relative to printed registration markers.
 export function readSeatMapMarks(rgb:Uint8Array,width:number,height:number):MapMarks|null{
  if(width<250||height<250||rgb.length!==width*height*3||width*height>6000000)return null;
  const pink=new Uint8Array(width*height);
@@ -127,12 +128,16 @@ export function readSeatMapMarks(rgb:Uint8Array,width:number,height:number):MapM
   for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){const px=Math.round(c.x)+xx,py=Math.round(c.y)+yy;if(px<0||px>=width||py<0||py>=height)return null;const k=(py*width+px)*3;sum+=(rgb[k]+rgb[k+1]+rgb[k+2])/3;n++;}
   const v=sum/n;if(v>90&&v<165)return null;hash=((hash<<1)|(v<=90?1:0))>>>0;
  }
- const blue=new Uint8Array(width*height);
+ const ink=new Uint8Array(width*height);
  for(let y=Math.ceil(tl.y);y<=Math.floor(bl.y)&&y<height;y++)for(let x=Math.ceil(tl.x);x<=Math.floor(tr.x)&&x<width;x++){
   if(x<0||y<0)continue;const i=y*width+x,r=rgb[i*3],g=rgb[i*3+1],b=rgb[i*3+2];
-  if(b>135&&b>r*1.45+25&&b>g*1.25+25)blue[i]=1;
+  // Distinguish strong annotation colors from the printed pastel seat colors.
+  const blue=b>135&&b>r*1.45+25&&b>g*1.25+25;
+  const red=r>155&&r-g>120&&r-b>120&&g<35&&b<38;
+  const green=g>110&&g>r*1.45+25&&g>b*1.45+25;
+  if(blue||red||green)ink[i]=1;
  }
- const marks=components(blue,width,height,4);
+ const marks=components(ink,width,height,4);
  if(marks.length>20||marks.some(m=>m.w>dx*.08||m.h>dy*.08))return null;
  return {venue,reference:hash.toString(16).toUpperCase().padStart(8,"0"),points:marks.map(m=>fromPixel(m.x,m.y))};
 }
