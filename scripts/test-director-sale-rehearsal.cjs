@@ -50,3 +50,17 @@ test('Sale exercises the selected sample policy without a model or a real order'
   assert.equal(exerciseRetailSample({...sample,rules:sample.rules.filter(rule=>rule!=='confirm_quantity')}).passed,false);
   assert.equal(retailSampleSchema.safeParse({...sample,stock:1}).success,false);
 });
+
+test('Sale reviews only anonymous daily Music cohorts and scopes contact/payment repair',()=>{
+ const {musicAuditInput,reviewMusicAudit}=require('../lib/extra-os/music-sale-audit.ts');
+ const row={showId:'show',day:'2026-11-26',inquiryChats:12,engagedChats:10,quotedChats:7,checkoutChats:4,paidChats:2,repeatedContactChats:2,paidRepromptChats:1};
+ const input={day:row.day,rows:[row]};
+ const report=reviewMusicAudit(musicAuditInput.parse(input));
+ assert.equal(report.reviews[0].findings.length,6);
+ assert.match(report.reviews[0].findings.join(' '),/chỉ hỏi đúng trường thiếu/);
+ assert.match(report.reviews[0].findings.join(' '),/chính đơn đó đã trả tiền/);
+ assert.equal(musicAuditInput.safeParse({...input,rows:[{...row,paidChats:5}]}).success,false);
+ assert.equal(musicAuditInput.safeParse({...input,rows:[{...row,email:'private'}]}).success,false);
+ assert.equal(musicAuditInput.safeParse({...input,rows:[row,row]}).success,false);
+ assert.equal(musicAuditInput.safeParse({...input,day:'2026-11-25'}).success,false);
+});

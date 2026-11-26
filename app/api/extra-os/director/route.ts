@@ -3,6 +3,8 @@ import { generateText, Output } from "ai";
 import { AI_SALES_MODEL } from "../../../../lib/ai-sales-policy";
 import { buildRetailRehearsal, exerciseRetailSample, rehearsalAnswerSchema, retailRehearsalSchema, retailSampleSchema, scoreRetailRehearsal } from "../../../../lib/extra-os/sale-rehearsal";
 
+import {musicAuditInput,reviewMusicAudit} from "../../../../lib/extra-os/music-sale-audit";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,11 @@ export async function POST(req: Request) {
   }
   const respond = (status: string, report: object) =>
     Response.json({...envelope,status,report},{headers:responseHeaders});
+  if(job.kind==="music_conversation_audit"){
+    const input=musicAuditInput.safeParse(job.input);
+    if(!input.success)return Response.json({error:"invalid_music_audit"},{status:400,headers:responseHeaders});
+    return respond("succeeded",reviewMusicAudit(input.data));
+  }
   if (job.kind === "retail_sample") {
     const sample = retailSampleSchema.safeParse(job.input);
     if (!sample.success) return Response.json({error:"invalid_sample"},{status:400,headers:responseHeaders});
