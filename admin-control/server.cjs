@@ -6,7 +6,7 @@ const {parseShowIntake,prepareShow}=require('./marketing-show-intake.ts');
 const {agents,jobDefinitions,planMarketing,planStaffWork,analyzeInternalPlans,executeAnalystPlan}=require('./marketing-director.ts');
 const {departmentLabels}=require('./marketing-workspace.ts');
 const {initDirectorQueue,queueDirector,listRuns,revise,restoreKnowledge,startDirectorWorker}=require('./director-queue.cjs');
-const {uuid,readRetailBrief,definitions,review,makeExecutor}=require('./director-program.cjs');
+const {uuid,readRetailBrief,definitions,review,makeExecutor,permissionLabels}=require('./director-program.cjs');
 const {renderDirector,directorCss}=require('./director-ui.cjs');
 const {sampleBrief,sampleReleaseRequestId}=require('./director-sample.cjs');
 const {makeConnectors}=require('./director-connectors.cjs');
@@ -208,8 +208,8 @@ async function handleDirector(res,path,f){
  }
  return invalid(404);
 }
-// Report only task counts and demo-receipt presence, never contact data or credentials.
-async function observeSampleRun(id){
+// Log only allowlisted task names and reason codes from an isolated sample.
+async function observeSampleRun(id,once=false){
  let previous='';
  for(let n=0;n<40;n++){
   const snapshot=await listRuns(pool,id);
@@ -217,10 +217,18 @@ async function observeSampleRun(id){
   const counts={queued:0,running:0,reported:0,accepted:0,blocked:0,failed:0};
   for(const job of snapshot.jobs)if(Object.hasOwn(counts,job.status))counts[job.status]++;
   const report=snapshot.jobs.find(job=>job.kind==='report'&&job.status==='accepted')?.result;
-  const state={...counts,total:snapshot.jobs.length,receipt:Boolean(report?.sample?.receipt)};
+   const knownKinds=new Set(definitions(sampleBrief).map(job=>job.kind));
+  const reasonCode=issue=>Object.hasOwn(permissionLabels,issue)?issue:
+   issue==='Đầu việc phụ thuộc đang chờ hoặc đã thất bại'?'dependency':
+   issue==='Hết hạn thực thi'?'deadline':
+   issue==='Bộ thực thi tạm thời không phản hồi'?'executor_unavailable':'review_or_other';
+  const blockedTasks=snapshot.jobs.filter(job=>knownKinds.has(job.kind)&&['blocked','failed'].includes(job.status))
+   .map(job=>({kind:job.kind,status:job.status,reasons:[...new Set(job.issues.map(reasonCode))],
+    dependencies:job.needs.filter(kind=>knownKinds.has(kind)&&snapshot.jobs.some(other=>other.kind===kind&&other.status!=='accepted'))}));
+  const state={...counts,total:snapshot.jobs.length,receipt:Boolean(report?.sample?.receipt),blockedTasks};
   const line=JSON.stringify(state);
   if(line!==previous){console.log('24H sample progress',id,line);previous=line;}
-  if(snapshot.jobs.length>0&&counts.queued+counts.running+counts.reported===0)return;
+  if(once||(snapshot.jobs.length>0&&counts.queued+counts.running+counts.reported===0))return;
   await new Promise(resolve=>setTimeout(resolve,15000).unref());
  }
 }
@@ -235,10 +243,14 @@ init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>init
   }
  });
  const server=http.createServer((req,res)=>handle(req,res).catch(e=>{console.error('Request failed',e.code||e.name);if(!res.headersSent)html(res,'<main>Không xử lý được yêu cầu. <a href="/">Quay lại</a></main>',400);else res.end()}));server.requestTimeout=20000;server.headersTimeout=10000;server.listen(port,'0.0.0.0',()=>{console.log('EXTRA OS staging ready');
-  startupSaleCheck().catch(()=>console.error('Sale connection check could not be recorded'));
-  if(process.env.RAILWAY_ENVIRONMENT_NAME==='staging'&&process.env.RAILWAY_SERVICE_NAME==='admin-web'){
-   queueDirector(pool,sampleReleaseRequestId,sampleBrief,definitions(sampleBrief))
-    .then(id=>{console.log('24H sample run available',id);return observeSampleRun(id)})
-    .catch(error=>console.error('24H sample could not be scheduled',error.code||error.name));
-  }
+  startupSaleCheck().then(async()=>{
+   if(process.env.RAILWAY_ENVIRONMENT_NAME!=='staging'||process.env.RAILWAY_SERVICE_NAME!=='admin-web')return;
+   const {rows:[previous]}=await pool.query('select id from os_director_runs where request_id=$1 and input->>\'mode\'=\'sample\'',[sampleReleaseRequestId]);
+   if(previous)await observeSampleRun(previous.id,true);
+   // One fresh, deduplicated release rehearsal after the Sale startup check. Keep earlier evidence.
+   const retryRequestId='b8bd8842-8ea4-4b28-9b7d-31e372e58461';
+   const id=await queueDirector(pool,retryRequestId,sampleBrief,definitions(sampleBrief));
+   console.log('24H sample run available',id);
+   return observeSampleRun(id);
+  }).catch(error=>console.error('24H sample or Sale startup check could not complete',error.code||error.name));
  });process.on('SIGTERM',()=>server.close(()=>stopWorker().finally(()=>pool.end()).finally(()=>process.exit(0))))}).catch(e=>{console.error('Database initialization failed',e.code||e.name);process.exit(1)});
