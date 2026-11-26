@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "feature/extra-os-v1.1": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/ai-sales",

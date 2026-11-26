@@ -77,14 +77,4 @@ function renderRetailDaily(report,day,esc){
  const rows=r.records.map(a=>'<tr><td>'+esc(a.product)+'</td><td>'+esc(money(a.metrics.netRevenueVnd))+'</td><td>'+esc(money(a.metrics.expenseVnd))+'</td><td>'+esc(money(a.metrics.profitVnd))+'</td><td>'+esc(money(a.deltaRevenue))+'</td><td>'+esc(money(a.deltaCost))+'</td><td>'+esc(fmt(a.deltaOrders))+'</td><td>'+esc(timeVN(a.recordedAt))+'</td></tr>').join('');
  return layout('Báo cáo 24H',day,'<section><h2>Doanh thu cửa hàng</h2><div class="grid">'+card('Doanh thu ngày từ Sapo FnB','Chưa kết nối',esc)+card('Đơn thanh toán từ Sapo FnB','Chưa kết nối',esc)+card('Chi phí và lợi nhuận thực tế','Chưa có đối soát',esc)+'</div><p>Đang chờ API FnB. Không lấy số liệu mẫu, kế hoạch hoặc Sapo Web làm số thực tế.</p></section><section><h2>Hoạt động nội bộ EXTRA OS</h2><div class="grid">'+card('Chiến dịch nội bộ tạo trong ngày',fmt(r.created),esc)+card('Lượt nhiệm vụ nghiệm thu',fmt(r.accepted),esc)+card('Lượt nhiệm vụ bị chặn',fmt(r.blocked),esc)+card('Lượt nhiệm vụ thất bại',fmt(r.failed),esc)+card('Hội thoại ghi nhận qua webhook',fmt(r.crm?.threads),esc)+card('Tin có ý định mua',fmt(r.crm?.sale_intents),esc)+'</div><p>Không tính lượt chạy mẫu. Số liệu hội thoại chỉ là sự kiện đã nhận, không khẳng định toàn bộ inbox.</p></section><section><h2>Đối soát nội bộ theo chiến dịch</h2><p>Lũy kế do người phụ trách ghi nhận đến ngày chọn. Chênh lệch chỉ hiện nếu có bản ghi của hai ngày liên tiếp và không giảm; không cộng chiến dịch vì có thể trùng đơn. Chưa phải doanh thu ngày của toàn cửa hàng.</p>'+(rows?'<div class="scroll"><table><thead><tr><th>Sản phẩm</th><th>Doanh thu lũy kế</th><th>Chi phí lũy kế</th><th>Lãi/lỗ ghi nhận</th><th>Chênh doanh thu</th><th>Chênh chi phí</th><th>Chênh số đơn</th><th>Ngày ghi nhận</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p>Chưa có bản đối soát cho ngày này.</p>')+'</section>',esc);
 }
-async function verifyMusicFinance(env=process.env,request=fetch){
- const token=env.EXTRA_OS_MUSIC_REPORT_READ_TOKEN??'';
- if(!/^[a-f0-9]{64}$/.test(token))return {configured:false};
- const [read,noKey,write]=await Promise.all([
-  getMusicFinance(),
-  request(endpoint,{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000)}).then(r=>r.status).catch(()=>null),
-  request(endpoint,{method:'POST',redirect:'error',headers:{'x-extra-music-report-key':token},signal:AbortSignal.timeout(10000)}).then(r=>r.status).catch(()=>null)
- ]);
- return {configured:true,status:read.status,rows:read.data?.rows.length??0,unauthorizedStatus:noKey,writeRejectedStatus:write};
-}
-module.exports={reportDay,musicDay,parseMusicFinance,createMusicFinanceReader,getMusicFinance,readRetailDaily,renderMusicDaily,renderRetailDaily,verifyMusicFinance};
+module.exports={reportDay,musicDay,parseMusicFinance,createMusicFinanceReader,getMusicFinance,readRetailDaily,renderMusicDaily,renderRetailDaily};

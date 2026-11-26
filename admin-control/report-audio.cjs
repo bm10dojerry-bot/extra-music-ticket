@@ -42,11 +42,11 @@ async function renderAudio(pool,key,apiKey,request=fetch){
   })().finally(()=>inFlight.delete(key));
   inFlight.set(key,pending);return pending;
 }
-async function serveAudio(req,res,pool,key){
+async function serveAudio(req,res,pool,key,apiKey=process.env.EXTRA_OS_OPENAI_API_KEY,request=fetch){
   const fail=(status)=>{res.writeHead(status,{'Cache-Control':'no-store'});res.end();};
   if(!/^[a-f0-9]{64}$/.test(key))return fail(404);
   let data;
-  try{data=await renderAudio(pool,key,process.env.EXTRA_OS_OPENAI_API_KEY);}
+  try{data=await renderAudio(pool,key,apiKey,request);}
   catch(error){console.warn('Report audio unavailable',error.message.match(/^speech_http_\d{3}$/)?.[0]??'speech_unavailable');return fail(503);}
   if(!data)return fail(404);
   const headers={'Content-Type':'audio/mpeg','Accept-Ranges':'bytes','Cache-Control':'private, max-age=86400','X-Content-Type-Options':'nosniff'};

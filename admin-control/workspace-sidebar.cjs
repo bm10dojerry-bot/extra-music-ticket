@@ -7,6 +7,8 @@ const sections = {
 const platforms = [['24h', '24H'], ['music', 'Music']];
 const pages = Object.keys(sections).flatMap(section => platforms.map(([id]) => section + '/' + id));
 
+const {visibleModules} = require('./v11-views.cjs');
+
 const chart = '<path d="M4 3v18h17M8 16v-5m5 5V7m5 9V4"/>';
 const groups = [
   ['TỔNG QUAN', [
@@ -26,20 +28,25 @@ const groups = [
   ]],
 ];
 
-function renderSidebar(active = 'home') {
-  if (active !== 'home' && !pages.includes(active)) throw Error('Unknown workspace page');
+function renderSidebar(active = 'home', {actor} = {}) {
+  if (active !== 'home' && !pages.includes(active) && !active.startsWith('/v11')) throw Error('Unknown workspace page');
   const root = active === 'home' ? '' : '/';
   const groupStart = active === 'home' ? null : '/' + active.split('/')[1] + '/24h';
-  const nav = groups.map(([title, items]) => {
+  const legacyGroups = !actor || actor.role === 'OWNER' ? groups : [];
+  const v11 = visibleModules(actor);
+  const newItems = v11.map(({path,title})=>[path,title,chart]);
+  const navigation = v11.length ? [...legacyGroups,['EXTRA OS V1.1',newItems]] : legacyGroups;
+  const nav = navigation.map(([title, items]) => {
     const links = items.map(([path, label, icon]) => {
       const href = path.startsWith('#') ? root + path : path;
-      const current = path === groupStart ? ' aria-current="location"' : '';
-      return '<a href="' + href + '"' + current + '><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      const current = path === groupStart || (path.startsWith('/v11') && path.split('?')[0] === active) ? ' aria-current="location"' : '';
+      return '<a href="' + href.replaceAll('&','&amp;') + '"' + current + '><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
         icon + '</svg><span>' + label + '</span><span class="nav-arrow" aria-hidden="true">›</span></a>';
     }).join('');
     return '<div class="nav-group"><div class="menu-label">' + title + '</div>' + links + '</div>';
   }).join('');
-  return '<aside class="os-sidebar"><a class="os-brand" href="' + root + '#overview"><span class="os-mark">+1</span><span><strong>EXTRA <span class="os-accent">OS</span></strong><small>ADMIN WORKSPACE</small></span></a>' +
+  const overview = actor && actor.role !== 'OWNER' ? '/v11' : root + '#overview';
+  return '<aside class="os-sidebar"><a class="os-brand" href="' + overview + '"><span class="os-mark">+1</span><span><strong>EXTRA <span class="os-accent">OS</span></strong><small>ADMIN WORKSPACE</small></span></a>' +
     '<nav aria-label="Menu điều hành">' + nav + '</nav><div class="os-sidebar-foot">STAGING · Hệ thống độc lập</div></aside>';
 }
 

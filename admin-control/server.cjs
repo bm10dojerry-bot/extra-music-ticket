@@ -15,7 +15,7 @@ const {renderSidebar,renderPlatformTabs,pages:workspacePages}=require('./workspa
 const {musicOverview}=require('./music-overview.cjs');
 const {initDailyDirector,readApprovals,startApprovedWorker,proposalPlatform,proposalUrl,proposalPeriodValue}=require('./daily-director.cjs');
 const {initLiveDirector,readLiveRun,startLiveDirector,renderLiveDirector,roleNames}=require('./live-director.cjs');
-const {reportDay,getMusicFinance,readRetailDaily,renderMusicDaily,renderRetailDaily,verifyMusicFinance}=require('./daily-reports.cjs');
+const {reportDay,getMusicFinance,readRetailDaily,renderMusicDaily,renderRetailDaily}=require('./daily-reports.cjs');
 const {initMedia}=require('./director-media.cjs');
 const {initCrm,messengerWebhook}=require('./director-crm.cjs');
 const {parseFinance,initDirectorFinance,saveFinance,listFinance,renderFinance}=require('./director-finance.cjs');
@@ -26,13 +26,17 @@ const {initShowApprovals,proposalState,readShowApproval,approvalPanel,approveSho
 const {getMusicSignals}=require('./music-signals.cjs');
 const {serveShowMedia}=require('./show-media.cjs');
 const {initAudio,saveTracks,serveAudio,playerHtml,scriptHash}=require('./report-audio.cjs');
+const {checkDeployment,migrateV11,recordAudit,transaction,staging}=require('./v11-core.cjs');
+const {setupOwner,authenticate,currentActor}=require('./v11-auth.cjs');
+const {seedCategories}=require('./v11-costs.cjs');
+const {monitorAds}=require('./v11-ads.cjs');
+const {startGoals,meteredModelRequest}=require('./v11-director.cjs');
+const {makeWorkspace,styles:v11Styles,speechHash,cameraPlayerHash}=require('./v11-workspace.cjs');
 const port=Number(process.env.PORT||3000);
 const password=process.env.ADMIN_BOOTSTRAP_PASSWORD||'';
 const db=process.env.DATABASE_URL||'';
 if(password.length<24||!db) throw Error('Admin credentials or database missing');
-const dbUrl=new URL(db);
-if(!dbUrl.hostname.endsWith('.railway.internal')) throw Error('Only isolated Railway database permitted');
-if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_URL','SEPAY_WEBHOOK_KEY','META_CAPI_ACCESS_TOKEN','EXTRA_OS_META_PAGE_TOKEN','EXTRA_OS_META_ADS_TOKEN'].some(k=>process.env[k])) throw Error('Music or live provider credentials forbidden');
+checkDeployment(process.env);
 const pool=new Pool({connectionString:db,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});
 const handleMessenger24=messengerWebhook(pool);
 const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -54,9 +58,10 @@ const platformTabCss=`
 .platform-tabs a:focus-visible,.report-overview-link:focus-visible{outline:2px solid #ac2334;outline-offset:-2px}
 .report-overview-link{padding:8px 4px}
 `;
-function html(res,body,status=200,audio=false){res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':(audio?"script-src 'sha256-"+scriptHash+"'; media-src 'self'; ":"")+"default-src 'none'; img-src 'self' https://iextra.net https://fokntdvgzfldxbaglrdc.supabase.co; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EXTRA OS</title><style>'+css+directorCss+platformTabCss+'</style>'+body+'</html>')}
+function html(res,body,status=200,audio=false,media=false){res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':(media==='camera'?"script-src 'self' 'sha256-"+cameraPlayerHash+"'; connect-src 'self'; media-src 'self' blob:; ":
+ (audio||media?"script-src "+[audio&&scriptHash,media&&speechHash].filter(Boolean).map(value=>"'sha256-"+value+"'").join(' ')+"; media-src 'self'; ":""))+"default-src 'none'; img-src 'self' https://iextra.net https://fokntdvgzfldxbaglrdc.supabase.co; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EXTRA OS</title><style>'+css+directorCss+platformTabCss+v11Styles+'</style>'+body+'</html>')}
 const redirect=(res,to,cookie)=>{res.writeHead(303,{'Location':to,'Cache-Control':'no-store',...(cookie?{'Set-Cookie':cookie}:{})});res.end()};
-const cookie=(v,age)=>'__Host-extra_os='+v+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+age;
+const cookie=(v,age)=>'__Host-extra_os_v11='+v+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+age;
 async function form(req){if(!String(req.headers['content-type']).startsWith('application/x-www-form-urlencoded'))throw Error('Invalid form');let n=0, chunks=[];for await(const c of req){n+=c.length;if(n>32000)throw Error('Form too large');chunks.push(c)}return new URLSearchParams(Buffer.concat(chunks).toString())}
 const staffPageTools={esc,csrfField};
 const pageNumber=value=>/^\d{1,6}$/.test(value||'')&&Number(value)>0?Number(value):1;
@@ -69,11 +74,44 @@ const crm={
  update:(res,session,fields)=>updateCrm(res,fields,session.staff_id)
 };
 const handleStaff=makeStaffPortal(pool,{form,eq,esc,html,redirect,statusLabels,csrfField,crm});
-async function session(req){const v=String(req.headers.cookie||'').match(/(?:^|;\s*)__Host-extra_os=([a-f0-9]{64})(?:;|$)/)?.[1];if(!v)return null;const {rows}=await pool.query('select token_hash,csrf from os_sessions where token_hash=$1 and expires_at>now()',[hash(v)]);return rows[0]||null}
+async function session(req){
+ const value=String(req.headers.cookie||'').match(/(?:^|;\s*)__Host-extra_os_v11=([a-f0-9]{64})(?:;|$)/)?.[1];
+ return value ? currentActor(pool,hash(value)) : null;
+}
+const v11=makeWorkspace(pool,{html,redirect,form,eq,csrfField});
+const modelRequest=meteredModelRequest(pool,process.env);
 async function audit(client,event,details){await client.query('insert into os_audit(event,details) values($1,$2)',[event,JSON.stringify(details)])}
 async function init(){await pool.query('create table if not exists os_sessions(token_hash text primary key,csrf text not null,expires_at timestamptz not null);create table if not exists os_shows(id uuid primary key,request_id uuid not null unique,intake jsonb not null,finance jsonb not null,created_at timestamptz default now());create table if not exists os_jobs(show_id uuid references os_shows(id),kind text,agent text,definition jsonb,status text not null,note text not null,primary key(show_id,kind));create table if not exists os_tasks(show_id uuid references os_shows(id),key text,definition jsonb,status text not null default \'pending\',note text not null default \'\',primary key(show_id,key));create table if not exists os_audit(id bigint generated always as identity primary key,event text,details jsonb,created_at timestamptz default now());create table if not exists os_login_rate(bucket bigint primary key,attempts integer not null);create table if not exists os_retail_plans(id uuid primary key,request_id uuid not null unique,intake jsonb not null,created_at timestamptz not null default now());')}
-async function login(req,res){const f=await form(req);const bucket=Math.floor(Date.now()/300000);const {rows}=await pool.query('insert into os_login_rate(bucket,attempts) values($1,1) on conflict(bucket) do update set attempts=os_login_rate.attempts+1 returning attempts',[bucket]);if(rows[0].attempts>12)return html(res,'<main>Quá nhiều lần thử. Vui lòng thử lại sau 5 phút.</main>',429);if(!eq(f.get('password')||'',password))return html(res,loginPage('Mật khẩu không đúng.'),401);const t=token();await pool.query('delete from os_sessions where expires_at<=now()');await pool.query('insert into os_sessions values($1,$2,now()+interval \'8 hours\')',[hash(t),token()]);await audit(pool,'login',{});redirect(res,'/',cookie(t,28800))}
-function loginPage(msg=''){return '<main class="login"><section><div class="brand"><b>+1</b> EXTRA <span class="os-accent">OS</span></div><h1>Đăng nhập quản trị</h1><p>Trang quản trị EXTRA OS.</p><p>'+esc(msg)+'</p><form method="post" action="/login"><label>Mật khẩu quản trị<input name="password" type="password" autocomplete="current-password" required></label><button>Đăng nhập</button></form></section></main>'}
+async function login(req,res){
+ if(req.headers['sec-fetch-site']==='cross-site')return html(res,loginPage(),403);
+ const fields=await form(req);
+ const username=(fields.get('username')||'owner').trim().toLowerCase().slice(0,64);
+ const bucket=Math.floor(Date.now()/300000);
+ const {rows:[limit]}=await pool.query('insert into os_login_rate(bucket,attempts) values($1,1) on conflict(bucket) do update set attempts=os_login_rate.attempts+1 returning attempts',[bucket]);
+ if(limit.attempts>120)return html(res,loginPage('Quá nhiều lần thử. Vui lòng thử lại sau 5 phút.'),429);
+ const {rows:[rate]}=await pool.query(`insert into os_v11_signin_rate(bucket,identity_hash,attempts) values($1,$2,1)
+  on conflict(bucket,identity_hash) do update set attempts=os_v11_signin_rate.attempts+1 returning attempts`,[bucket,hash(username)]);
+ if(rate.attempts>12)return html(res,loginPage('Quá nhiều lần thử. Vui lòng thử lại sau 5 phút.'),429);
+ const actorId=await authenticate(pool,username,fields.get('password'));
+ if(!actorId)return html(res,loginPage('Tên đăng nhập hoặc mật khẩu không đúng.'),401);
+ const value=token();
+ await transaction(pool,async client=>{
+  await client.query('delete from os_v11_sessions where expires_at<=now()');
+  await client.query('delete from os_v11_signin_rate where bucket<$1',[bucket-12]);
+  await client.query('delete from os_login_rate where bucket<$1',[bucket-12]);
+  await client.query("insert into os_v11_sessions(token_hash,csrf,actor_id,expires_at) values($1,$2,$3,now()+interval '8 hours')",[hash(value),token(),actorId]);
+  await audit(client,'login',{actorId});
+  await recordAudit(client,{id:actorId},'access.login');
+ });
+ return redirect(res,username==='owner'?'/':'/v11',cookie(value,28800));
+}
+function loginPage(msg=''){
+ return '<main class="login"><section><div class="brand"><b>+1</b> EXTRA <span class="os-accent">OS</span></div>'+
+ '<h1>Đăng nhập EXTRA OS</h1><p>'+esc(msg)+'</p><form method="post" action="/login">'+
+ '<label>Tên đăng nhập<input name="username" autocomplete="username" value="owner" required></label>'+
+ '<label>Mật khẩu<input name="password" type="password" autocomplete="current-password" required></label>'+
+ '<button>Đăng nhập</button></form><p><a href="/v11/activate">Kích hoạt tài khoản</a> · <a href="/staff">Cổng công việc V1.0</a></p></section></main>';
+}
 async function dispatchAnalystPlan(c,id,input,finance,now){
  const definition={kind:'analyst_plan',agent:'Analyst',dependencies:[],run_at:now.toISOString(),priority:80,scope:'internal_plan'};
  const result=executeAnalystPlan(input,finance);
@@ -133,12 +171,12 @@ async function directorSaleCheck(){
  return status;
 }
 async function startupSaleCheck(){for(let n=0;n<4;n++){if(await directorSaleCheck()==='succeeded')return;if(n<3)await new Promise(r=>setTimeout(r,15000));}}
-async function dashboard(res,s,reportPage=1,directorRun=null,selectedShow=null){const [snapshot,finance,directorState]=await Promise.all([getMusicSnapshot(),getMusicFinance(),listRuns(pool,directorRun)]);const reportHtml=await reportsPanel(reportPage,finance);const overview=musicOverview(snapshot,finance,reportDay(null),selectedShow,esc);const [{rows:shows},{rows:jobs},{rows:tasks},{rows:logs}]=await Promise.all([pool.query('select * from os_shows order by created_at desc limit 50'),pool.query('select * from os_jobs order by show_id,kind limit 1000'),pool.query('select * from os_tasks order by show_id,key limit 1000'),pool.query('select event,created_at from os_audit order by id desc limit 20')]);const saleCheck=(await pool.query("select details,created_at from os_audit where event='director.sale.connection_check' order by id desc limit 1")).rows[0];const saleLinkHtml=(saleCheck?'<p><small>'+esc(saleCheck.details.reason)+' · '+esc(new Date(saleCheck.created_at).toISOString())+'</small></p>':'<p><small>Chưa có kết quả kiểm tra hai chiều.</small></p>')+'<form action="/sale-check" method="post">'+csrfField(s)+'<button>Director: Kiểm tra kết nối AI Sale</button></form>';const campaign=directorState.selected;const financeHtml=campaign&&campaign.input.mode!=='sample'?renderFinance(campaign,await listFinance(pool,campaign.id),{esc,money,csrfField,s,requestId:crypto.randomUUID()}):'';const director=renderDirector(directorState,{esc,money,csrfField,s,agents,saleLinkHtml,requestId:crypto.randomUUID(),sampleRequestId:crypto.randomUUID(),financeHtml});const retailHtml=await retailPanel(s,director.retail);const field=(k,l,v=0)=>formField(k,l,'number',v);let body='<header><div class="brand"><b>+1</b> EXTRA <span class="os-accent">OS</span> · ADMIN</div><form action="/logout" method="post">'+csrfField(s)+'<button>Đăng xuất</button></form></header><div class="os-layout">'+renderSidebar()+'<main class="os-content"><p class="tag os-status">STAGING · Dữ liệu riêng · Không chạy quảng cáo hoặc thanh toán thật</p><div class="os-panel" id="overview"><h1>Trung tâm điều hành</h1>'+overview+'<div class="grid"><div class="tile">Show nội bộ<strong>'+shows.length+'</strong><small>Tối đa 50 show gần nhất</small></div><div class="tile">Nhiệm vụ đã lập<strong>'+tasks.length+'</strong><small>Tối đa 1.000 mục</small></div><div class="tile">Doanh thu vé Music hôm nay<strong>'+esc(finance.data?money(finance.data.rows.reduce((sum,r)=>sum+(r.days[reportDay(null)]?.revenueVnd??0),0)):'Chưa có dữ liệu')+'</strong><small>Tổng các show · đơn đã thanh toán</small></div></div><p><a href="#reports">Mở tổng quan báo cáo ›</a></p></div>'+reportHtml+'<section class="os-panel" id="platforms"><h2>Nền tảng</h2><div class="grid"><div class="tile">Music<strong>Lịch show · chỉ đọc</strong><small>Báo cáo và lịch show chỉ đọc; không mở bán.</small><p><a href="/reports/music">Báo cáo Music theo ngày ›</a> · <a href="/music">Lịch show và số ghế</a></p></div><div class="tile">24H<strong>24h EXTRA</strong><small>Page ID: 1413936608477545 · Đã xác nhận Page trên Windsor · Tài khoản quảng cáo Lào Cai: 1915621506464312 (dùng chung với Music, phân tách chiến dịch) · Chờ tích hợp thực thi và API Sapo.</small><p><a href="/reports/24h">Báo cáo 24H theo ngày ›</a></p><p><a href="https://www.facebook.com/profile.php?id=1413936608477545" target="_blank" rel="noopener noreferrer">Mở Page 24H</a></p></div><div class="tile">EXTRA OS<strong>Staging</strong><small>PostgreSQL riêng.</small></div></div></section><section class="os-panel" id="oneclick"><h2>ONE CLICK MUSIC · Lập kế hoạch show nội bộ</h2><p>Kế thừa logic EXTRA OS hiện có. Giá và doanh thu là dự tính; chưa kiểm chứng sơ đồ ghế. Không mở bán.</p><form action="/show" method="post">'+csrfField(s)+'<input type="hidden" name="request_id" value="'+crypto.randomUUID()+'"><div class="grid">'+formField('artist','Nghệ sĩ')+formField('startsAt','Ngày giờ diễn (Việt Nam)','datetime-local')+formField('venue','Địa điểm')+field('capacity','Sức chứa',550)+field('bookingVnd','Cát-xê')+field('productionVnd','Chi phí tổ chức')+field('adsVnd','Ngân sách quảng cáo dự kiến')+field('printingVnd','In ấn')+field('otherVnd','Chi phí khác')+field('startingPriceVnd','Giá vé khởi điểm',199000)+field('targetProfitVnd','Lợi nhuận mục tiêu')+'</div>'+formField('mediaDriveUrl','Link Drive tư liệu','url')+'<label>Danh sách bài hát<textarea name="setlist" required></textarea></label><label><span><input type="checkbox" name="artistConfirmed" required> Đã xác nhận nghệ sĩ</span></label><label><span><input type="checkbox" name="mediaRightsConfirmed" required> Đã xác nhận quyền tư liệu</span></label><button>Tạo kế hoạch và giao việc nội bộ</button></form></section>'+retailHtml+'<section class="os-panel" id="shows"><h2>Show và công việc</h2><p><a href="/staff/access">Quản lý truy cập nhân sự</a> · <a href="/staff">Cổng nhân sự staging</a></p>';
+async function dashboard(res,s,reportPage=1,directorRun=null,selectedShow=null){const [snapshot,finance,directorState]=await Promise.all([getMusicSnapshot(),getMusicFinance(),listRuns(pool,directorRun)]);const reportHtml=await reportsPanel(reportPage,finance);const overview=musicOverview(snapshot,finance,reportDay(null),selectedShow,esc);const [{rows:shows},{rows:jobs},{rows:tasks},{rows:logs}]=await Promise.all([pool.query('select * from os_shows order by created_at desc limit 50'),pool.query('select * from os_jobs order by show_id,kind limit 1000'),pool.query('select * from os_tasks order by show_id,key limit 1000'),pool.query('select event,created_at from os_audit order by id desc limit 20')]);const saleCheck=(await pool.query("select details,created_at from os_audit where event='director.sale.connection_check' order by id desc limit 1")).rows[0];const saleLinkHtml=(saleCheck?'<p><small>'+esc(saleCheck.details.reason)+' · '+esc(new Date(saleCheck.created_at).toISOString())+'</small></p>':'<p><small>Chưa có kết quả kiểm tra hai chiều.</small></p>')+'<form action="/sale-check" method="post">'+csrfField(s)+'<button>Director: Kiểm tra kết nối AI Sale</button></form>';const campaign=directorState.selected;const financeHtml=campaign&&campaign.input.mode!=='sample'?renderFinance(campaign,await listFinance(pool,campaign.id),{esc,money,csrfField,s,requestId:crypto.randomUUID()}):'';const director=renderDirector(directorState,{esc,money,csrfField,s,agents,saleLinkHtml,requestId:crypto.randomUUID(),sampleRequestId:crypto.randomUUID(),financeHtml});const retailHtml=await retailPanel(s,director.retail);const field=(k,l,v=0)=>formField(k,l,'number',v);let body='<header><div class="brand"><b>+1</b> EXTRA <span class="os-accent">OS</span> · ADMIN</div><form action="/logout" method="post">'+csrfField(s)+'<button>Đăng xuất</button></form></header><div class="os-layout">'+renderSidebar('home',{actor:s})+'<main class="os-content"><p class="tag os-status">STAGING · Dữ liệu riêng · Không chạy quảng cáo hoặc thanh toán thật</p><div class="os-panel" id="overview"><h1>Trung tâm điều hành</h1>'+overview+'<div class="grid"><div class="tile">Show nội bộ<strong>'+shows.length+'</strong><small>Tối đa 50 show gần nhất</small></div><div class="tile">Nhiệm vụ đã lập<strong>'+tasks.length+'</strong><small>Tối đa 1.000 mục</small></div><div class="tile">Doanh thu vé Music hôm nay<strong>'+esc(finance.data?money(finance.data.rows.reduce((sum,r)=>sum+(r.days[reportDay(null)]?.revenueVnd??0),0)):'Chưa có dữ liệu')+'</strong><small>Tổng các show · đơn đã thanh toán</small></div></div><p><a href="#reports">Mở tổng quan báo cáo ›</a></p></div>'+reportHtml+'<section class="os-panel" id="platforms"><h2>Nền tảng</h2><div class="grid"><div class="tile">Music<strong>Lịch show · chỉ đọc</strong><small>Báo cáo và lịch show chỉ đọc; không mở bán.</small><p><a href="/reports/music">Báo cáo Music theo ngày ›</a> · <a href="/music">Lịch show và số ghế</a></p></div><div class="tile">24H<strong>24h EXTRA</strong><small>Page ID: 1413936608477545 · Đã xác nhận Page trên Windsor · Tài khoản quảng cáo Lào Cai: 1915621506464312 (dùng chung với Music, phân tách chiến dịch) · Chờ tích hợp thực thi và API Sapo.</small><p><a href="/reports/24h">Báo cáo 24H theo ngày ›</a></p><p><a href="https://www.facebook.com/profile.php?id=1413936608477545" target="_blank" rel="noopener noreferrer">Mở Page 24H</a></p></div><div class="tile">EXTRA OS<strong>Staging</strong><small>PostgreSQL riêng.</small></div></div></section><section class="os-panel" id="oneclick"><h2>ONE CLICK MUSIC · Lập kế hoạch show nội bộ</h2><p><a href="/v11/analysis/music">Phân tích show và điểm hòa vốn ›</a></p><p>Kế thừa logic EXTRA OS hiện có. Giá và doanh thu là dự tính; chưa kiểm chứng sơ đồ ghế. Không mở bán.</p><form action="/show" method="post">'+csrfField(s)+'<input type="hidden" name="request_id" value="'+crypto.randomUUID()+'"><div class="grid">'+formField('artist','Nghệ sĩ')+formField('startsAt','Ngày giờ diễn (Việt Nam)','datetime-local')+formField('venue','Địa điểm')+field('capacity','Sức chứa',550)+field('bookingVnd','Cát-xê')+field('productionVnd','Chi phí tổ chức')+field('adsVnd','Ngân sách quảng cáo dự kiến')+field('printingVnd','In ấn')+field('otherVnd','Chi phí khác')+field('startingPriceVnd','Giá vé khởi điểm',199000)+field('targetProfitVnd','Lợi nhuận mục tiêu')+'</div>'+formField('mediaDriveUrl','Link Drive tư liệu','url')+'<label>Danh sách bài hát<textarea name="setlist" required></textarea></label><label><span><input type="checkbox" name="artistConfirmed" required> Đã xác nhận nghệ sĩ</span></label><label><span><input type="checkbox" name="mediaRightsConfirmed" required> Đã xác nhận quyền tư liệu</span></label><button>Tạo kế hoạch và giao việc nội bộ</button></form></section>'+retailHtml+'<section class="os-panel" id="shows"><h2>Show và công việc</h2><p><a href="/staff/access">Quản lý truy cập nhân sự</a> · <a href="/staff">Cổng nhân sự staging</a></p>';
 for(const sh of shows){body+='<details open><summary>'+esc(sh.intake.artist)+' · '+esc(sh.intake.startsAt)+'</summary><p>Chi phí dự kiến: '+money(sh.finance.plannedCostVnd)+' · Doanh thu mục tiêu: '+money(sh.finance.targetRevenueVnd)+' · Số vé hòa vốn theo giá khởi điểm: '+esc(sh.finance.breakEvenTicketsAtStartingPrice)+'</p><div class="scroll"><table><tr><th>Nhiệm vụ</th><th>Trạng thái / Báo cáo</th></tr>';for(const t of tasks.filter(t=>t.show_id===sh.id)){body+='<tr><td>'+esc(t.definition.title)+'<br><small>'+esc(departmentLabels[t.definition.department])+' · '+esc(t.definition.acceptance)+'</small></td><td><form action="/task" method="post">'+csrfField(s)+'<input type="hidden" name="id" value="'+sh.id+'"><input type="hidden" name="key" value="'+esc(t.key)+'"><select name="status">'+['pending','in_progress','submitted','accepted','blocked'].map(v=>'<option value="'+v+'" '+(v===t.status?'selected':'')+'>'+statusLabels[v]+'</option>').join('')+'</select><label>Ghi chú<input name="note" maxlength="2000" value="'+esc(t.note)+'"></label><input type="hidden" name="revision" value="'+t.revision+'">'+assigneeField(t.assignee,esc)+'<button>Lưu</button></form></td></tr>'}body+='</table></div><p>Hàng đợi AI: '+jobs.filter(j=>j.show_id===sh.id).length+' mục. Chỉ phân tích kế hoạch nội bộ đã có bộ thực thi.</p><form action="/analyst-plan" method="post">'+csrfField(s)+'<input type="hidden" name="id" value="'+esc(sh.id)+'"><button>Director: Giao AI Analyst phân tích kế hoạch</button></form><div class="scroll"><table><tr><th>Agent</th><th>Nhiệm vụ</th><th>Trạng thái</th></tr>'+jobs.filter(j=>j.show_id===sh.id).map(j=>'<tr><td>'+esc(j.agent)+'</td><td>'+esc(jobDefinitions[j.kind]?.title||j.kind)+'</td><td>'+esc(statusLabels[j.status])+'<br><small>'+esc(j.note)+'</small></td></tr>').join('')+'</table></div></details>'}
 body+='</section>'+director.panel+'<section class="os-panel" id="audit"><h2>Nhật ký quản trị</h2>'+logs.map(l=>'<p>'+esc(l.event)+' · '+esc(new Date(l.created_at).toISOString())+'</p>').join('')+'</section></main></div>';html(res,body)}
 function reportWorkspace(s,path,content,filters){
  const body=content.replace(/^<main>/,'').replace(/<\/main>$/,'');
- return '<header><div class="brand"><b>+1</b> EXTRA <span class="os-accent">OS</span> · ADMIN</div><form action="/logout" method="post">'+csrfField(s)+'<button>Đăng xuất</button></form></header><div class="os-layout os-report-page">'+renderSidebar(path)+'<main class="os-content">'+renderPlatformTabs(path,filters)+body+'</main></div>';
+ return '<header><div class="brand"><b>+1</b> EXTRA <span class="os-accent">OS</span> · ADMIN</div><form action="/logout" method="post">'+csrfField(s)+'<button>Đăng xuất</button></form></header><div class="os-layout os-report-page">'+renderSidebar(path,{actor:s.role?s:undefined})+'<main class="os-content">'+renderPlatformTabs(path,filters)+body+'</main></div>';
 }
 async function musicShowPage(req,res,session,path){
  const params=new URL(req.url,'http://localhost').searchParams;
@@ -223,9 +261,22 @@ async function verifyMusicReportPage(allTabs=false){
 
  console.log('Music admin release check',JSON.stringify(checks));
 }
-async function handle(req,res){const path=new URL(req.url,'http://localhost').pathname;if(['/staff','/staff/login','/staff/task','/staff/crm','/staff/logout'].includes(path))return handleStaff(req,res,path);if(path==='/api/24h/messenger/webhook')return handleMessenger24(req,res);if(path==='/health'&&req.method==='GET'){await pool.query('select 1');res.writeHead(200,{'Content-Type':'text/plain','Cache-Control':'no-store'});return res.end('ok')}if(path==='/login'&&req.method==='POST')return login(req,res);const s=await session(req);if(!s)return html(res,loginPage(),path==='/'?200:401);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/show-media/'))return serveShowMedia(req,res);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/report-audio/')){
+async function handle(req,res){const path=new URL(req.url,'http://localhost').pathname;if(['/staff','/staff/login','/staff/task','/staff/crm','/staff/logout'].includes(path))return handleStaff(req,res,path);if(path==='/api/24h/messenger/webhook')return handleMessenger24(req,res);if(path==='/health'&&req.method==='GET'){await pool.query('select 1');res.writeHead(200,{'Content-Type':'text/plain','Cache-Control':'no-store'});return res.end('ok')}if(path==='/login'&&req.method==='POST')return login(req,res);if(path==='/v11/activate')return v11.activate(req,res);const s=await session(req);if(!s)return html(res,loginPage(),path==='/'?200:401);
+ if(path==='/v11'||path.startsWith('/v11/'))return v11.handle(req,res,s);
+ if(path==='/logout'&&req.method==='POST'){
+  const fields=await form(req);
+  if(!eq(fields.get('csrf')||'',s.csrf))return html(res,'<main>Yêu cầu không hợp lệ.</main>',403);
+  await pool.query('delete from os_v11_sessions where token_hash=$1',[s.token_hash]);
+  await recordAudit(pool,s,'access.logout');
+  return redirect(res,'/',cookie('',0));
+ }
+ if(s.role!=='OWNER'){
+  if(req.method==='GET'&&path==='/')return redirect(res,'/v11');
+  return html(res,'<main>Tài khoản chưa được cấp quyền cho trang này. <a href="/v11">Về EXTRA OS</a></main>',403);
+ }
+ if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/show-media/'))return serveShowMedia(req,res);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/report-audio/')){
   const match=/^\/report-audio\/([a-f0-9]{64})\.mp3$/.exec(path);
-  return serveAudio(req,res,pool,match?.[1]??'');
+  return serveAudio(req,res,pool,match?.[1]??'',process.env.EXTRA_OS_V11_AUDIO_APPROVED==='true'?process.env.EXTRA_OS_OPENAI_API_KEY:'',modelRequest);
  }
  if(req.method==='GET'&&workspacePages.includes(path))return workspacePage(req,res,s,path);
  if(req.method==='GET'&&path==='/music')return html(res,renderMusicSnapshot(await getMusicSnapshot(),esc));
@@ -234,7 +285,7 @@ async function handle(req,res){const path=new URL(req.url,'http://localhost').pa
   const show=snapshot.rows.find(s=>s.id===f.get('show'));
   if(!await approveShow(pool,f,show,{finance,signals,checkedAt:snapshot.checkedAt}))return html(res,'<main><p>Đề xuất đã thay đổi hoặc chưa đủ điều kiện phê duyệt.</p><a href="/proposals/music">Xem lại đề xuất</a></main>',409);
   return redirect(res,'/proposals/music?'+new URLSearchParams({show:show.id,day:f.get('day'),period:f.get('period')}));
- }if(path==='/daily-director/approve')return html(res,'<main><h1>Phương án cũ đã ngừng duyệt</h1><p>Chỉ trình phương án mới từ kết quả điều phối AI. Không thực thi phương án mẫu.</p><a href="/proposals/music">Xem đề xuất Music</a></main>',409);if(path==='/logout'){await pool.query('delete from os_sessions where token_hash=$1',[s.token_hash]);return redirect(res,'/',cookie('',0))}if(path==='/show')return createShow(req,res,s,f);if(path.startsWith('/director/'))return handleDirector(res,path,f);if(path==='/retail-plan')return createRetailPlan(res,f);if(path==='/analyst-plan')return rerunAnalystPlan(res,f);if(path==='/sale-check'){await directorSaleCheck();return redirect(res,'/#agents')}if(path==='/crm')return updateCrm(res,f);if(path==='/staff/access'){
+ }if(path==='/daily-director/approve')return html(res,'<main><h1>Phương án cũ đã ngừng duyệt</h1><p>Chỉ trình phương án mới từ kết quả điều phối AI. Không thực thi phương án mẫu.</p><a href="/proposals/music">Xem đề xuất Music</a></main>',409);if(path==='/show')return createShow(req,res,s,f);if(path.startsWith('/director/'))return handleDirector(res,path,f);if(path==='/retail-plan')return createRetailPlan(res,f);if(path==='/analyst-plan')return rerunAnalystPlan(res,f);if(path==='/sale-check'){await directorSaleCheck();return redirect(res,'/#agents')}if(path==='/crm')return updateCrm(res,f);if(path==='/staff/access'){
  const staffId=f.get('staff_id');
  const code=await issueCode(pool,staffId);
  if(!code)return html(res,'<main>Nhân sự không hợp lệ.</main>',400);
@@ -351,15 +402,19 @@ async function observeSampleRun(id,once=false){
   await new Promise(resolve=>setTimeout(resolve,15000).unref());
  }
 }
-init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>initCrm(pool)).then(()=>initStaffWork(pool)).then(()=>initCrmFollowup(pool)).then(()=>initDirectorFinance(pool)).then(()=>initDailyDirector(pool)).then(()=>initLiveDirector(pool)).then(()=>initShowApprovals(pool)).then(()=>initAudio(pool)).then(()=>{
+migrateV11(pool).then(()=>init()).then(()=>setupOwner(pool,password)).then(()=>seedCategories(pool)).then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>initCrm(pool)).then(()=>initStaffWork(pool)).then(()=>initCrmFollowup(pool)).then(()=>initDirectorFinance(pool)).then(()=>initDailyDirector(pool)).then(()=>initLiveDirector(pool)).then(()=>initShowApprovals(pool)).then(()=>initAudio(pool)).then(()=>{
  const stopApproved=startApprovedWorker(pool,{onResult:result=>console.log('Approved daily Director task',JSON.stringify(result)),onError:error=>console.error('Approved daily task error',error.code||error.name)});
- const stopDaily=startLiveDirector(pool,{onResult:result=>{
+ const stopAds=monitorAds(pool);
+ const stopGoals=startGoals(pool);
+ const legacyDirectorEnv=process.env.EXTRA_OS_V11_LEGACY_AUTO_AI==='true'?process.env:{...process.env,EXTRA_OS_DIRECTOR_MODEL_ENABLED:'false'};
+ const stopDaily=startLiveDirector(pool,{env:legacyDirectorEnv,onResult:result=>{
   console.log('Live Director cycle',JSON.stringify(result));
-  if(result.platform==='music'&&result.stage==='DirectorFinal'&&result.status==='ready'&&process.env.RAILWAY_ENVIRONMENT_NAME==='staging'){
+  if(result.platform==='music'&&result.stage==='DirectorFinal'&&result.status==='ready'&&process.env.RAILWAY_ENVIRONMENT_NAME===staging){
    verifyMusicReportPage().catch(error=>console.error('Music admin release check failed',error.code||error.name));
   }
  },onError:error=>console.error('Live Director cycle unavailable',error.code||error.name)});
- const stopWorker=startDirectorWorker(pool,makeExecutor(pool,makeConnectors(pool)),review,{
+ const stopWorker=startDirectorWorker(pool,makeExecutor(pool,makeConnectors(pool,process.env.EXTRA_OS_V11_LEGACY_AUTO_AI==='true' ?
+   process.env : {...process.env,EXTRA_OS_OPENAI_API_KEY:undefined},modelRequest)),review,{
   onError:(kind,error)=>console.error('Director task error',kind,error.code||error.name),
   onReport:({runId,mode,report})=>{
    if(mode!=='sample')return;
@@ -369,10 +424,10 @@ init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>init
   }
  });
  const server=http.createServer((req,res)=>handle(req,res).catch(e=>{console.error('Request failed',e.code||e.name);if(!res.headersSent)html(res,'<main>Không xử lý được yêu cầu. <a href="/">Quay lại</a></main>',400);else res.end()}));server.requestTimeout=20000;server.headersTimeout=10000;server.listen(port,'0.0.0.0',()=>{console.log('EXTRA OS staging ready');
+  if(process.env.EXTRA_OS_V11_RELEASE_CHECKS!=='true')return;
   startupSaleCheck().then(async()=>{
-   if(process.env.RAILWAY_ENVIRONMENT_NAME!=='staging'||process.env.RAILWAY_SERVICE_NAME!=='admin-web')return;
    verifyMusicReportPage(true).catch(error=>console.error('Music admin release check failed',error.code||error.name));
-   verifyMusicFinance().then(status=>console.log('Music daily read-only verification',JSON.stringify(status))).catch(()=>console.error('Music daily verification unavailable'));
+   getMusicFinance().then(status=>console.log('Music daily read-only verification',status.status)).catch(()=>console.error('Music daily verification unavailable'));
    readRetailDaily(pool,reportDay(null)).then(result=>console.log('24H daily report verification',JSON.stringify({ok:true,internalCampaigns:result.created,financeRecords:result.records.length,hasInboundData:result.crm!==null,sapoFnB:'not_connected'}))).catch(()=>console.error('24H daily report verification unavailable'));
    getMusicSnapshot().then(snapshot=>console.log('Music public snapshot',JSON.stringify({showsAvailable:snapshot.showsAvailable,inventoryAvailable:snapshot.inventoryAvailable,shows:snapshot.rows.length,rowsWithInventory:snapshot.rows.filter(row=>row.inventory!==null).length,rowsWithHeld:snapshot.rows.filter(row=>row.inventory?.held!==null&&row.inventory?.held!==undefined).length,rowsWithPrices:snapshot.rows.filter(row=>Object.values(row.prices??{}).some(v=>v!==null)).length}))).catch(()=>console.error('Music public snapshot unavailable'));
    const {rows:[previous]}=await pool.query('select id from os_director_runs where request_id=$1 and input->>\'mode\'=\'sample\'',[sampleReleaseRequestId]);
@@ -383,4 +438,4 @@ init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>init
    console.log('24H sample run available',id);
    return observeSampleRun(id);
   }).catch(error=>console.error('24H sample or Sale startup check could not complete',error.code||error.name));
- });process.on('SIGTERM',()=>server.close(()=>Promise.allSettled([stopWorker(),stopDaily(),stopApproved()]).finally(()=>pool.end()).finally(()=>process.exit(0))))}).catch(e=>{console.error('Database initialization failed',e.code||e.name);process.exit(1)});
+ });process.on('SIGTERM',()=>server.close(()=>Promise.allSettled([stopWorker(),stopDaily(),stopApproved(),stopAds(),stopGoals()]).finally(()=>pool.end()).finally(()=>process.exit(0))))}).catch(e=>{console.error('Database initialization failed',e.code||e.name);process.exit(1)});
