@@ -133,6 +133,28 @@ change('  const friendly=friendlyAcknowledgement(latest.body);',recoveryBlock+' 
 const recoveryAst=tsRecovery.createSourceFile(file,worker,tsRecovery.ScriptTarget.Latest,true,tsRecovery.ScriptKind.TS);
 assert.equal(recoveryAst.parseDiagnostics.length,0,"Checkout recovery syntax");
 console.log("[EXTRA AI Sale] 9 confirmation-recovery cases passed; SQL reservation and payment guards unchanged.");
+
+ // Natural checkout confirmation, synchronized with migration messenger_confirmation_language_variants.
+ const checkoutFile="lib/ai-sales-checkout.ts";
+ let checkoutSource=fs.readFileSync(checkoutFile,"utf8");
+ const checkoutAst=tsRecovery.createSourceFile(checkoutFile,checkoutSource,tsRecovery.ScriptTarget.Latest,true,tsRecovery.ScriptKind.TS);
+ const confirmationFunctions=checkoutAst.statements.filter(n=>tsRecovery.isFunctionDeclaration(n)&&n.name?.text==="isAiPurchaseConfirmation");
+ assert.equal(confirmationFunctions.length,1,"Expected exactly one checkout confirmation parser");
+ const existingConfirmation=confirmationFunctions[0];
+ const nextConfirmation="export function isAiPurchaseConfirmation(body:string):boolean{\n  if(typeof body!==\"string\"||body.length>100)return false;\n  const text=body.normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g,\"\").replace(/[đĐ]/g,\"d\").toLowerCase().replace(/[.!,]+/g,\" \").trim().replace(/\\s+/g,\" \");\n  return /^((da|vang|u|uh|um) )?(ok|okay|oke|okie|okey|oki|o ke|uk|dong y|dong y dat ve|dong y mua ve|dong y lay ve|chot|chot ve|chot don|xac nhan|xac nhan dat ve|xac nhan mua ve|yes|duoc|duoc roi|nhat tri|dong y chot|ok chot|ok dat ve|vang|da|u|uh|um)( (em|anh|chi|nhe|nha|a|nhe em|em nhe|nha em|em nha|giup anh|giup chi|luon|luon em|a em|em a|anh nhe|chi nhe|e|minh))?$/.test(text);\n}";
+ checkoutSource=checkoutSource.slice(0,existingConfirmation.getStart(checkoutAst))+nextConfirmation+checkoutSource.slice(existingConfirmation.getEnd());
+ const quoteWording='trả lời “ĐỒNG Ý”';
+ assert.equal(checkoutSource.split(quoteWording).length,2,"Expected checkout quote wording");
+ checkoutSource=checkoutSource.replace(quoteWording,'trả lời “OK”, “Oke”, “Đồng ý” hoặc xác nhận tương đương');
+ const confirmationCompiled=tsRecovery.transpileModule(nextConfirmation.replace("export function ","function "),{compilerOptions:{target:tsRecovery.ScriptTarget.ES2022}}).outputText;
+ const actualConfirmation=new Function(confirmationCompiled+"\\nreturn isAiPurchaseConfirmation;".replace("\\n","\n"))();
+ const confirmationCases=[["ok",true],["OK",true],["Oke",true],["ĐỒNG Ý",true],["đồng ý",true],["Đồng ý",true],["đồng ý nhé em",true],["Dạ OK ạ",true],["ô kê!",true],["okie",true],["ok chốt",true],["vâng ạ",true],["được rồi",true],["Dạ, ok",true],["ok em ạ",true],["chốt luôn",true],["ok anh nhé",true],["không đồng ý",false],["ok nhưng đổi ghế",false],["đồng ý nếu giảm giá",false],["ok?",false],["why",false],["ok em hỏi thêm",false],["chưa đồng ý",false],["đồng ý đổi ngày",false],["",false]];
+ for(const [body,expected] of confirmationCases)assert.equal(actualConfirmation(body),expected,"Checkout confirmation: "+body);
+ const updatedCheckoutAst=tsRecovery.createSourceFile(checkoutFile,checkoutSource,tsRecovery.ScriptTarget.Latest,true,tsRecovery.ScriptKind.TS);
+ assert.equal(updatedCheckoutAst.parseDiagnostics.length,0,"Checkout parser syntax");
+ fs.writeFileSync(checkoutFile,checkoutSource);
+ change('const instructions=`','const instructions=`Chấp nhận xác nhận mua vé tự nhiên sau báo giá hợp lệ: OK, Oke, Đồng ý, chốt, vâng và các biến thể viết hoa, viết thường, có dấu hoặc không dấu. Không ép khách gõ một cụm từ cố định. Câu phủ định, câu hỏi hoặc yêu cầu thay đổi không phải xác nhận; luôn giữ nguyên bộ kiểm tra báo giá, tồn ghế và đối soát thanh toán ở máy chủ.\\n');
+ console.log("[EXTRA AI Sale] "+confirmationCases.length+" natural-confirmation parser cases passed.");
 fs.writeFileSync(file,worker);
 const quickFile="lib/ai-sales-quick-reply.ts";
 const quick=fs.readFileSync(quickFile,"utf8");
