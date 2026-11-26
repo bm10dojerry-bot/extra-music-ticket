@@ -330,3 +330,42 @@ test('Vietnamese report audio preserves all words across bounded immutable parts
  const html=playerHtml({full:parts.map(p=>p.key),brief:[parts[0].key]});
  assert.match(html,/Nghe toàn bộ báo cáo/);assert.match(html,/audio preload="none"/);
 });
+test('A staffing-only revision preserves validated targets, budgets and 11 report references',async()=>{
+ const facts=live.makeFacts('music','2030-01-02',null,null,null,null);
+ const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13'};
+ const results={DirectorBrief:{responseId:'brief',output:{assignments:[]}}};
+ for(const agent of live.roleNames)results[agent]={responseId:'resp_'+agent,output:{assetIds:[],actions:[]}};
+ const deadline='2030-01-02T18:00:00+07:00';
+ const action={agent:'Ads',action:'Vận hành quảng cáo',deliverable:'Báo cáo chi',metric:'Chi theo nguồn',deadline};
+ const old={title:'Kế hoạch',summary:'Tổng hợp',decision:'Duyệt mức chi',blockers:[],
+  reportReview:live.roleNames.map(agent=>({agent,reportId:results[agent].responseId,decisionImpact:'Đã rà soát'})),
+  campaigns:[{title:'Bán vé',showId:'',target:'Hai vé',rationale:'Căn cứ báo cáo',proposedBudgetVnd:100000,expectedLow:1,expectedHigh:2,budgetBasis:'Đã ghi nhận',stopRule:'Dừng khi đủ',deadline,assetIds:[],missing:[],actions:[action],staff:[]}]};
+ results.PreviousDirectorFinal={responseId:'old',output:old};
+ const makeRequest=duty=>async(url,req)=>{
+   const schema=JSON.parse(req.body).text.format;
+   assert.equal(schema.name,'director_staff_revision');
+   assert.deepEqual(Object.keys(schema.schema.properties.assignments.properties),['campaign_1']);
+   return Response.json({id:'new',status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({assignments:{campaign_1:{actions:[action],staff:[{duty,deadline}]}}})}]}]});
+ };
+ const updated=await live.callRole('DirectorFinal',facts,results,env,makeRequest('print'));
+ assert.equal(updated.staffPolicyVersion,1);assert.equal(updated.output.campaigns[0].proposedBudgetVnd,100000);
+ assert.equal(updated.output.campaigns[0].staff[0].staffId,'trang');
+ assert.deepEqual(updated.output.reportReview,old.reportReview);
+ await assert.rejects(live.callRole('DirectorFinal',facts,results,env,makeRequest('run_ads')),/invalid_campaign_fields/);
+});
+test('One full-play click advances every audio part and a new mode starts from its first part',async()=>{
+ const vm=require('node:vm'),{playerHtml}=require('./report-audio.cjs');
+ const html=playerHtml({full:['a','b','c'],brief:['z']});
+ const elem=()=>{const listeners={};return {dataset:{},addEventListener:(t,fn)=>{listeners[t]=fn;},fire:t=>listeners[t]?.()};};
+ const audio=elem(),status=elem(),window=elem(),buttons=[elem(),elem()],played=[];
+ buttons[0].dataset={mode:'full',track:'a,b,c',label:'Full'};buttons[1].dataset={mode:'brief',track:'z',label:'Brief'};
+ audio.paused=true;audio.pause=()=>{audio.paused=true;audio.fire('pause');};
+ audio.play=()=>{played.push(audio.src);audio.paused=false;audio.fire('playing');return Promise.resolve();};
+ const panel={querySelector:s=>s==='audio'?audio:status,querySelectorAll:()=>buttons};
+ vm.runInNewContext(html.match(/<script>([\s\S]+)<\/script>/)[1],{document:{querySelector:()=>panel},window});
+ buttons[0].fire('click');audio.fire('ended');audio.fire('ended');audio.fire('ended');
+ assert.deepEqual(played,['/report-audio/a.mp3','/report-audio/b.mp3','/report-audio/c.mp3']);
+ assert.equal(status.textContent,'Đã đọc hết.');buttons[1].fire('click');
+ assert.equal(played.at(-1),'/report-audio/z.mp3');
+ buttons[1].fire('click');assert.equal(audio.paused,true);buttons[1].fire('click');assert.equal(audio.paused,false);
+});
