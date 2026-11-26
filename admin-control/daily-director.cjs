@@ -77,6 +77,35 @@ function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00')),per
    {agent:'Analyst / Director',deadline,action:'Đối chiếu số vé thanh toán tăng thêm so với mốc đầu, kiểm tra từng deadline; nếu hụt mục tiêu, nêu nguyên nhân có bằng chứng và trình phương án mới để chủ duyệt.',metric:'So sánh kết quả thật với '+n(goal)+' vé mới, và từng mốc trong kế hoạch.'}
   ]};
 }
+// Read-only specialist calculations. These are deterministic checks, not model-generated reports.
+function musicSpecialistReports(day,finance,inventory){
+ if(finance?.status!=='available'||!Array.isArray(finance.data?.rows))return [];
+ const inv=new Map((inventory?.rows??[]).map(s=>[s.id,s]));
+ const rows=finance.data.rows.map(r=>{
+  const last7=Array.from({length:7},(_,k)=>r.days?.[shiftDay(day,-k-1)]?.paidTickets??0).reduce((a,b)=>a+b,0);
+  const previous7=Array.from({length:7},(_,k)=>r.days?.[shiftDay(day,-k-8)]?.paidTickets??0).reduce((a,b)=>a+b,0);
+  const i=inv.get(r.showId)?.inventory;
+  const revenue=r.total.revenueVnd,cost=r.recordedCostVnd,paid=r.total.paidTickets;
+  const avg=paid>0?revenue/paid:null;
+  return {artist:r.artist,date:r.date,showId:r.showId,revenue,cost,paid,last7,previous7,
+   gap:cost==null?null:Math.max(0,cost-revenue),recordedBalance:cost==null?null:revenue-cost,
+   remainingAtAvg:cost==null||!avg?null:Math.ceil(Math.max(0,cost-revenue)/avg),
+   available:i&&validCount(i.remaining)&&validCount(i.held)?Math.max(0,i.remaining-i.held):null};
+ });
+ return [
+  {agent:'Finance',status:'computed',title:'Đối chiếu doanh thu và chi phí khai báo',detail:'Chênh lệch doanh thu xác nhận trừ chi phí khai báo; không phải lợi nhuận quyết toán. Số vé bù chênh lệch giả định giá bình quân lịch sử, chưa gồm chi phí tăng thêm.',rows:rows.map(({artist,revenue,cost,recordedBalance,gap,remainingAtAvg})=>({artist,revenue,cost,recordedBalance,gap,remainingAtAvg}))},
+  {agent:'Sale / Analyst',status:'computed',title:'So sánh hai kỳ 7 ngày hoàn tất',detail:'So sánh vé thanh toán, không quy kết nguyên nhân khi chưa có dữ liệu hội thoại.',rows:rows.map(({artist,date,paid,last7,previous7,available})=>({artist,date,paid,last7,previous7,delta:last7-previous7,available}))},
+  {agent:'Marketing / CRM',status:'needs_input',title:'Hiệu quả quảng cáo và chuyển đổi',detail:'Nguồn hiện tại không có chi tiêu phân bổ, hội thoại hoặc lý do khách chưa mua. Không tính CPA hoặc tỷ lệ chốt giả.',rows:[]}
+ ];
+}
+function renderMusicSpecialists(reports,esc){
+ if(!reports?.length)return '';
+ const labels={artist:'Show',date:'Ngày diễn',revenue:'Doanh thu xác nhận (đ)',cost:'Chi phí khai báo (đ)',recordedBalance:'Chênh lệch ghi nhận (đ)',gap:'Còn thiếu (đ)',remainingAtAvg:'Vé bù theo giá bình quân (giả định)',paid:'Vé trả tiền lũy kế',last7:'7 ngày gần nhất',previous7:'7 ngày trước đó',delta:'Chênh lệch vé',available:'Ghế còn sau giữ'};
+ return '<section><h3>Báo cáo kiểm tra chuyên môn Music</h3><p>Kiểm tra số liệu tự động chỉ đọc; chưa phải Agent chạy mô hình AI.</p>'+reports.map(r=>{
+ const keys=Object.keys(r.rows[0]??{});
+ return '<details open><summary>'+esc(r.agent+' · '+r.title)+'</summary><p>'+esc(r.detail)+'</p>'+(keys.length?'<div class="scroll"><table><thead><tr>'+keys.map(k=>'<th>'+esc(labels[k]??k)+'</th>').join('')+'</tr></thead><tbody>'+r.rows.map(row=>'<tr>'+keys.map(k=>'<td>'+esc(row[k]==null?'Chưa có':typeof row[k]==='number'?n(row[k]):row[k])+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>':'')+'</details>';
+ }).join('')+'</section>';
+}
 function musicPlan(day,finance,inventory,now=new Date(timeOf(day,'00:00')),period='day'){
  const source=finance?.status==='available'&&finance.data;
  const current=inventory?.showsAvailable===true&&inventory?.inventoryAvailable===true;
@@ -110,6 +139,7 @@ function musicPlan(day,finance,inventory,now=new Date(timeOf(day,'00:00')),perio
  const financeById=new Map(finance.data.rows.map(row=>[row.showId,row]));
  const campaigns=upcoming.map(show=>buildCampaign(day,show,financeById.get(show.id),now,period)).filter(Boolean);
  facts.campaigns=campaigns;
+ facts.specialistReports=musicSpecialistReports(day,finance,inventory);
  const base=[task('daily-analysis','Analyst','Đọc và so sánh kết quả báo cáo ngày','Theo ngày thanh toán: '+n(report.daily.paidOrders)+' đơn trả tiền, '+n(report.daily.paidTickets)+' vé trả tiền, '+money(report.daily.revenueVnd)+'. Ngày trước ('+previousDay+'): '+n(previous.daily.paidTickets)+' vé, '+money(previous.daily.revenueVnd)+'. Chênh lệch đến thời điểm đọc: '+signed(report.daily.paidTickets-previous.daily.paidTickets)+' vé, '+signed(report.daily.revenueVnd-previous.daily.revenueVnd)+' đ; ngày hiện tại có thể chưa kết thúc. Chưa coi doanh thu xác nhận là tiền đã đối soát ngân hàng, không quy kết cho chiến dịch quảng cáo khi chưa có dữ liệu phân bổ.')];
  const retrospective=past.length?'Có '+n(past.length)+' show đã qua ngày diễn trong nguồn tài chính. So sánh vé trả tiền, doanh thu xác nhận, vé mời và chi phí khai báo từng show; cần kiểm tra trạng thái kết thúc, hoàn trả, chi phí thực và dữ liệu quảng cáo trước khi kết luận hiệu quả. Rút bài học về tốc độ bán, cơ cấu khách và truyền thông chỉ khi có chứng cứ.':'Chưa có show đã qua ngày diễn trong nguồn tài chính. Không tạo kết quả lịch sử giả; thu thập báo cáo show cũ và chứng từ để học.';
  const tasks=[...base,task('historical-review','Analyst','Tổng kết show đã qua và bài học cho show mới',retrospective,past.length?'draft_ready':'needs_input'),task('portfolio-plan','Planner','Phương án toàn bộ show chưa diễn','Đã lập danh sách '+n(portfolio.length)+' show theo ngày diễn và mức ưu tiên. Áp dụng bài học đã xác minh của show cũ; rà đối tượng khách, nội dung, giá, sức chứa và KPI từng show. Danh sách riêng bên dưới. Chờ chủ duyệt; không tự mở bán hoặc tăng ngân sách.',portfolio.length?'draft_ready':'needs_input')];
@@ -320,7 +350,7 @@ function renderProposalPreview(record,day,esc,approvals=[]){
   'Ads / Analyst: rà dữ liệu chi tiêu, số hội thoại và số vé thanh toán; chưa có căn cứ tăng ngân sách. So sánh kết quả ngày tiếp theo.'
  ]:p.tasks.slice(0,3).map(t=>t.title+': '+t.deliverable);
  const progress=approved?'<p>Tiến độ phiên bản đã duyệt: '+esc(n(approved.tasks.filter(t=>t.status==='draft_prepared').length))+' tài liệu nội bộ đã chuẩn bị · '+esc(n(approved.tasks.filter(t=>t.status==='blocked').length))+' việc bị chặn · '+esc(n(approved.tasks.filter(t=>t.status==='queued').length))+' việc chờ.</p>':'<p>Chưa tạo hàng đợi triển khai cho phiên bản này.</p>';
- return '<section class="director-preview"><h2>Phương án AI Director</h2><p class="tag">'+esc(status)+' · Phiên bản '+esc(record.revision)+' · '+esc(day)+'</p><h3>'+esc(title)+'</h3>'+engine+baseline+detailed+retailHtml+(p.evidence?.retailStrategy?'':'<h4>Biện pháp đề xuất</h4><ol>'+measures.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>')+(lead?'<p><strong>Đo kết quả:</strong> vé đã thanh toán, doanh thu xác nhận và số ghế bán; không quy kết cho quảng cáo khi chưa có dữ liệu phân bổ. '+esc(n(portfolio.length))+' show trong danh sách chuẩn bị.</p>':'')+progress+'<p>Ngân sách phát sinh: 0 đ. Chưa ghi Music, chưa đăng bài, chưa gửi tin.</p><p><a class="director-jump" href="#daily-director">Xem đầy đủ phương án, phê duyệt và kết quả →</a></p></section>';
+ return '<section class="director-preview"><h2>Phương án AI Director</h2><p class="tag">'+esc(status)+' · Phiên bản '+esc(record.revision)+' · '+esc(day)+'</p><h3>'+esc(title)+'</h3>'+engine+baseline+renderMusicSpecialists(p.evidence?.specialistReports,esc)+detailed+retailHtml+(p.evidence?.retailStrategy?'':'<h4>Biện pháp đề xuất</h4><ol>'+measures.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>')+(lead?'<p><strong>Đo kết quả:</strong> vé đã thanh toán, doanh thu xác nhận và số ghế bán; không quy kết cho quảng cáo khi chưa có dữ liệu phân bổ. '+esc(n(portfolio.length))+' show trong danh sách chuẩn bị.</p>':'')+progress+'<p>Ngân sách phát sinh: 0 đ. Chưa ghi Music, chưa đăng bài, chưa gửi tin.</p><p><a class="director-jump" href="#daily-director">Xem đầy đủ phương án, phê duyệt và kết quả →</a></p></section>';
 }
 function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new Date()}={}){
  const states={draft_ready:'Bản nháp đề xuất · chờ duyệt',needs_input:'Chờ dữ liệu / nhân sự',awaiting_approval:'Khóa thực thi bên ngoài'};
