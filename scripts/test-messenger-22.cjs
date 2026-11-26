@@ -265,5 +265,46 @@ test('direct checkout sends payment in the same turn after verified booking deta
  const no=await inbox('fixture@example.com',[],false,{direct:'not-ready',calls:rejected});
  assert.deepEqual(rejected,['details']);
  assert.doesNotMatch(no.join('\n'),/Mã đơn:|img\.vietqr\.io|đã giữ ghế/iu);
- assert.match(no.join('\n'),/muốn đặt đúng các ghế này/);
+ assert.match(no.join('\n'),/số điện thoại/);
+ assert.doesNotMatch(no.join('\n'),/muốn đặt đúng các ghế này/);
+});
+
+test('contact evidence validates the specific field, retains valid fields and never guesses',()=>{
+ const c=load('messenger-contact-validation');
+ const prior=[{sender:'customer',body:'Chốt ghế E01 E02'},{sender:'customer',body:'Họ tên: Nguyễn Văn An'},{sender:'customer',body:'0912345678'},{sender:'staff',body:'Mình gửi email nhận vé để em lập đơn ghế E01 và E02 nhé.'}];
+ const inspect=body=>c.inspectBookingContacts([...prior,{sender:'customer',body}]);
+ const bad=inspect('buyer@ example.com');
+ assert.deepEqual(c.unresolvedContactFields(bad),['email']);
+ assert.equal(bad.fields.phone.valid,true);
+ assert.equal(bad.fields.name.valid,true);
+ assert.equal(bad.active,true);
+ assert.match(c.contactCorrectionReply(['email']),/email nhận vé/);
+ assert.doesNotMatch(c.contactCorrectionReply(['email']),/số điện thoại|họ tên|chọn ghế/);
+ const ack=c.inspectBookingContacts([...prior,{sender:'customer',body:'buyer@ example.com'},{sender:'staff',body:'Email chưa đúng định dạng. Mình gửi lại email giúp em nhé.'},{sender:'customer',body:'đúng rồi e'}]);
+ assert.equal(ack.affirmation,true);
+ assert.deepEqual(c.unresolvedContactFields(ack),['email']);
+ const good=c.inspectBookingContacts([...prior,{sender:'customer',body:'buyer@ example.com'},{sender:'staff',body:'Email chưa đúng định dạng. Mình gửi lại email giúp em nhé.'},{sender:'customer',body:'buyer@example.com'}]);
+ assert.deepEqual(c.unresolvedContactFields(good),[]);
+ assert.deepEqual(c.missingContactProof(good),[]);
+ assert.equal(c.correctedBookingContact({name:'Nguyễn Văn An',phone:'0900000000',email:'wrong@example.com'},good).email,'buyer@example.com');
+ for(const value of ['a@ b.com','a@b','a..b@example.com','a@b..com','a@@b.com','a@-b.com'])assert.equal(c.validBookingContact('email',value),false,value);
+ for(const value of ['buyer@example.com','a+b@example.co.uk'])assert.equal(c.validBookingContact('email',value),true,value);
+ for(const value of ['09123','091234567890','09abc5678','1234567890'])assert.equal(c.validBookingContact('phone',value),false,value);
+ for(const value of ['0912345678','091 234 5678','+84 912 345 678','02031234567'])assert.equal(c.validBookingContact('phone',value),true,value);
+ assert.equal(c.validBookingContact('name','Nguyễn Văn An'),true);
+ assert.equal(c.validBookingContact('name','1234'),false);
+ const phone=c.inspectBookingContacts([{sender:'staff',body:'Cho em xin số điện thoại để lập đơn đặt vé ghế E01.'},{sender:'customer',body:'09123'}]);
+ assert.deepEqual(c.unresolvedContactFields(phone),['phone']);
+ assert.deepEqual(c.unresolvedContactFields(c.inspectBookingContacts([{sender:'customer',body:'Giá vé 399000đ?'}])),[]);
+});
+test('worker stops malformed contact before checkout; corrected contact proceeds',async()=>{
+ const badCalls=[];
+ const bad=await inbox('fixture@ example.com',['Chốt ghế C19 C20','Khách mẫu 0900000000'],false,{direct:true,calls:badCalls});
+ assert.deepEqual(badCalls,[]);
+ assert.match(bad.join('\n'),/email nhận vé chưa đúng định dạng/);
+ assert.doesNotMatch(bad.join('\n'),/muốn đặt đúng các ghế này|Mã đơn:|img\.vietqr\.io/);
+ const goodCalls=[];
+ const good=await inbox('fixture@example.com',['Chốt ghế C19 C20','Khách mẫu 0900000000','fixture@ example.com'],false,{direct:true,calls:goodCalls});
+ assert.deepEqual(goodCalls,['details']);
+ assert.match(good.join('\n'),/Mã đơn: EX0000000000000001/);
 });

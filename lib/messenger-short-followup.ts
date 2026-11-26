@@ -10,6 +10,7 @@ type Sent={id:string;body:string;purpose:string;sent_at:string;order_code:string
 const pause=/\b(?:doi (?:chut|ti)|de (?:minh|anh|chi|em) (?:nghi|xem|hoi|ban)|bao lai|suy nghi|tham khao da|khong can|dung nhan|de sau|hen sau|tam biet|ve loi|loi ve|mat tien|chua nhan|khong hai long|khieu nai|gap nhan vien|ma don|thanh toan|chuyen khoan|doi soat|hoan tien|nhan ve|ho tro truc tiep)\b/;
 export function nextAdvice(customer:string,answer:string,context:readonly Turn[]=[]):string|null{
   const asked=norm(customer),said=norm(answer);
+  if(customer.includes("@")||/\b(?:email|mail|so dien thoai|sdt|ho ten)\b/.test(said)&&/\b(?:dinh dang|gui lai|chua du|chua ro|chua hop le|lap don|khong can gui lai)\b/.test(said))return null;
   if(!asked||isPing(customer)||explicitStop(customer)||sensitiveQuestion(customer)||customerRequestsHuman(customer)||
     friendlyAcknowledgement(customer)||pause.test(asked)||pause.test(said)||/\b(?:cam on|thank you|thanks)\b/.test(asked)||
     /^(?:(?:da|ok|vang|oke|okay|duoc|uh|um)(?: a| em| nhe)?\s*)+$/.test(asked)||/^(?:hi|hello|xin chao|chao em)$/.test(asked))return null;
