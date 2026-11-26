@@ -2,6 +2,29 @@
 // Only public GET endpoints. Do not copy customer details or use Music database credentials.
 const base='https://iextra.net';
 const endpoints={shows:base+'/api/public/shows',inventory:base+'/api/public/show-inventory'};
+// Allow public, non-signed Music assets only; no arbitrary URLs or access to private storage.
+function publicMusicAsset(raw){
+ if(typeof raw!=='string'||raw.length>1500||(!raw.startsWith('https://')&&!raw.startsWith('/api/public/extra-os-poster/')))return null;
+ try{
+  const u=new URL(raw,base);
+  if(u.protocol!=='https:'||u.username||u.password||u.port||u.search||u.hash)return null;
+  const storage=u.hostname==='fokntdvgzfldxbaglrdc.supabase.co'&&u.pathname.startsWith('/storage/v1/object/public/extra-media/');
+  const poster=u.hostname==='iextra.net'&&/^\/api\/public\/extra-os-poster\/extra-os-[0-9a-f-]{36}$/.test(u.pathname);
+  if(!storage&&!poster)return null;
+  return u.href;
+ }catch{return null;}
+}
+async function readMusicMedia(request=fetch){
+ try{
+  const r=await request(base+'/api/public/media',{method:'GET',redirect:'error',headers:{accept:'application/json'},signal:AbortSignal.timeout(7000)});
+  if(!r.ok)throw Error('media');
+  const body=await r.json();
+  if(!body?.images||typeof body.images!=='object'||Array.isArray(body.images)||Object.keys(body.images).length>600)throw Error('media');
+  const assets=Object.entries(body.images).filter(([slot,url])=>/^[a-z0-9-]{3,120}$/.test(slot)&&publicMusicAsset(url)).map(([slot,url])=>({slot,url:publicMusicAsset(url),kind:'image',source:'music_public_media',printVerified:false,publicationRights:'unverified'}));
+  return {available:true,assets};
+ }catch{return {available:false,assets:[]};}
+}
+
 const statuses={announced:'Đã công bố',pending:'Đang chuẩn bị',sold_out:'Hết vé',live:'Đang diễn',ended:'Đã kết thúc'};
 const venues={ccc:'CCC Sa Pa',moana:'Moana Sa Pa',laocai:'Lào Cai'};
 const isText=(x,n)=>typeof x==='string'&&x.trim().length>0&&x.length<=n;
@@ -18,7 +41,7 @@ function parseShows(body){
    const price=s.prices?.[zone];
    return [zone,Number.isSafeInteger(price)&&price>=0&&price<=1000000000?price:null];
   }));
-  return {id:s.id,artist:s.artist,date:s.date,time:s.time.slice(0,5),venue:s.venue,status:s.status,prices};
+  return {id:s.id,artist:s.artist,date:s.date,time:s.time.slice(0,5),venue:s.venue,status:s.status,prices,posterUrl:publicMusicAsset(s.posterUrl)};
  }).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
 }
 function parseInventory(body){
@@ -73,4 +96,4 @@ function renderMusicSnapshot(data,esc){
  (data.showsAvailable?'<div class="scroll"><table><thead><tr><th>Nghệ sĩ</th><th>Ngày giờ</th><th>Địa điểm</th><th>Trạng thái</th><th>Sức chứa</th><th>Đã bán theo API</th><th>Còn theo API</th><th>Đang giữ (API)</th><th>Khóa (API)</th><th>Giá niêm yết</th></tr></thead><tbody>'+(rows||'<tr><td colspan="10">Không có show trong phản hồi.</td></tr>')+'</tbody></table></div>':'<p>Chưa có lịch để hiển thị. Không suy diễn dữ liệu khi kết nối lỗi.</p>')+
  '</section></main>';
 }
-module.exports={readMusicSnapshot,renderMusicSnapshot,createMusicSnapshotReader,getMusicSnapshot};
+module.exports={publicMusicAsset,readMusicMedia,readMusicSnapshot,renderMusicSnapshot,createMusicSnapshotReader,getMusicSnapshot};
