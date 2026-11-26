@@ -18,11 +18,11 @@ function segments(text){
 async function initAudio(pool){
   await pool.query('create table if not exists os_report_audio (key text primary key, input text not null, mp3 bytea)');
 }
-async function saveTracks(pool,brief,full){
-  const tracks={brief:segments(brief),full:segments(full)};
-  const entries=[...new Map([...tracks.brief,...tracks.full].map(part=>[part.key,part])).values()].sort((a,b)=>a.key.localeCompare(b.key));
+async function saveTracks(pool,full){
+  const parts=segments(full);
+  const entries=[...new Map(parts.map(part=>[part.key,part])).values()].sort((a,b)=>a.key.localeCompare(b.key));
   if(entries.length)await pool.query('insert into os_report_audio(key,input) select * from unnest($1::text[],$2::text[]) on conflict(key) do nothing',[entries.map(p=>p.key),entries.map(p=>p.input)]);
-  return Object.fromEntries(Object.entries(tracks).map(([k,v])=>[k,v.map(p=>p.key)]));
+  return {full:parts.map(part=>part.key)};
 }
 async function renderAudio(pool,key,apiKey,request=fetch){
   const result=await pool.query('select input,mp3 from os_report_audio where key=$1',[key]);
@@ -103,7 +103,6 @@ function setupPlayer(){
 const script='('+setupPlayer.toString()+')();';
 const scriptHash=crypto.createHash('sha256').update(script).digest('base64');
 function playerHtml(tracks){
-  const button=(mode,label)=>'<button type="button" data-mode="'+mode+'" data-label="'+label+'" data-track="'+tracks[mode].join(',')+'">'+label+'</button>';
-  return '<div data-report-player>'+button('full','▶ Nghe toàn bộ báo cáo')+' '+button('brief','▶ Nghe tóm tắt')+'<audio preload="none"></audio><p><small>Giọng đọc AI · tiếng Việt</small> <span role="status" aria-live="polite"></span></p></div><script>'+script+'</script>';
+  return '<div data-report-player><button type="button" data-mode="full" data-label="▶ Nghe toàn bộ báo cáo" data-track="'+tracks.full.join(',')+'">▶ Nghe toàn bộ báo cáo</button><audio preload="none"></audio><p><small>Giọng đọc AI · tiếng Việt</small> <span role="status" aria-live="polite"></span></p></div><script>'+script+'</script>';
 }
 module.exports={initAudio,segments,saveTracks,renderAudio,serveAudio,playerHtml,scriptHash};
