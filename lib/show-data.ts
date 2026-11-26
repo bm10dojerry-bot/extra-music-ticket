@@ -6,10 +6,19 @@ export const blankPrices={A:null,B:null,C:null,D:null};
 export const showTicketPrices:Record<string,Record<"A"|"B"|"C"|"D",number>>=posterPrices;
 export function defaultShows():ManagedShow[]{return shows.map(s=>({...s,posterUrl:null,prices:{...blankPrices,...showTicketPrices[s.id]}}))}
 type Row={id:string;artist:string;title:string;show_date:string;show_time:string;venue_id:Show["venue"];status:string;poster_path:string|null;prices:Record<string,unknown>};
+// Correct the published Violet poster only. Any later upload wins automatically.
+function posterForShow(row:Row){
+ if(row.id==="dinh-dung-2811" && row.show_date==="2026-11-28" && row.venue_id==="ccc" &&
+    row.show_time?.slice(0,5)==="19:30" &&
+    row.poster_path==="posters/dinh-dung-2811/b3017970-ef76-46ca-a264-89215790d5f3.jpg"){
+  return "https://iextra.net/posters/dinh-dung-2811-ccc-f1f3bbf7.jpg";
+ }
+ return row.poster_path?mediaPublicUrl(row.poster_path):null;
+}
 export function normalizeShow(r:Row):ManagedShow{
  const prices:Record<"A"|"B"|"C"|"D",number|null>={...blankPrices};
  for(const zone of ["A","B","C","D"] as const){const n=r.prices?.[zone];prices[zone]=typeof n==="number"&&Number.isSafeInteger(n)&&n>=0?n:null}
- return {id:r.id,artist:r.artist,title:r.title,date:r.show_date,time:r.show_time,venue:r.venue_id,status:r.status==="pending"?"pending":r.status==="sold_out"?"sold_out":r.status==="live"?"live":r.status==="ended"?"ended":"announced",posterUrl:r.poster_path?mediaPublicUrl(r.poster_path):null,prices};
+ return {id:r.id,artist:r.artist,title:r.title,date:r.show_date,time:r.show_time,venue:r.venue_id,status:r.status==="pending"?"pending":r.status==="sold_out"?"sold_out":r.status==="live"?"live":r.status==="ended"?"ended":"announced",posterUrl:posterForShow(r),prices};
 }
 export async function loadShows():Promise<ManagedShow[]>{
  const url=process.env.SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;
