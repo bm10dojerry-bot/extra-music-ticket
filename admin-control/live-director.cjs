@@ -33,9 +33,13 @@ const modelName=env=>env.EXTRA_OS_OPENAI_MODEL||'gpt-4.1-mini';
 const maxCalls=env=>{const n=Number(env.EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY);return Number.isInteger(n)&&n>=13&&n<=78?n:0;};
 // An explicitly approved, date-specific allowance expires at midnight in Vietnam.
 function dailyCallLimit(env,day){
- const base=maxCalls(env),approved=Number(env.EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL);
- return base>0&&env.EXTRA_OS_DIRECTOR_OVERRIDE_DAY===day&&Number.isInteger(approved)&&approved>=base&&approved<=78?approved:base;
+ const base=maxCalls(env);
+ if(!base||env.EXTRA_OS_DIRECTOR_OVERRIDE_DAY!==day)return base;
+ if(env.EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL==='unlimited')return null;
+ const approved=Number(env.EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL);
+ return Number.isInteger(approved)&&approved>=base&&approved<=78?approved:base;
 }
+function dailyLimitReached(calls,limit){return limit!==null&&calls>=limit;}
 function modelReady(env){return enabled(env)&&maxCalls(env)>0;}
 function configStatus(env){return !env.EXTRA_OS_OPENAI_API_KEY?'missing_model_key':!enabled(env)?'model_disabled':!maxCalls(env)?'missing_call_limit':'configured';}
 function makeFacts(scope,day,finance,inventory,media,retail,signals=null){
@@ -258,7 +262,7 @@ async function claim(pool,env,now=new Date()){
   await client.query('begin');
   await client.query("insert into os_live_director_call_budget(day,calls) values($1::date,0) on conflict do nothing",[day]);
   const {rows:[budget]}=await client.query("select calls,retry_at from os_live_director_call_budget where day=$1::date for update",[day]);
-  if(budget.calls>=dailyCallLimit(env,day)||budget.retry_at&&new Date(budget.retry_at)>now){await client.query('commit');return null;}
+  if(dailyLimitReached(budget.calls,dailyCallLimit(env,day))||budget.retry_at&&new Date(budget.retry_at)>now){await client.query('commit');return null;}
   // A lost in-flight response is never retried automatically; avoid duplicate paid calls.
   await client.query("update os_live_director_runs set status='blocked',reason='interrupted_model_call',updated_at=now() where status='running' and updated_at<now()-interval '3 minutes'");
   // Resume a legacy validation failure once under the new schema. New validation
@@ -314,9 +318,10 @@ function renderLiveDirector(run,esc,env=process.env){
  const header='<section id="live-director"><h2>AI Director · Điều phối thực tế</h2><p>Director → 11 Agent → tổng hợp và kiểm tra → trình chủ duyệt. Không dùng phương án mẫu làm kết quả AI.</p>';
  if(!run)return header+'<p>Chưa có phiên chạy cho ngày chọn. Trạng thái: '+safe(states[configStatus(env)]??configStatus(env))+'</p></section>';
  const results=run.results??{},f=run.facts??{},complete=roleNames.filter(r=>results[r]?.responseId).length;
- const usage=integer(run.calls_today)?'<p>Lượt gọi trong ngày '+safe(run.day)+': '+safe(run.calls_today)+' / '+safe(dailyCallLimit(env,run.day))+'.</p>':'';
+ const limit=dailyCallLimit(env,run.day);
+ const usage=integer(run.calls_today)?'<p>Lượt gọi trong ngày '+safe(run.day)+': '+safe(run.calls_today)+' / '+(limit===null?'không giới hạn':safe(limit))+'.</p>':'';
  const nextStage=stages[run.step_index];
- const reachedLimit=integer(run.calls_today)&&run.calls_today>=dailyCallLimit(env,run.day);
+ const reachedLimit=integer(run.calls_today)&&dailyLimitReached(run.calls_today,limit);
  const budgetNote=reachedLimit&&nextStage&&run.status!=='ready'&&run.status!=='running'
   ?'<p>Đã dùng hết lượt gọi của ngày. Bước còn lại tiếp theo: '+safe(nextStage)+'.</p>':'';
  const status=usage+budgetNote+'<p><strong>'+safe(run.status==='ready'?'Đã nhận kết quả mô hình':run.status==='blocked'?'Đang bị chặn':run.status==='running'?'Đang xử lý':'Đang chờ xử lý')+'</strong> · '+complete+'/11 Agent có phản hồi mô hình · '+safe(states[run.reason]??run.reason??'')+'</p>';
