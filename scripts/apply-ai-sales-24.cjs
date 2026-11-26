@@ -5,11 +5,18 @@ function replace(s,a,b){assert.equal(s.split(a).length,2,"AI Sale 2.4 anchor: "+
 function syntax(p,s){assert.equal(ts.createSourceFile(p,s,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS).parseDiagnostics.length,0,p+" syntax");write(p,s);}
 const worker="lib/ai-sales.ts";
 let w=read(worker);
+w=replace(w,'async function handleInbound(job:AiJob,chat:AiChat){', [
+'async function handoffToSale(job:AiJob,summary:string,reason:string,orderCode:string|null=null){',
+'  const result=await aiRpc("handoff",{p_job_id:job.id,p_lease_token:job.lease_token,p_summary:summary.slice(0,1200),p_reason:reason.slice(0,1000),p_order_code:orderCode});',
+'  if(result.outcome!=="updated"||result.mode!=="manual")throw new JobStopped("Handoff no longer current");',
+'}',
+'async function handleInbound(job:AiJob,chat:AiChat){'
+].join("\n"));
 w=replace(w,'import "server-only";','import "server-only";\nimport {asksForStaff,unableToAnswer,seatCodes,simpleSeatQuestion,exactSeatDetails,formatExactSeats,HANDOFF_REPLY} from "./ai-sales-24";');
 w=replace(w,'  const recognition=await recognizeInquiry(',[
 '  if(asksForStaff(latest.body)){',
 '    try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:HANDOFF_REPLY});}',
-'    finally{await setState(job,"needs_attention","Khách yêu cầu gặp Sale/CSKH/ban quản lý; nhân viên tiếp nhận hội thoại.","Khách chủ động yêu cầu gặp nhân viên.");}',
+'    finally{await handoffToSale(job,"Khách yêu cầu gặp Sale/CSKH/ban quản lý; nhân viên tiếp nhận hội thoại.","Khách chủ động yêu cầu gặp nhân viên.");}',
 '    return;',
 '  }',
 '  const recognition=await recognizeInquiry('
@@ -20,7 +27,7 @@ w=replace(w,'  if(recognition.reply){',[
 '  const reading24=recognition.reading;',
 '  const exactCodes=reading24?.kind==="seat_map"?(reading24.seatSelectionCertain?reading24.selectedSeats||[]:[]):seatCodes(latest.body);',
 '  if(isNewImage&&(!reading24||reading24.kind==="unreadable"||reading24.kind==="error"||reading24.kind==="other")){',
-'    await setState(job,"needs_attention","AI chưa đọc được nội dung khách gửi; Sale kiểm tra ảnh gốc.","Nội dung ảnh chưa xác định được.");return;',
+'    await handoffToSale(job,"AI chưa đọc được nội dung khách gửi; Sale kiểm tra ảnh gốc.","Nội dung ảnh chưa xác định được.");return;',
 '  }',
 '  if((reading24?.kind==="seat_map"&&isNewImage)||simpleSeatQuestion(latest.body)){',
 '    const catalog=await listAiSalesShows().catch(()=>[]);',
@@ -30,14 +37,14 @@ w=replace(w,'  if(recognition.reply){',[
 '      let details:Awaited<ReturnType<typeof exactSeatDetails>>|null=null;',
 '      try{details=await exactSeatDetails(choice.id,exactCodes);}catch{}',
 '      if(details&&details.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:formatExactSeats(details)});return;}',
-'      await setState(job,"needs_attention","Sale kiểm tra mã ghế trên ảnh hoặc tin nhắn.","Mã ghế chưa đối chiếu được với sơ đồ bán vé.");return;',
+'      await handoffToSale(job,"Sale kiểm tra mã ghế trên ảnh hoặc tin nhắn.","Mã ghế chưa đối chiếu được với sơ đồ bán vé.");return;',
 '    }',
-'    if(isNewImage){await setState(job,"needs_attention","Sale kiểm tra vị trí khách đánh dấu trên sơ đồ.","Chưa xác định chắc chắn mã ghế hoặc show từ ảnh.");return;}',
+'    if(isNewImage){await handoffToSale(job,"Sale kiểm tra vị trí khách đánh dấu trên sơ đồ.","Chưa xác định chắc chắn mã ghế hoặc show từ ảnh.");return;}',
 '  }',
 '  if(recognition.reply){'
 ].join("\n"));
 w=replace(w,'    const withNote=serviceNote && action.purpose==="reply" && !media ?',[
-'    if(action.purpose==="reply"&&!media&&unableToAnswer(action.body))return setState(job,"needs_attention","Sale tiếp quản câu hỏi chưa trả lời được.","AI không đủ dữ liệu hoặc không thể xử lý yêu cầu.").then(()=>{throw new JobStopped("Handoff to Sale");});',
+'    if(action.purpose==="reply"&&!media&&unableToAnswer(action.body))return handoffToSale(job,"Sale tiếp quản câu hỏi chưa trả lời được.","AI không đủ dữ liệu hoặc không thể xử lý yêu cầu.").then(()=>{throw new JobStopped("Handoff to Sale");});',
 '    const withNote=serviceNote && action.purpose==="reply" && !media ?'
 ].join("\n"));
 w=replace(w,'const instructions='+String.fromCharCode(96),'const instructions='+String.fromCharCode(96)+'AI SALE 2.4: Khi câu hỏi không hiểu, ngoài phạm vi hoặc thiếu căn cứ để trả lời chính xác, gọi request_support ngay và dừng. Không tự nói lời xin lỗi, không hỏi lại vòng vo, không nhắc tiếp. Nếu khách chỉ thiếu một thông tin đặt vé rõ ràng (show, số vé, mã ghế hoặc thông tin nhận vé), được hỏi đúng thông tin thiếu một lần. Khi khách yêu cầu nhân viên/CSKH/ban quản lý thì dùng request_support. Với mã ghế cụ thể phải tra exact_seats; không suy đoán từ hạng vé hoặc ảnh. Giá, tồn ghế và thanh toán phải theo máy chủ. Không lặp lại nội dung vừa gửi hoặc tự chốt khi khách chỉ hỏi.\n');
@@ -46,11 +53,14 @@ w=replace(w,'      request_support:tool({description:',[
 '      request_support:tool({description:'
 ].join("\n"));
 w=replace(w,'  if(!action){\n    const text=result.text.trim();if(!safeAiConversationText(text))throw Error("Model response needs factual review");',[
-'  if(needsSupport){await setState(job,"needs_attention","Sale tiếp quản yêu cầu ngoài khả năng AI.","AI yêu cầu nhân viên xử lý.",currentOrder?.code||null);return;}',
+'  if(needsSupport){await handoffToSale(job,"Sale tiếp quản yêu cầu ngoài khả năng AI.","AI yêu cầu nhân viên xử lý.",currentOrder?.code||null);return;}',
 '  if(!action){',
-'    const text=result.text.trim();if(!safeAiConversationText(text)||unableToAnswer(text)){await setState(job,"needs_attention","Sale tiếp quản câu hỏi chưa trả lời được.","AI chưa thể trả lời chính xác.",currentOrder?.code||null);return;}'
+'    const text=result.text.trim();if(!safeAiConversationText(text)||unableToAnswer(text)){await handoffToSale(job,"Sale tiếp quản câu hỏi chưa trả lời được.","AI chưa thể trả lời chính xác.",currentOrder?.code||null);return;}'
 ].join("\n"));
 w=replace(w,'const imageUrl=SEAT_MAP_URL(selected.venue);','const imageUrl=SEAT_MAP_URL(selected.venue,selected.show?.id);');
+assert.equal((w.match(/handoffToSale\(job,/g)||[]).length,7,"All seven 2.4 handoff paths must use the guarded atomic RPC");
+assert.ok(w.includes('result.mode!=="manual"'),"Handoff requires confirmed manual mode");
+assert.ok(w.includes('aiRpc("handoff",{p_job_id:job.id,p_lease_token:job.lease_token'),"Handoff must be scoped to the active job");
 syntax(worker,w);
 const img="lib/ai-sales-inbound-image.ts";let i=read(img);
 i=replace(i,' multipleShows:z.boolean(),',' multipleShows:z.boolean(),\n selectedSeats:z.array(z.string().regex(/^[A-O][0-9]{2}$/)).max(20).optional(),\n seatSelectionCertain:z.boolean().optional(),');
