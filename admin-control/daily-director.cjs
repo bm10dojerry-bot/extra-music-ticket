@@ -245,6 +245,18 @@ function periodLabel(period){return period==='week'?'Kế hoạch tuần (7 ngà
 function proposalPlan(platform,period,day,finance,inventory,retail,now){
  const base=platform==='music'?musicPlan(day,finance,inventory,now,period):retailPlan(retail);
  const end=period==='week'?shiftDay(day,6):period==='month'?new Date(Date.UTC(Number(day.slice(0,4)),Number(day.slice(5,7)),0)).toISOString().slice(0,10):shiftDay(day,1);
+ if(platform==='24h'){
+  const deadline=timeOf(end),firstDeadline=timeOf(day);
+  const scopeNote=period==='day'?'Xác minh nguồn và chuẩn bị nội dung tư vấn trong kỳ.':period==='week'?'Trong 7 ngày, kiểm tra dữ liệu hằng ngày, chọn sản phẩm có đủ giá vốn và tồn kho; lập kịch bản thử nghiệm sau khi xác minh.':'Đến cuối tháng, tổng hợp chứng từ, rà biên lợi nhuận và lập phương án tháng tiếp theo sau khi có nguồn thực tế.';
+  base.summary=scopeNote+' Chưa có API FnB; chưa đặt chỉ tiêu doanh thu, đơn hàng hoặc ngân sách bằng dữ liệu giả.';
+  base.evidence={...base.evidence,retailObjective:{objective:scopeNote,deadline,budgetNewVnd:0,orderTarget:null,revenueTargetVnd:null,staff:[
+   {person:'Diệu',role:'Sale / CSKH',deadline:firstDeadline,action:'Đề xuất xác minh quy trình tư vấn và báo số hội thoại đã ghi nhận; không tự gửi tin.'},
+   {person:'Trang',role:'Quảng cáo',deadline:firstDeadline,action:'Đề xuất kiểm tra số liệu quảng cáo theo đúng Page; chưa chi tiền.'},
+   {person:'Hải',role:'Tài chính',deadline,action:'Đề xuất tổng hợp chứng từ, đối chiếu doanh thu và giá vốn; ghi rõ khoản thiếu.'}
+  ]}};
+  base.tasks=base.tasks.map(t=>({...t,deadline:['sapo','crm','ads'].includes(t.id)?firstDeadline:deadline}));
+  for(const person of base.evidence.retailObjective.staff)base.tasks.push({...task('staff:'+person.person,'Nhân sự · '+person.person,'Đề xuất phân công '+person.person,person.action,'needs_input'),deadline:person.deadline});
+ }
  return {...base,period,periodStart:day,periodEnd:end,title:periodLabel(period)+' · '+base.title};
 }
 function validProposalPlatform(platform){return ['music','24h','music_week','music_month','24h_week','24h_month'].includes(platform);}
@@ -297,6 +309,8 @@ function renderProposalPreview(record,day,esc,approvals=[]){
  if(!record)return '<section class="director-preview"><h2>Phương án AI Director</h2><p>Chưa có phương án lưu cho ngày '+esc(day)+'. Chọn ngày hiện tại để xem đề xuất tự động.</p><a href="#daily-director">Xem trạng thái AI Director</a></section>';
  const p=record.plan,approved=approvals.find(a=>a.revision===record.revision),lead=p.evidence?.shows?.[0],portfolio=p.evidence?.upcomingShows??[];
  const campaigns=p.evidence?.campaigns??[],detailed=campaigns.length?'<h3>Chiến dịch đề xuất · mục tiêu và deadline</h3>'+campaigns.map((campaign,index)=>renderCampaign(campaign,esc,index===0)).join(''):'';
+ const retail=p.evidence?.retailObjective;
+ const retailHtml=retail?'<p><strong>Mục tiêu:</strong> '+esc(retail.objective)+'</p><p><strong>Deadline:</strong> '+esc(displayDeadline(retail.deadline))+' · Ngân sách tăng thêm 0 đ · Chỉ tiêu đơn và doanh thu: chờ dữ liệu FnB.</p><details><summary>Nhân sự đề xuất</summary><ul>'+retail.staff.map(s=>'<li>'+esc(s.person+' · '+s.role+' — '+s.action+' Hạn: '+displayDeadline(s.deadline))+'</li>').join('')+'</ul></details>':'';
  const status=approved?'Đã phê duyệt · triển khai nội bộ':'Chờ anh phê duyệt';
  const title=lead?'Ưu tiên bán vé '+lead.artist+' · '+lead.date:p.title;
  const baseline=lead?'<p><strong>Căn cứ:</strong> '+esc(n(lead.inventory.sold)+'/'+n(lead.inventory.capacity)+' ghế đã bán theo API; '+n(lead.inventory.remaining)+' ghế còn theo API (chưa trừ giữ chỗ). '+(lead.daySales?'Trong ngày: '+n(lead.daySales.paidTickets)+' vé trả tiền, '+money(lead.daySales.revenueVnd)+'.':'Chưa có số thanh toán khớp mã show.'))+'</p>':'<p>'+esc(p.summary)+'</p>';
@@ -306,7 +320,7 @@ function renderProposalPreview(record,day,esc,approvals=[]){
   'Ads / Analyst: rà dữ liệu chi tiêu, số hội thoại và số vé thanh toán; chưa có căn cứ tăng ngân sách. So sánh kết quả ngày tiếp theo.'
  ]:p.tasks.slice(0,3).map(t=>t.title+': '+t.deliverable);
  const progress=approved?'<p>Tiến độ phiên bản đã duyệt: '+esc(n(approved.tasks.filter(t=>t.status==='draft_prepared').length))+' tài liệu nội bộ đã chuẩn bị · '+esc(n(approved.tasks.filter(t=>t.status==='blocked').length))+' việc bị chặn · '+esc(n(approved.tasks.filter(t=>t.status==='queued').length))+' việc chờ.</p>':'<p>Chưa tạo hàng đợi triển khai cho phiên bản này.</p>';
- return '<section class="director-preview"><h2>Phương án AI Director</h2><p class="tag">'+esc(status)+' · Phiên bản '+esc(record.revision)+' · '+esc(day)+'</p><h3>'+esc(title)+'</h3>'+baseline+detailed+'<h4>Biện pháp đề xuất</h4><ol>'+measures.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'+(lead?'<p><strong>Đo kết quả:</strong> vé đã thanh toán, doanh thu xác nhận và số ghế bán; không quy kết cho quảng cáo khi chưa có dữ liệu phân bổ. '+esc(n(portfolio.length))+' show trong danh sách chuẩn bị.</p>':'')+progress+'<p>Ngân sách phát sinh: 0 đ. Chưa ghi Music, chưa đăng bài, chưa gửi tin.</p><p><a class="director-jump" href="#daily-director">Xem đầy đủ phương án, phê duyệt và kết quả →</a></p></section>';
+ return '<section class="director-preview"><h2>Phương án AI Director</h2><p class="tag">'+esc(status)+' · Phiên bản '+esc(record.revision)+' · '+esc(day)+'</p><h3>'+esc(title)+'</h3>'+baseline+detailed+retailHtml+'<h4>Biện pháp đề xuất</h4><ol>'+measures.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'+(lead?'<p><strong>Đo kết quả:</strong> vé đã thanh toán, doanh thu xác nhận và số ghế bán; không quy kết cho quảng cáo khi chưa có dữ liệu phân bổ. '+esc(n(portfolio.length))+' show trong danh sách chuẩn bị.</p>':'')+progress+'<p>Ngân sách phát sinh: 0 đ. Chưa ghi Music, chưa đăng bài, chưa gửi tin.</p><p><a class="director-jump" href="#daily-director">Xem đầy đủ phương án, phê duyệt và kết quả →</a></p></section>';
 }
 function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new Date()}={}){
  const states={draft_ready:'Bản nháp đề xuất · chờ duyệt',needs_input:'Chờ dữ liệu / nhân sự',awaiting_approval:'Khóa thực thi bên ngoài'};
