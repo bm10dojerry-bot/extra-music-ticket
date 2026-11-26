@@ -75,7 +75,7 @@ export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},
  rect(740,395,2120,90,"#171d31",'rx="24"')+vectorLabel("SÂN KHẤU",W/2,418,45,"#fff","middle");
  const markers=[[anchors.left,anchors.top],[anchors.right,anchors.top],[anchors.left,anchors.bottom],[anchors.right,anchors.bottom]].map(([a,b])=>rect(a-18,b-18,36,36,"#ff00ff")).join("");
  const bitWidth=24,bitStart=W/2-16*bitWidth;
- const bits=Array.from({length:32},(_,i)=>rect(bitStart+i*bitWidth,320,bitWidth,26,(parseInt(reference,16)>>> (31-i))&1?"#101010":"#ffffff")).join("");
+ const bits=Array.from({length:32},(_,i)=>rect(bitStart+i*bitWidth,305,bitWidth,20,(parseInt(reference,16)>>> (31-i))&1?"#101010":"#ffffff")).join("");
  const legend=["A","B","C","D",...(snapshot?["X"]:[])].map((z,i,all)=>{
   const step=(W-160)/all.length,x=80+i*step,tag=z==="X"?"KHÔNG KHẢ DỤNG":(snapshot?.tierLabels?.[z]??"HẠNG "+z);
   return rect(x,H-163,48,36,z==="X"?"#737984":zoneColors[z],'rx="4"')+vectorLabel(tag,x+60,H-156,27,"#162032","start",step-72);
@@ -123,7 +123,7 @@ export function readSeatMapMarks(rgb:Uint8Array,width:number,height:number):MapM
  const fromPixel=(x:number,y:number)=>({x:80+(x-tl.x)*(W-160)/dx,y:300+(y-tl.y)*(H-510)/dy});
  let hash=0;
  for(let i=0;i<32;i++){
-  const c=toPixel(W/2-16*24+i*24+12,333);let sum=0,n=0;
+  const c=toPixel(W/2-16*24+i*24+12,315);let sum=0,n=0;
   for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){const px=Math.round(c.x)+xx,py=Math.round(c.y)+yy;if(px<0||px>=width||py<0||py>=height)return null;const k=(py*width+px)*3;sum+=(rgb[k]+rgb[k+1]+rgb[k+2])/3;n++;}
   const v=sum/n;if(v>90&&v<165)return null;hash=((hash<<1)|(v<=90?1:0))>>>0;
  }
