@@ -42,7 +42,7 @@ w=replace(w,'  if(recognition.reply){',[
 '        const matches=(await Promise.all(candidates.filter(s=>s.id!==choice?.id).map(s=>verifiedMarkedSeatDetails(s.id,marks).catch(()=>null)))).filter(v=>v!==null);',
 '        if(matches.length===1)verified=matches[0];',
 '      }',
-'      if(verified&&verified.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:"Em đã đối chiếu dấu bút xanh với sơ đồ chính thức.\\n"+formatExactSeats(verified)});return;}',
+'      if(verified&&verified.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:"Em đã kiểm tra các ghế mình đánh dấu trên sơ đồ.\\n"+formatExactSeats(verified)});return;}',
 '    }',
 '    if(exactCodes.length&&choice){',
 '      let details:Awaited<ReturnType<typeof exactSeatDetails>>|null=null;',
@@ -50,7 +50,7 @@ w=replace(w,'  if(recognition.reply){',[
 '      if(details&&details.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:formatExactSeats(details)});return;}',
 '      await handoffToSale(job,"Sale kiểm tra mã ghế trên ảnh hoặc tin nhắn.","Mã ghế chưa đối chiếu được với sơ đồ bán vé.");return;',
 '    }',
-'    if(isNewImage){try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:"Mình gửi ảnh giữ đủ 4 mốc hồng, chấm bút xanh dương vào chính giữa ô ghế hoặc nhắn mã ghế giúp em nhé. Em chưa giữ ghế nào."});}finally{await handoffToSale(job,"Sale kiểm tra vị trí khách đánh dấu trên sơ đồ.","Chưa đối chiếu được mã sơ đồ hoặc dấu đánh ghế.");}return;}',
+'    if(isNewImage){try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:"Dạ, em chưa xác định chắc chắn vị trí ghế mình đánh dấu. Mình gửi lại ảnh rõ hơn hoặc cho em mã ghế nhé. Em chưa giữ ghế nào."});}finally{await handoffToSale(job,"Sale kiểm tra vị trí khách đánh dấu trên sơ đồ.","Chưa đối chiếu được mã sơ đồ hoặc dấu đánh ghế.");}return;}',
 '  }',
 '  if(recognition.reply){'
 ].join("\n"));
@@ -75,7 +75,7 @@ assert.ok(w.includes('aiRpc("handoff",{p_job_id:job.id,p_lease_token:job.lease_t
 syntax(worker,w);
 const img="lib/ai-sales-inbound-image.ts";let i=read(img);
 i=replace(i,' multipleShows:z.boolean(),',' multipleShows:z.boolean(),\n selectedSeats:z.array(z.string().regex(/^[A-O][0-9]{2}$/)).max(20).optional(),\n seatSelectionCertain:z.boolean().optional(),');
-i=replace(i,'When no show text is legible return null. On receipts return null showText and false multipleShows.','When no show text is legible return null. On receipts return null showText and false multipleShows. For a seat map, selectedSeats contains ONLY complete seat codes that are explicitly circled, highlighted as selected, ticked or pointed at by the customer. Never copy all printed or available seats. Require clear row letter and number, pad number to two digits. If the mark, row or number is ambiguous, return empty selectedSeats and seatSelectionCertain false. For other images omit these fields. Never infer seat availability, prices or payment from an image.');
+i=replace(i,'When no show text is legible return null. On receipts return null showText and false multipleShows.','When no show text is legible return null. On receipts return null showText and false multipleShows. For a seat map, selectedSeats contains ONLY complete seat codes that are explicitly circled, dotted, highlighted as selected, ticked or pointed at by the customer, regardless of annotation color or device. Never copy all printed or available seats. Require clear row letter and number, pad number to two digits. If the mark, row or number is ambiguous, return empty selectedSeats and seatSelectionCertain false. For other images omit these fields. Never infer seat availability, prices or payment from an image.');
 i=replace(i,'import "server-only";','import "server-only";\nimport {readSeatMapMarks,type MapMarks} from "./seat-map-image";');
 i=replace(i,'type ImageReading=z.infer<typeof schema>;','type ImageReading=z.infer<typeof schema>&{mapMarks?:MapMarks};');
 i=replace(i,'  const sanitized=await sharp(bytes,',[
