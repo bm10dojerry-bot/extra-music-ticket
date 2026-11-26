@@ -17,19 +17,23 @@ function musicPlan(day,finance,inventory){
  }
  const report=musicDay(finance.data,day);
  const byId=new Map(report.rows.map(r=>[r.showId,r]));
+ const previousDay=new Date(Date.parse(day+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+ const previous=musicDay(finance.data,previousDay);
+ const previousById=new Map(previous.rows.map(r=>[r.showId,r]));
+ const signed=v=>(v>0?'+':'')+n(v);
  const candidates=inventory.rows.filter(r=>r.date>=day&&hoursToDay(r.date,day)<=7&&r.status==='announced'&&r.inventory&&r.inventory.capacity>0&&r.inventory.remaining>0&&validCount(r.inventory.sold)&&r.inventory.sold<=r.inventory.capacity)
  .sort((a,b)=>a.date.localeCompare(b.date)||a.inventory.sold/a.inventory.capacity-b.inventory.sold/b.inventory.capacity).slice(0,2);
- const facts={daily:report.daily,shows:candidates.map(s=>({id:s.id,artist:s.artist,date:s.date,inventory:s.inventory,daySales:byId.get(s.id)?.daily??null}))};
- const base=[task('daily-analysis','Analyst','Đọc báo cáo ngày','Theo ngày thanh toán: '+n(report.daily.paidOrders)+' đơn trả tiền, '+n(report.daily.paidTickets)+' vé trả tiền, '+money(report.daily.revenueVnd)+'. Chưa coi doanh thu xác nhận là tiền đã đối soát ngân hàng.')];
+ const facts={daily:report.daily,previousDay,previous:previous.daily,shows:candidates.map(s=>({id:s.id,artist:s.artist,date:s.date,inventory:s.inventory,daySales:byId.get(s.id)?.daily??null,previousSales:previousById.get(s.id)?.daily??null})),adAttribution:null};
+ const base=[task('daily-analysis','Analyst','Đọc và so sánh kết quả báo cáo ngày','Theo ngày thanh toán: '+n(report.daily.paidOrders)+' đơn trả tiền, '+n(report.daily.paidTickets)+' vé trả tiền, '+money(report.daily.revenueVnd)+'. Ngày trước ('+previousDay+'): '+n(previous.daily.paidTickets)+' vé, '+money(previous.daily.revenueVnd)+'. Chênh lệch đến thời điểm đọc: '+signed(report.daily.paidTickets-previous.daily.paidTickets)+' vé, '+signed(report.daily.revenueVnd-previous.daily.revenueVnd)+' đ; ngày hiện tại có thể chưa kết thúc. Chưa coi doanh thu xác nhận là tiền đã đối soát ngân hàng, không quy kết cho chiến dịch quảng cáo khi chưa có dữ liệu phân bổ.')];
  if(!candidates.length)return {title:'Theo dõi bán vé Music',summary:'Không có show phù hợp tiêu chí ưu tiên trong 7 ngày tới ở nguồn hiện tại. Không đề xuất chiến dịch bán vé mới khi chưa có căn cứ.',evidence:facts,tasks:[...base,task('review-shows','Planner','Kiểm tra lịch show','Rà các show sắp tới và đối chiếu tình trạng mở bán từ nguồn chính thức.','needs_input')]};
  const tasks=[...base];
  for(const s of candidates){
-  const id=s.id,ratio=Math.round(s.inventory.sold*100/s.inventory.capacity),r=byId.get(id),left=s.inventory.remaining;
+  const id=s.id,ratio=Math.round(s.inventory.sold*100/s.inventory.capacity),r=byId.get(id),prev=previousById.get(id),left=s.inventory.remaining;
   const price=Object.entries(s.prices||{}).filter(([,v])=>validCount(v)).map(([k,v])=>'Hạng '+k+': '+money(v)).join('; ');
   const headline=s.artist+' — '+s.date;
-  const context='Show '+headline+'. API ghi '+n(s.inventory.sold)+'/'+n(s.inventory.capacity)+' ghế đã bán ('+ratio+'%); '+n(left)+' ghế còn theo API, chưa trừ giữ chỗ. '+(r?'Ngày chọn: '+n(r.daily.paidTickets)+' vé trả tiền, '+money(r.daily.revenueVnd)+'.':'Chưa khớp dữ liệu doanh thu theo mã show.');
+  const context='Show '+headline+'. API ghi '+n(s.inventory.sold)+'/'+n(s.inventory.capacity)+' ghế đã bán ('+ratio+'%); '+n(left)+' ghế còn theo API, chưa trừ giữ chỗ. '+(r?'Ngày chọn: '+n(r.daily.paidTickets)+' vé trả tiền, '+money(r.daily.revenueVnd)+'.':'Chưa khớp dữ liệu doanh thu theo mã show.')+(prev?' Ngày trước: '+n(prev.daily.paidTickets)+' vé, '+money(prev.daily.revenueVnd)+'.':'');
   tasks.push(
-   task(id+':planner','Planner','Chiến dịch ưu tiên '+s.artist,context+' Mục tiêu đề xuất: tăng số vé thanh toán so với báo cáo ngày trước; kiểm tra lại lượng ghế và mục tiêu đã duyệt trước khi chốt KPI. Ưu tiên nhắc lịch, tư vấn ghế và chăm sóc khách đã quan tâm.'),
+   task(id+':planner','Planner','Chiến dịch ưu tiên '+s.artist,context+' Biện pháp phát triển: tăng tỷ lệ chuyển đổi khách quan tâm thành vé đã thanh toán. KPI theo dõi: vé trả tiền, doanh thu xác nhận, tỷ lệ lấp đầy và hội thoại có kết quả; không đặt chỉ tiêu hoặc ngân sách giả. Sau khi duyệt, so lại báo cáo ngày tiếp theo với mốc này; kiểm tra lượng ghế và mục tiêu được duyệt. Ưu tiên nhắc lịch, tư vấn ghế và chăm sóc khách đã quan tâm.'),
    task(id+':content','Content','Bản nháp bài truyền thông '+s.artist,'Hẹn gặp bạn tại '+headline+'! Xem lịch, giá vé và ghế đang mở tại https://iextra.net. '+(price?'Giá niêm yết nguồn hiện tại: '+price+'. ':'')+'Liên hệ đội tư vấn nếu cần chọn khu ghế. Bản nháp chưa đăng; phải kiểm lại thông tin trước khi xuất bản.'),
    task(id+':creative','Creative','Brief hình ảnh '+s.artist,'Dùng poster đã được xác nhận quyền sử dụng của '+s.artist+'. Nhấn ngày '+s.date+', thương hiệu +1 Music Show và lời mời xem sơ đồ ghế. Không tự tạo hoặc công bố giá, ảnh nghệ sĩ khi chưa xác minh.'),
    task(id+':sale','Sale','Kịch bản tư vấn '+s.artist,'Xác nhận khách quan tâm '+headline+'; hỏi số vé và mức giá; gửi sơ đồ ghế hiện hành từ Music. Nhắc xác nhận chỗ trống trên hệ bán vé trước khi tư vấn. Không tạo đơn, giữ ghế hoặc gửi tin từ EXTRA OS.'),
@@ -39,7 +43,7 @@ function musicPlan(day,finance,inventory){
   );
  }
  tasks.push(task('audit','Auditor','Kiểm tra quyền và nghiệm thu','Tất cả đầu ra là bản nháp nội bộ, nguồn Music chỉ đọc. Chưa có quyền đăng bài, tạo đơn, sửa dữ liệu hay chi tiền; không xác nhận thực thi bên ngoài.'));
- return {title:'Chiến dịch ưu tiên show gần ngày diễn',summary:'Ưu tiên theo lịch diễn trong 7 ngày tới và số ghế công khai còn lại. Không đặt KPI giả; cần đối chiếu doanh số, nguồn ghế và ngân sách trước khi chạy thật.',evidence:facts,tasks};
+ return {title:'Chiến dịch ưu tiên show gần ngày diễn',summary:'Điều chỉnh kinh doanh dựa trên báo cáo ngày và ngày liền trước, ưu tiên show trong 7 ngày tới có ghế còn. Đo hiệu quả bằng báo cáo tiếp theo; chưa có dữ liệu phân bổ theo quảng cáo nên không kết luận hiệu quả từng chiến dịch. Cần đối chiếu số ghế và ngân sách trước khi chạy thật.',evidence:facts,tasks};
 }
 function retailPlan(report){
  if(!report)return {title:'Khôi phục báo cáo 24H',summary:'Chưa đọc được báo cáo nội bộ.',evidence:{available:false},tasks:[task('audit-source','Auditor','Kiểm tra nguồn 24H','Rà kết nối báo cáo nội bộ, không sử dụng số liệu giả.','needs_input')]};
