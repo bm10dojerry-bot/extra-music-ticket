@@ -248,6 +248,7 @@ init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>init
   startupSaleCheck().then(async()=>{
    if(process.env.RAILWAY_ENVIRONMENT_NAME!=='staging'||process.env.RAILWAY_SERVICE_NAME!=='admin-web')return;
    verifyMusicFinance().then(status=>console.log('Music daily read-only verification',JSON.stringify(status))).catch(()=>console.error('Music daily verification unavailable'));
+   readRetailDaily(pool,reportDay(null)).then(result=>console.log('24H daily report verification',JSON.stringify({ok:true,internalCampaigns:result.created,financeRecords:result.records.length,hasInboundData:result.crm!==null,sapoFnB:'not_connected'}))).catch(()=>console.error('24H daily report verification unavailable'));
    getMusicSnapshot().then(snapshot=>console.log('Music public snapshot',JSON.stringify({showsAvailable:snapshot.showsAvailable,inventoryAvailable:snapshot.inventoryAvailable,shows:snapshot.rows.length,rowsWithInventory:snapshot.rows.filter(row=>row.inventory!==null).length,rowsWithHeld:snapshot.rows.filter(row=>row.inventory?.held!==null&&row.inventory?.held!==undefined).length,rowsWithPrices:snapshot.rows.filter(row=>Object.values(row.prices??{}).some(v=>v!==null)).length}))).catch(()=>console.error('Music public snapshot unavailable'));
    const {rows:[previous]}=await pool.query('select id from os_director_runs where request_id=$1 and input->>\'mode\'=\'sample\'',[sampleReleaseRequestId]);
    if(previous)await observeSampleRun(previous.id,true);
