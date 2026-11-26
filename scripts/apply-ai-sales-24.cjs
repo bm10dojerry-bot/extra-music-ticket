@@ -75,7 +75,16 @@ m=replace(m,'Ảnh thể hiện các hạng ghế, không thể hiện tình tr�
 syntax(sm,m);
 const fb="lib/facebook-messenger.ts";let f=read(fb);
 f=replace(f,'(?:ccc|laocai)$/.test(imageUrl)','(?:ccc|laocai)(?:\\?show=[a-z0-9-]{3,100})?$/.test(imageUrl)');
+
+const uploadHelper="\ntype SeatMapUploadConfig={pageId:string;pageToken:string;apiVersion:string};\nfunction seatMapUploadTarget(imageUrl:string){\n const match=/^https:\\/\\/iextra\\.net\\/api\\/public\\/seat-map\\/(ccc|laocai)(?:\\?show=([a-z0-9-]{3,100}))?$/.exec(imageUrl);\n return match?{venue:match[1] as \"ccc\"|\"laocai\",showId:match[2]}:null;\n}\nfunction seatMapUploadForm(psid:string,png:Uint8Array){\n if(!/^[0-9]{5,80}$/.test(psid)||png.byteLength<24||png.byteLength>8*1024*1024||![137,80,78,71,13,10,26,10].every((v,i)=>png[i]===v))throw new MessengerSendError(false);\n const form=new FormData();\n form.set(\"recipient\",JSON.stringify({id:psid}));\n form.set(\"messaging_type\",\"RESPONSE\");\n form.set(\"message\",JSON.stringify({attachment:{type:\"image\",payload:{is_reusable:false}}}));\n form.set(\"filedata\",new Blob([new Uint8Array(png)],{type:\"image/png\"}),\"extra-seat-map.png\");\n return form;\n}\nasync function renderSeatMapForMessenger(imageUrl:string):Promise<Uint8Array>{\n const target=seatMapUploadTarget(imageUrl);if(!target)throw new MessengerSendError(false);\n const {venue,showId}=target;\n const [{renderSeatMapSvg},{getAiSeatSnapshot},{staffDb},{default:sharp}]=await Promise.all([import(\"./seat-map-image\"),import(\"./ai-sales-checkout\"),import(\"./staff-auth\"),import(\"sharp\")]);\n let svg:string;\n if(showId){\n  const snapshot=await getAiSeatSnapshot(showId);\n  if(snapshot.show.venueId!==venue)throw new MessengerSendError(false);\n  const taken=new Set([...snapshot.taken,...snapshot.seats.filter(s=>snapshot.show.prices[s.zone as \"A\"|\"B\"|\"C\"|\"D\"]===null).map(s=>s.id)]);\n  svg=renderSeatMapSvg(venue,{}, {seats:snapshot.seats,taken,title:snapshot.show.artist+\" · \"+snapshot.show.date,checkedAt:new Date().toLocaleString(\"vi-VN\",{timeZone:\"Asia/Ho_Chi_Minh\"})});\n }else{\n  const rows=await staffDb(\"venue_seat_rows?venue_id=eq.\"+venue+\"&select=row_code,seat_count&limit=1000\",{signal:AbortSignal.timeout(5000)}) as {row_code:string;seat_count:number}[];\n  if(!Array.isArray(rows))throw new MessengerSendError(false);\n  const counts:Record<string,number>={};\n  for(const row of rows){if(!/^[A-O]$/.test(row.row_code)||!Number.isSafeInteger(row.seat_count)||row.seat_count<2||row.seat_count>80)throw new MessengerSendError(false);counts[row.row_code]=row.seat_count;}\n  svg=renderSeatMapSvg(venue,counts);\n }\n return new Uint8Array(await sharp(Buffer.from(svg)).png().toBuffer());\n}\nasync function sendSeatMapFile(config:SeatMapUploadConfig,psid:string,imageUrl:string,render=renderSeatMapForMessenger,send=fetch):Promise<{messageId:string}>{\n if(!seatMapUploadTarget(imageUrl)||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);\n let form:FormData;\n try{form=seatMapUploadForm(psid,await render(imageUrl));}\n catch{console.warn(\"[seat-map-upload] render rejected\");throw new MessengerSendError(false);}\n let response:Response;\n try{response=await send(\"https://graph.facebook.com/\"+config.apiVersion+\"/\"+config.pageId+\"/messages\",{\n  method:\"POST\",headers:{Authorization:\"Bearer \"+config.pageToken},body:form,cache:\"no-store\",redirect:\"error\",signal:AbortSignal.timeout(15000)\n });}catch{console.warn(\"[seat-map-upload] delivery uncertain\");throw new MessengerSendError(true);}\n const data=await response.json().catch(()=>({})) as {message_id?:string;error?:{code?:number;error_subcode?:number}};\n if(!response.ok||typeof data.message_id!==\"string\"||data.message_id.length<4){\n  const known=!response.ok&&response.status>=400&&response.status<500&&response.status!==408;\n  console.warn(\"[seat-map-upload] rejected\",response.status,typeof data.error?.code===\"number\"?data.error.code:\"unknown\",typeof data.error?.error_subcode===\"number\"?data.error.error_subcode:\"unknown\");\n  throw new MessengerSendError(!known,response.status,data.error?.code);\n }\n console.info(\"[seat-map-upload] delivered\");\n return {messageId:data.message_id};\n}\n";
+const imageStart=f.indexOf("export async function sendMessengerPageImage(");
+assert(imageStart>=0,"Image transport missing");
+const prefix=f.slice(0,imageStart),imageSource=f.slice(imageStart);
+const configAnchor=' if(!config||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);';
+assert.equal(imageSource.split(configAnchor).length,2,"Image config guard must be unique");
+f=prefix+imageSource.replace(configAnchor,()=>configAnchor+'\n if(seatMapUploadTarget(imageUrl))return sendSeatMapFile(config,psid,imageUrl);')+"\n"+uploadHelper;
 syntax(fb,f);
+
 const notif="lib/ai-sales-notifications.ts";let n=read(notif);
 n=replace(n,'AI cần xử lý tiếp trường hợp này. Trạng thái thanh toán được giữ nguyên theo dữ liệu đối soát.','Nhân viên Sale/CSKH cần tiếp quản hội thoại. Mở liên kết nội bộ để xem đầy đủ nội dung. Trạng thái thanh toán không thay đổi.');
 syntax(notif,n);
@@ -90,3 +99,34 @@ assert.equal(policy.unableToAnswer("Em chưa đọc rõ nội dung ảnh"),true)
 assert.equal(policy.unableToAnswer("Ghế C01 đang trống"),false);
 for(const venue of ["ccc","laocai"]){const seats=v.seatsFor(venue),svg=maps.renderSeatMapSvg(venue,{}, {seats,taken:new Set([seats[0].id]),title:"<test>",checkedAt:"test"});for(const seat of seats)assert.ok(svg.includes(">"+seat.id+"</text>"),venue+" "+seat.id);assert.ok(svg.includes("#737984"));assert.ok(svg.includes("&lt;test&gt;"));}
 console.log("[AI SALE 2.4] Handoff, exact seat codes, two real layout maps and safety checks passed.");
+
+
+async function testSeatMapUpload(){
+ const code=ts.transpileModule(uploadHelper,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ class E extends Error{constructor(ambiguous,statusCode,providerCode){super("test");this.ambiguous=ambiguous;this.statusCode=statusCode;this.providerCode=providerCode;}}
+ const api=new Function("MessengerSendError",code+"\nreturn {seatMapUploadTarget,seatMapUploadForm,sendSeatMapFile};")(E);
+ const url="https://iextra.net/api/public/seat-map/ccc?show=dinh-dung-2811";
+ const png=new Uint8Array(await require("sharp")(Buffer.from(maps.renderSeatMapSvg("ccc"))).png().toBuffer());
+ assert.deepEqual(api.seatMapUploadTarget(url),{venue:"ccc",showId:"dinh-dung-2811"});
+ for(const bad of ["https://evil.example/api/public/seat-map/ccc","https://iextra.net/api/public/seat-map/ccc?show=x&x=y","https://iextra.net/api/public/seat-map/moana"])assert.equal(api.seatMapUploadTarget(bad),null);
+ const cfg={pageId:"123456",pageToken:"test-only",apiVersion:"v24.0"};
+ let calls=0;
+ const mockSend=async(endpoint,opts)=>{
+  calls++;assert.equal(endpoint,"https://graph.facebook.com/v24.0/123456/messages");
+  assert.equal(opts.method,"POST");assert.equal(opts.body.get("messaging_type"),"RESPONSE");
+  assert.deepEqual(JSON.parse(opts.body.get("recipient")),{id:"1234567"});
+  assert.deepEqual(JSON.parse(opts.body.get("message")),{attachment:{type:"image",payload:{is_reusable:false}}});
+  const file=opts.body.get("filedata");assert.equal(file.type,"image/png");assert.equal(file.name,"extra-seat-map.png");
+  assert.deepEqual(new Uint8Array(await file.arrayBuffer()),png);
+  return new Response(JSON.stringify({message_id:"test-mid-1"}),{status:200});
+ };
+ assert.deepEqual(await api.sendSeatMapFile(cfg,"1234567",url,async()=>png,mockSend),{messageId:"test-mid-1"});
+ assert.equal(calls,1);
+ await assert.rejects(api.sendSeatMapFile(cfg,"1234567",url,async()=>new Uint8Array(1),mockSend),e=>e.ambiguous===false);
+ assert.equal(calls,1);
+ await assert.rejects(api.sendSeatMapFile(cfg,"1234567",url,async()=>png,async()=>new Response(JSON.stringify({error:{code:100,error_subcode:1}}),{status:400})),e=>e.ambiguous===false&&e.providerCode===100);
+ await assert.rejects(api.sendSeatMapFile(cfg,"1234567",url,async()=>png,async()=>{throw Error("network");}),e=>e.ambiguous===true);
+ await assert.rejects(api.sendSeatMapFile(cfg,"1234567",url,async()=>png,async()=>new Response("{}",{status:200})),e=>e.ambiguous===true);
+ console.log("[AI SALE 2.4.3] Binary PNG multipart, strict scope, acknowledgement and no automatic ambiguous retry tests passed.");
+}
+testSeatMapUpload().catch(e=>{console.error(e);process.exitCode=1;});
