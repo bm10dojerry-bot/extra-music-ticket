@@ -261,6 +261,21 @@ test('Live Director retains only the allowlisted provider failure code and honor
  }
 });
 
+test('An incomplete audit stays unverified and records only the provider reason',async()=>{
+ const facts=live.makeFacts('music','2030-01-02',null,null,null,null);
+ const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture-only',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13'};
+ const results={DirectorBrief:{responseId:'resp_brief',output:{assignments:[{agent:'Auditor'}]}}};
+ for(const [reason,expected] of [['max_output_tokens','provider_output_limit'],['content_filter','provider_content_filter'],['unknown detail','provider_not_completed']]){
+  const request=async(url,opts)=>{
+   const body=JSON.parse(opts.body);
+   assert.equal(body.text.format.schema.properties.actions.maxItems,5);
+   return Response.json({id:'resp_incomplete',status:'incomplete',incomplete_details:{reason}});
+  };
+  await assert.rejects(live.callRole('Auditor',facts,results,env,request),e=>e.message===expected);
+ }
+ const page=live.renderLiveDirector({day:facts.day,step_index:live.stages.indexOf('Auditor'),calls_today:13,status:'blocked',results,facts},escapeMusic,env);
+ assert.match(page,/Đã dùng hết lượt gọi của ngày.*Auditor/);
+});
 test('Music signals separate quoted conversations from verified linked buyers and isolate show-specific ad spend',()=>{
  const {parseSignals}=require('./music-signals.cjs');
  const input={source:'music_sales_signals_v1',checkedAt:'2030-01-02T08:00:00Z',fromDay:'2029-12-27',toDay:'2030-01-02',

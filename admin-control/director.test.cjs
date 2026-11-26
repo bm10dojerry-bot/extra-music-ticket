@@ -586,6 +586,9 @@ test('Live Director persists all 13 distinct provider response checkpoints and b
    assert.equal(await live.runNext(pool,{env,request,now}),null);
    await setReason('invalid_model_report');
   }
+  if(live.stages[n]==='Auditor'){
+   await pool.query("update os_live_director_runs set status='blocked',reason='provider_incomplete' where platform='music' and day=$1::date",[day]);
+  }
   const result=await live.runNext(pool,{env,request,now});
   assert(result);assert.equal(result.externalActions,0);
  }
