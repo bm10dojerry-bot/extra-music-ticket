@@ -198,3 +198,46 @@ test('24H proposals contain a concrete pilot and honest conversion assumptions r
  assert.match(page,/Tăng lượt khách mua tại cửa hàng 24H/);assert.match(page,/100\.000 đ/);assert.match(page,/2–6/);assert.match(page,/Điều kiện hòa vốn/);assert.match(page,/chưa có API doanh thu/);
  assert(daily.tasks.some(t=>t.id==='strategy:Ads / Auditor'&&t.state==='awaiting_approval'));
 });
+
+
+const live=require('./live-director.cjs');
+const {publicMusicAsset,readMusicMedia}=require('./music-readonly.cjs');
+const mediaFixture='https://fokntdvgzfldxbaglrdc.supabase.co/storage/v1/object/public/extra-media/poster.png';
+test('Live Director media connector reads only public assets and excludes arbitrary or signed URLs',async()=>{
+ assert.equal(publicMusicAsset(mediaFixture),mediaFixture);
+ for(const url of ['https://example.com/banner.png','http://iextra.net/banner.png',mediaFixture+'?token=secret','https://fokntdvgzfldxbaglrdc.supabase.co/storage/v1/object/sign/extra-media/secret.png'])assert.equal(publicMusicAsset(url),null);
+ const result=await readMusicMedia(async(url,opts)=>{assert.equal(url,'https://iextra.net/api/public/media');assert.equal(opts.method,'GET');assert.equal(opts.redirect,'error');return Response.json({images:{'artist-music-1':mediaFixture,'bad':'https://example.com/unknown.png'}})});
+ assert.equal(result.available,true);assert.equal(result.assets.length,1);assert.equal(result.assets[0].printVerified,false);
+});
+test('Live Director cannot call a model or show a completed AI plan without a configured model',async()=>{
+ const f=live.makeFacts('music','2030-01-02',{status:'available',data:parseMusicFinance(reportFixture)},{...planInventory,checkedAt:'2030-01-02T00:00:00Z'}, {available:true,assets:[]},null);
+ assert.equal(live.roleNames.length,11);assert.equal(live.stages.length,13);
+ assert(f.missing.some(x=>x.includes('Video')));
+ let calls=0;
+ await assert.rejects(live.callRole('DirectorBrief',f,{}, {},async()=>{calls++;throw Error('unexpected');}),/model_not_configured/);
+ assert.equal(calls,0);
+ const page=live.renderLiveDirector({status:'blocked',reason:'missing_model_key',facts:f,results:{}},escapeMusic,{});
+ assert.match(page,/0\/11 Agent/);assert.match(page,/Chưa cấp API key/);assert.match(page,/Chưa có phương án đủ điều kiện/);
+ assert.doesNotMatch(page,/Phê duyệt phương án AI/);
+});
+test('Live Director requires distinct assignments and actual model reports before synthesis',async()=>{
+ const day='2030-01-02',deadline=day+'T22:00:00+07:00';
+ const f=live.makeFacts('music',day,{status:'available',data:parseMusicFinance(reportFixture)},{...planInventory,checkedAt:day+'T00:00:00Z',rows:[{...planInventory.rows[0],posterUrl:mediaFixture}]},{available:true,assets:[]},null);
+ const assignment=agent=>({agent,mission:'Phân tích theo dữ liệu đã cấp',deadline,deliverable:'Báo cáo kết quả',metric:'Đối chiếu báo cáo'});
+ const brief={summary:'Director phân việc',assignments:live.roleNames.map(assignment),blockers:[]};
+ assert(live.validBrief(brief,f));assert(!live.validBrief({...brief,assignments:brief.assignments.slice(1)},f));
+ const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture-only',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13'};
+ let calls=0;
+ const request=async(url,opts)=>{
+  calls++;assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(opts.method,'POST');
+  const body=JSON.parse(opts.body),input=JSON.parse(body.input);
+  if(input.role==='Research')assert.equal(input.assignment.agent,'Research');
+  const output=input.role==='DirectorBrief'?brief:{summary:'Báo cáo mô hình fixture',actions:[],assetIds:[],assumptions:[],blockers:[]};
+  return Response.json({id:'resp_fixture_'+calls,status:'completed',model:'fixture',output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]});
+ };
+ const b=await live.callRole('DirectorBrief',f,{},env,request);
+ assert.equal(b.responseId,'resp_fixture_1');
+ const r=await live.callRole('Research',f,{DirectorBrief:b},env,request);assert.equal(r.responseId,'resp_fixture_2');
+ await assert.rejects(live.callRole('DirectorFinal',f,{DirectorBrief:b,Research:r},env,request),/missing_agent_reports/);
+ assert.equal(calls,2);
+});
