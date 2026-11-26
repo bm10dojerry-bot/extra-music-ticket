@@ -12,7 +12,7 @@ w=replace(w,'async function handleInbound(job:AiJob,chat:AiChat){', [
 '}',
 'async function handleInbound(job:AiJob,chat:AiChat){'
 ].join("\n"));
-w=replace(w,'import "server-only";','import "server-only";\nimport {asksForStaff,unableToAnswer,seatCodes,simpleSeatQuestion,exactSeatDetails,verifiedMarkedSeatDetails,formatExactSeats,HANDOFF_REPLY} from "./ai-sales-24";');
+w=replace(w,'import "server-only";','import "server-only";\nimport {asksForStaff,unableToAnswer,seatCodes,simpleSeatQuestion,exactSeatDetails,verifiedMarkedSeatDetails,formatMarkedSeats,formatExactSeats,HANDOFF_REPLY} from "./ai-sales-24";');
 w=replace(w,'  const recognition=await recognizeInquiry(',[
 '  if(asksForStaff(latest.body)){',
 '    try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:HANDOFF_REPLY});}',
@@ -42,7 +42,7 @@ w=replace(w,'  if(recognition.reply){',[
 '        const matches=(await Promise.all(candidates.filter(s=>s.id!==choice?.id).map(s=>verifiedMarkedSeatDetails(s.id,marks).catch(()=>null)))).filter(v=>v!==null);',
 '        if(matches.length===1)verified=matches[0];',
 '      }',
-'      if(verified&&verified.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:"Em đã kiểm tra các ghế mình đánh dấu trên sơ đồ.\\n"+formatExactSeats(verified)});return;}',
+'      if(verified&&verified.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:formatMarkedSeats(verified,extraPaymentAddress(history))});return;}',
 '    }',
 '    if(exactCodes.length&&choice){',
 '      let details:Awaited<ReturnType<typeof exactSeatDetails>>|null=null;',
@@ -58,7 +58,7 @@ w=replace(w,'    const withNote=serviceNote && action.purpose==="reply" && !medi
 '    if(action.purpose==="reply"&&!media&&unableToAnswer(action.body))return handoffToSale(job,"Sale tiếp quản câu hỏi chưa trả lời được.","AI không đủ dữ liệu hoặc không thể xử lý yêu cầu.").then(()=>{throw new JobStopped("Handoff to Sale");});',
 '    const withNote=serviceNote && action.purpose==="reply" && !media ?'
 ].join("\n"));
-w=replace(w,'const instructions='+String.fromCharCode(96),'const instructions='+String.fromCharCode(96)+'AI SALE 2.4: Khi câu hỏi không hiểu, ngoài phạm vi hoặc thiếu căn cứ để trả lời chính xác, gọi request_support ngay và dừng. Không tự nói lời xin lỗi, không hỏi lại vòng vo, không nhắc tiếp. Nếu khách chỉ thiếu một thông tin đặt vé rõ ràng (show, số vé, mã ghế hoặc thông tin nhận vé), được hỏi đúng thông tin thiếu một lần. Khi khách yêu cầu nhân viên/CSKH/ban quản lý thì dùng request_support. Với mã ghế cụ thể phải tra exact_seats; không suy đoán từ hạng vé hoặc ảnh. Giá, tồn ghế và thanh toán phải theo máy chủ. Không lặp lại nội dung vừa gửi hoặc tự chốt khi khách chỉ hỏi.\n');
+w=replace(w,'const instructions='+String.fromCharCode(96),'const instructions='+String.fromCharCode(96)+'AI SALE 2.4: Khi câu hỏi không hiểu, ngoài phạm vi hoặc thiếu căn cứ để trả lời chính xác, gọi request_support ngay và dừng. Không tự nói lời xin lỗi, không hỏi lại vòng vo, không nhắc tiếp. Nếu khách chỉ thiếu một thông tin đặt vé rõ ràng (show, số vé, mã ghế hoặc thông tin nhận vé), được hỏi đúng thông tin thiếu một lần. Khi khách yêu cầu nhân viên/CSKH/ban quản lý thì dùng request_support. Với mã ghế cụ thể phải tra exact_seats; không suy đoán từ hạng vé hoặc ảnh. Giá, tồn ghế và thanh toán phải theo máy chủ. Không lặp lại nội dung vừa gửi hoặc tự chốt khi khách chỉ hỏi. Khi khách trả lời chọn một phần hoặc lấy tất cả ghế trong vùng đánh dấu, chỉ dùng danh sách mã ghế đã được kiểm chứng ở phản hồi gần nhất của trợ lý trong đúng show. Kiểm tra lại tình trạng từng mã ghế, không thay ghế hoặc thêm ghế ngoài ý khách. Nếu danh sách hoặc show không còn rõ, hỏi lại một câu cụ thể. Nếu khách hỏi giá hay tình trạng ghế thì trả lời đúng câu hỏi, không tự coi là đồng ý đặt. Khi khách đã chọn ghế, chỉ hỏi thông tin đặt vé còn thiếu và thực hiện quy trình xác nhận hiện có. \n');
 w=replace(w,'      request_support:tool({description:',[
 '      exact_seats:tool({description:"Kiểm tra đúng mã ghế khách nói trên sơ đồ thật, trả hạng vé, giá và trạng thái theo show. Không giữ ghế.",inputSchema:z.object({showId:z.string().max(100),seats:z.array(z.string().regex(/^[A-O][0-9]{2}$/)).min(1).max(20)}),execute:({showId,seats})=>safeTool(()=>exactSeatDetails(showId,seats))}),',
 '      request_support:tool({description:'
@@ -92,7 +92,7 @@ q=replace(q,'  if(isImage)result.reading=reading;','  if(isImage)result.reading=
 syntax(inquiry,q);
 const sm="lib/ai-sales-seat-map.ts";let m=read(sm);
 m=replace(m,'export const SEAT_MAP_URL=(venue:MapVenue)=>"https://iextra.net/api/public/seat-map/"+venue;','export const SEAT_MAP_URL=(venue:MapVenue,showId?:string)=>"https://iextra.net/api/public/seat-map/"+venue+(showId&&/^[a-z0-9-]{3,100}$/.test(showId)?"?show="+encodeURIComponent(showId):"");');
-m=replace(m,'Ảnh thể hiện các hạng ghế, không thể hiện tình trạng ghế còn trống.','Ảnh có mã của từng ghế trên sơ đồ bán vé.');
+m=replace(m,'Ảnh thể hiện các hạng ghế, không thể hiện tình trạng ghế còn trống.','Ảnh có mã của từng ghế trên sơ đồ bán vé. Mình có thể nhắn mã ghế hoặc chấm, khoanh trực tiếp ghế trên ảnh rồi gửi lại cho em để em kiểm tra và hỗ trợ đặt ghế ạ.');
 syntax(sm,m);
 const fb="lib/facebook-messenger.ts";let f=read(fb);
 f=replace(f,'(?:ccc|laocai)$/.test(imageUrl)','(?:ccc|laocai)(?:\\?show=[a-z0-9-]{3,100})?$/.test(imageUrl)');
