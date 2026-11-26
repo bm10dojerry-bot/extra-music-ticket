@@ -56,7 +56,11 @@ function retailPlan(report){
  return {title:'Chiến dịch 24H — chuẩn bị và xác minh dữ liệu',summary:'Chưa đủ API FnB để chọn chiến dịch bán hàng thật. Director thực hiện bản nháp nội bộ và giao đầu việc gỡ vướng; không chạy mẫu dưới danh nghĩa dữ liệu thật.',evidence,tasks};
 }
 function initDailyDirector(pool){
- return pool.query("create table if not exists os_daily_director (platform text not null check(platform in ('music','24h')), day date not null, fingerprint text not null, plan jsonb not null, revision integer not null default 1, updated_at timestamptz not null default now(), primary key(platform,day))");
+ return pool.query(
+  "create table if not exists os_daily_director (platform text not null check(platform in ('music','24h')), day date not null, fingerprint text not null, plan jsonb not null, revision integer not null default 1, updated_at timestamptz not null default now(), primary key(platform,day));"+
+  "create table if not exists os_daily_approvals (platform text not null, day date not null, revision integer not null, fingerprint text not null, plan jsonb not null, approved_at timestamptz not null default now(), primary key(platform,day,revision));"+
+  "create table if not exists os_daily_execution (platform text not null, day date not null, revision integer not null, task_id text not null, ordinal integer not null, task jsonb not null, status text not null check(status in ('queued','draft_prepared','blocked')), result jsonb, updated_at timestamptz not null default now(), primary key(platform,day,revision,task_id), foreign key(platform,day,revision) references os_daily_approvals(platform,day,revision));"+
+  "create index if not exists os_daily_execution_queue on os_daily_execution(day,ordinal) where status='queued';");
 }
 async function savePlan(pool,platform,day,plan){
  if(!['music','24h'].includes(platform))throw Error('platform');
@@ -65,8 +69,64 @@ async function savePlan(pool,platform,day,plan){
  return {changed:rows.length===1,revision:rows[0]?.revision??null};
 }
 async function readPlan(pool,platform,day){
- const {rows}=await pool.query("select day::text day,plan,revision,updated_at from os_daily_director where platform=$1 and day=$2::date",[platform,day]);
+ const {rows}=await pool.query("select day::text day,plan,revision,updated_at,fingerprint from os_daily_director where platform=$1 and day=$2::date",[platform,day]);
  return rows[0]??null;
+}
+const validApproval=(platform,day,revision,fingerprint,now)=>['music','24h'].includes(platform)&&typeof day==='string'&&day===reportDay(null,now)&&Number.isSafeInteger(revision)&&revision>0&&typeof fingerprint==='string'&&/^[a-f0-9]{64}$/.test(fingerprint);
+async function approvePlan(pool,{platform,day,revision,fingerprint},now=new Date()){
+ if(!validApproval(platform,day,revision,fingerprint,now))return {status:'invalid'};
+ const client=await pool.connect();
+ try{
+  await client.query('begin');
+  const {rows:[proposal]}=await client.query("select revision,fingerprint,plan from os_daily_director where platform=$1 and day=$2::date for update",[platform,day]);
+  if(!proposal||proposal.revision!==revision||proposal.fingerprint!==fingerprint){await client.query('rollback');return {status:'stale'};}
+  const inserted=await client.query("insert into os_daily_approvals(platform,day,revision,fingerprint,plan) values($1,$2::date,$3,$4,$5::jsonb) on conflict(platform,day,revision) do nothing returning revision",[platform,day,revision,fingerprint,JSON.stringify(proposal.plan)]);
+  if(inserted.rowCount===0){await client.query('commit');return {status:'already_approved'};}
+  const tasks=proposal.plan.tasks;
+  if(!Array.isArray(tasks)||!tasks.length||tasks.length>40||new Set(tasks.map(t=>t.id)).size!==tasks.length)throw Error('invalid tasks');
+  for(let index=0;index<tasks.length;index++){
+   const t=tasks[index];
+   if(typeof t.id!=='string'||!t.id||!['draft_ready','needs_input','awaiting_approval'].includes(t.state)||typeof t.deliverable!=='string')throw Error('invalid task');
+   await client.query("insert into os_daily_execution(platform,day,revision,task_id,ordinal,task,status) values($1,$2::date,$3,$4,$5,$6::jsonb,'queued')",[platform,day,revision,t.id,index,JSON.stringify(t)]);
+  }
+  await client.query('commit');
+  return {status:'approved',tasks:tasks.length};
+ }catch(error){await client.query('rollback');throw error;}finally{client.release();}
+}
+function executeApprovedTask(task,day,now=new Date()){
+ if(day!==reportDay(null,now))return {status:'blocked',result:{reason:'Đã qua ngày hiệu lực; cần phương án mới.',externalActions:0}};
+ if(task.state==='needs_input')return {status:'blocked',result:{reason:'Thiếu dữ liệu hoặc cần người phụ trách xác minh.',handoff:task.deliverable,externalActions:0}};
+ if(task.state==='awaiting_approval')return {status:'blocked',result:{reason:'Quyền thực thi ngoài EXTRA OS chưa được cấp; không chi ngân sách hoặc đăng bài.',handoff:task.deliverable,externalActions:0}};
+ if(task.state!=='draft_ready')return {status:'blocked',result:{reason:'Trạng thái đầu việc không hợp lệ.',externalActions:0}};
+ return {status:'draft_prepared',result:{kind:'internal_prepared_artifact',agent:task.agent,title:task.title,content:task.deliverable,basis:'approved_rule_based_proposal',externalActions:0}};
+}
+// Work is limited to preparing the approved internal artifact; no provider credentials,
+// network calls, Music writes, publication, or paid actions are available to this executor.
+async function executeNextApprovedTask(pool,now=new Date()){
+ const client=await pool.connect();
+ try{
+  await client.query('begin');
+  const {rows:[row]}=await client.query("select e.platform,e.day::text day,e.revision,e.task_id,e.task from os_daily_execution e join os_daily_approvals a on a.platform=e.platform and a.day=e.day and a.revision=e.revision where e.status='queued' order by e.day,e.ordinal,e.platform,e.revision for update of e skip locked limit 1");
+  if(!row){await client.query('commit');return null;}
+  const output=executeApprovedTask(row.task,row.day,now);
+  await client.query("update os_daily_execution set status=$5,result=$6::jsonb,updated_at=now() where platform=$1 and day=$2::date and revision=$3 and task_id=$4 and status='queued'",[row.platform,row.day,row.revision,row.task_id,output.status,JSON.stringify(output.result)]);
+  await client.query('commit');
+  return {platform:row.platform,day:row.day,revision:row.revision,status:output.status,externalActions:0};
+ }catch(error){await client.query('rollback');throw error;}finally{client.release();}
+}
+async function readApprovals(pool,platform,day){
+ const {rows}=await pool.query("select a.revision,a.plan,a.approved_at,coalesce((select jsonb_agg(jsonb_build_object('task',e.task,'status',e.status,'result',e.result) order by e.ordinal) from os_daily_execution e where e.platform=a.platform and e.day=a.day and e.revision=a.revision),'[]'::jsonb) as tasks from os_daily_approvals a where a.platform=$1 and a.day=$2::date order by a.revision desc limit 20",[platform,day]);
+ return rows;
+}
+function startApprovedWorker(pool,{interval=2000,onError=()=>{},onResult=()=>{}}={}){
+ let stopped=false,timer=null,pending=null;
+ async function run(){
+  if(stopped)return;
+  pending=(async()=>{for(let i=0;i<20&&!stopped;i++){const result=await executeNextApprovedTask(pool);if(!result)break;onResult(result);}})().catch(onError);
+  try{await pending;}finally{pending=null;if(!stopped)timer=setTimeout(run,interval).unref();}
+ }
+ timer=setTimeout(run,1000).unref();
+ return async()=>{stopped=true;if(timer)clearTimeout(timer);if(pending)await pending;};
 }
 async function runDailyDirector(pool,{now=new Date(),music=getMusicFinance,inventory=getMusicSnapshot,retail=day=>readRetailDaily(pool,day)}={}){
  const day=reportDay(null,now);
@@ -90,10 +150,18 @@ function startDailyDirector(pool,{interval=3600000,onResult=()=>{},onError=()=>{
  timer=setTimeout(run,1000).unref();
  return async()=>{stopped=true;if(timer)clearTimeout(timer);if(pending)await pending;};
 }
-function renderDailyDirector(record,day,esc){
- const states={draft_ready:'Bản nháp nội bộ đã tạo',needs_input:'Chờ dữ liệu / nhân sự',awaiting_approval:'Khóa thực thi bên ngoài'};
- if(!record)return '<section id="daily-director"><h2>AI Director</h2><p>Chưa có bản phân tích tự động đã lưu cho ngày '+esc(day)+'. Hệ thống tạo bản phân tích cho ngày hiện tại; không dựng lại lịch sử bằng dữ liệu hôm nay.</p></section>';
- const p=record.plan;
- return '<section id="daily-director"><h2>AI Director</h2><p>Ngày '+esc(day)+' · Phiên bản '+esc(record.revision)+' · Cập nhật '+esc(new Date(record.updated_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+' (giờ Việt Nam).</p><h3>'+esc(p.title)+'</h3><p>'+esc(p.summary)+'</p><p>Đang thử nghiệm bộ quy tắc phân việc nội bộ. Bản nháp tạo tự động, không đồng nghĩa Agent đã chạy mô hình hoặc đã đăng bài. Không có quyền ghi Music, gửi tin hoặc chi ngân sách.</p><div class="scroll"><table><thead><tr><th>Agent</th><th>Nhiệm vụ / Đề xuất</th><th>Đầu ra nội bộ</th><th>Trạng thái</th></tr></thead><tbody>'+p.tasks.map(t=>'<tr><td>'+esc(t.agent)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.deliverable)+'</td><td>'+esc(states[t.state]??'Chưa xác định')+'</td></tr>').join('')+'</tbody></table></div></section>';
+function renderDailyDirector(record,day,esc,{platform,csrf,approvals=[],now=new Date()}={}){
+ const states={draft_ready:'Bản nháp đề xuất · chờ duyệt',needs_input:'Chờ dữ liệu / nhân sự',awaiting_approval:'Khóa thực thi bên ngoài'};
+ const executionStates={queued:'Đã giao · đang chờ xử lý',draft_prepared:'Đã chuẩn bị tài liệu nội bộ',blocked:'Đang bị chặn'};
+ const history=approvals.map(a=>{
+  const items=a.tasks.map(t=>'<tr><td>'+esc(t.task.agent)+'</td><td>'+esc(t.task.title)+'</td><td>'+esc(executionStates[t.status]??'Chưa xác định')+'</td><td>'+esc(t.result?.content??t.result?.reason??'Chờ xử lý')+'</td></tr>').join('');
+  return '<details open><summary>Phương án '+esc(a.revision)+' đã duyệt · '+esc(a.plan.title)+'</summary><p>Đã phê duyệt lúc '+esc(new Date(a.approved_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+' (giờ Việt Nam). Chỉ xử lý nội bộ; 0 hành động bên ngoài.</p><div class="scroll"><table><thead><tr><th>Agent</th><th>Nhiệm vụ</th><th>Tiến độ</th><th>Kết quả / vướng mắc</th></tr></thead><tbody>'+items+'</tbody></table></div></details>';
+ }).join('');
+ if(!record)return '<section id="daily-director"><h2>AI Director</h2><p>Chưa có bản phân tích tự động đã lưu cho ngày '+esc(day)+'. Hệ thống tạo bản phân tích cho ngày hiện tại; không dựng lại lịch sử bằng dữ liệu hôm nay.</p>'+history+'</section>';
+ const p=record.plan,approved=approvals.some(a=>a.revision===record.revision);
+ const canApprove=!approved&&typeof csrf==='string'&&validApproval(platform,day,record.revision,record.fingerprint,now);
+ const controls=approved?'<p><strong>Phương án hiện tại đã được duyệt.</strong></p>':canApprove?
+  '<form method="post" action="/daily-director/approve"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="platform" value="'+esc(platform)+'"><input type="hidden" name="day" value="'+esc(day)+'"><input type="hidden" name="revision" value="'+esc(record.revision)+'"><input type="hidden" name="fingerprint" value="'+esc(record.fingerprint)+'"><p><strong>Chờ anh phê duyệt phương án '+esc(record.revision)+'.</strong> Phê duyệt chỉ cho phép giao nhiệm vụ và chuẩn bị tài liệu nội bộ, không mở quyền ghi Music hoặc chi tiêu.</p><button>Phê duyệt phương án nội bộ</button></form>':'<p>Chưa được phê duyệt. Chỉ có thể duyệt phương án ngày hiện tại bằng tài khoản quản trị.</p>';
+ return '<section id="daily-director"><h2>AI Director</h2><p>Ngày '+esc(day)+' · Phiên bản '+esc(record.revision)+' · Cập nhật '+esc(new Date(record.updated_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))+' (giờ Việt Nam).</p><h3>'+esc(p.title)+'</h3><p>'+esc(p.summary)+'</p><p>Đang thử nghiệm bộ quy tắc phân việc nội bộ. Bản nháp tạo tự động, không đồng nghĩa Agent đã chạy mô hình hoặc đã đăng bài. Không có quyền ghi Music, gửi tin hoặc chi ngân sách.</p><div class="scroll"><table><thead><tr><th>Agent</th><th>Nhiệm vụ / Đề xuất</th><th>Đầu ra dự kiến</th><th>Trạng thái đề xuất</th></tr></thead><tbody>'+p.tasks.map(t=>'<tr><td>'+esc(t.agent)+'</td><td>'+esc(t.title)+'</td><td>'+esc(t.deliverable)+'</td><td>'+esc(states[t.state]??'Chưa xác định')+'</td></tr>').join('')+'</tbody></table></div>'+controls+(history?'<h3>Tiến độ phương án đã duyệt</h3>'+history:'')+'</section>';
 }
-module.exports={musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector};
+module.exports={musicPlan,retailPlan,initDailyDirector,savePlan,readPlan,runDailyDirector,startDailyDirector,renderDailyDirector,approvePlan,readApprovals,executeApprovedTask,executeNextApprovedTask,startApprovedWorker};
