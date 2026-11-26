@@ -20,7 +20,7 @@ function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00')),per
  // Other shows: propose 5/day or 1.5x recent pace, limited to 20/day.
  const dailyGoal=Math.min(20,Math.max(daysToShow<=3?10:5,Math.ceil(rate*1.5)));
  const slots=[];
- const horizon=period==='week'?7:period==='month'?31:2;
+ const horizon=period==='week'?7:period==='month'?31:1;
  const month=day.slice(0,7);
  for(let k=0;k<horizon;k++){
   const date=shiftDay(day,k);if(date>show.date||(period==='month'&&date.slice(0,7)!==month))break;
@@ -234,17 +234,17 @@ function startApprovedWorker(pool,{interval=2000,onError=()=>{},onResult=()=>{}}
  return async()=>{stopped=true;if(timer)clearTimeout(timer);if(pending)await pending;};
 }
 // Three planning horizons, each stored under a separate approval identity.
-// Day plan covers today and tomorrow; week means the next 7 days;
+// Day plan covers the selected day; week means the next 7 days;
 // month means the remaining days in the selected calendar month, VN time.
 const periods=['day','week','month'];
 function proposalPlatform(platform,period='day'){
  if(!['music','24h'].includes(platform)||!periods.includes(period))throw Error('proposal scope');
  return period==='day'?platform:platform+'_'+period;
 }
-function periodLabel(period){return period==='week'?'Kế hoạch tuần (7 ngày tới)':period==='month'?'Kế hoạch tháng (đến cuối tháng)':'Kế hoạch ngày (hôm nay và ngày mai)';}
+function periodLabel(period){return period==='week'?'Kế hoạch tuần (7 ngày tới)':period==='month'?'Kế hoạch tháng (đến cuối tháng)':'Kế hoạch ngày (ngày được chọn)';}
 function proposalPlan(platform,period,day,finance,inventory,retail,now){
  const base=platform==='music'?musicPlan(day,finance,inventory,now,period):retailPlan(retail);
- const end=period==='week'?shiftDay(day,6):period==='month'?new Date(Date.UTC(Number(day.slice(0,4)),Number(day.slice(5,7)),0)).toISOString().slice(0,10):shiftDay(day,1);
+ const end=period==='week'?shiftDay(day,6):period==='month'?new Date(Date.UTC(Number(day.slice(0,4)),Number(day.slice(5,7)),0)).toISOString().slice(0,10):day;
  if(platform==='24h'){
   const deadline=timeOf(end),firstDeadline=timeOf(day);
   const scopeNote=period==='day'?'Xác minh nguồn và chuẩn bị nội dung tư vấn trong kỳ.':period==='week'?'Trong 7 ngày, kiểm tra dữ liệu hằng ngày, chọn sản phẩm có đủ giá vốn và tồn kho; lập kịch bản thử nghiệm sau khi xác minh.':'Đến cuối tháng, tổng hợp chứng từ, rà biên lợi nhuận và lập phương án tháng tiếp theo sau khi có nguồn thực tế.';
