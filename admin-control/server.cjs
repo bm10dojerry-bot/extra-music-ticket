@@ -22,6 +22,9 @@ const {parseFinance,initDirectorFinance,saveFinance,listFinance,renderFinance}=r
 const {initCrmFollowup,listFollowups,readFollowup,saveFollowup,renderFollowups}=require('./crm-followup.cjs');
 const {initStaffWork,issueCode,updateShowTask,assigneeField,staffAccessPage,makeStaffPortal}=require('./staff-work.cjs');
 const {showCatalog,buildReport,reading,renderShowPage}=require('./show-report.cjs');
+const {initShowApprovals,proposalState,readShowApproval,approvalPanel,approveShow}=require('./show-approval.cjs');
+const {getMusicSignals}=require('./music-signals.cjs');
+const {serveShowMedia}=require('./show-media.cjs');
 const {initAudio,saveTracks,serveAudio,playerHtml,scriptHash}=require('./report-audio.cjs');
 const port=Number(process.env.PORT||3000);
 const password=process.env.ADMIN_BOOTSTRAP_PASSWORD||'';
@@ -130,23 +133,50 @@ function reportWorkspace(s,path,content){
 async function musicShowPage(req,res,session,path){
  const params=new URL(req.url,'http://localhost').searchParams;
  const day=reportDay(params.get('day')),period=proposalPeriodValue(params.get('period'));
- const [snapshot,finance]=await Promise.all([getMusicSnapshot(),getMusicFinance()]);
+ const [snapshot,finance,signals]=await Promise.all([getMusicSnapshot(),getMusicFinance(),getMusicSignals()]);
  const catalog=showCatalog(snapshot,finance,reportDay(null));
  const wanted=params.get('show');
  const archived=catalog.ended.find(s=>s.id===wanted);
- if(archived&&path==='/proposals/music')return redirect(res,'/reports/music?'+new URLSearchParams({day,show:wanted,view:'revenue'}));
+ if(archived&&path==='/proposals/music')return redirect(res,'/reports/music?'+new URLSearchParams({day,period,show:wanted,view:'revenue'}));
  const show=archived??(wanted?catalog.active.find(s=>s.id===wanted):catalog.active[0]);
  const run=show&&!archived?await readLiveRun(pool,proposalPlatform('music',period),day):null;
- const report=show?buildReport(show,day,finance,run,Boolean(archived)):null;
+ const context={signals,checkedAt:snapshot.checkedAt};
+ const report=show?buildReport(show,day,finance,run,Boolean(archived),context):null;
  const tracks=report?await saveTracks(pool,reading(report,'full')):null;
- const content=renderShowPage({path,day,period,catalog,show,ended:Boolean(archived),report,snapshot,run,esc,player:tracks?playerHtml(tracks):''});
+ let approval='';
+ if(show&&!archived){
+  const state=proposalState(run,show,new Date(),{...context,finance});
+  const approvedAt=await readShowApproval(pool,run,show,state);
+  approval=approvalPanel({run,show,period,day,csrf:session.csrf,state,approvedAt,esc});
+ }
+ const content=renderShowPage({path,day,period,catalog,show,approvalPanel:approval,ended:Boolean(archived),report,snapshot,run,esc,player:tracks?playerHtml(tracks):''});
  return html(res,reportWorkspace(session,path,content),wanted&&!show?404:200,Boolean(tracks));
 }
-async function handle(req,res){const path=new URL(req.url,'http://localhost').pathname;if(['/staff','/staff/login','/staff/task','/staff/crm','/staff/logout'].includes(path))return handleStaff(req,res,path);if(path==='/api/24h/messenger/webhook')return handleMessenger24(req,res);if(path==='/health'&&req.method==='GET'){await pool.query('select 1');res.writeHead(200,{'Content-Type':'text/plain','Cache-Control':'no-store'});return res.end('ok')}if(path==='/login'&&req.method==='POST')return login(req,res);const s=await session(req);if(!s)return html(res,loginPage(),path==='/'?200:401);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/report-audio/')){
+// Verify the actual report renderer and its DB-backed audio track on each staging release.
+async function verifyMusicReportPage(){
+ const snapshot=await getMusicSnapshot();
+ const show=showCatalog(snapshot,{},reportDay(null)).active[0];
+ if(!show)return console.log('Music admin release check',JSON.stringify({showFound:false}));
+ let status,markup;
+ const res={writeHead(code){status=code;},end(body){markup=String(body);}};
+ await musicShowPage({url:'/proposals/music?'+new URLSearchParams({show:show.id})},res,{csrf:''},'/proposals/music');
+ const tracks=markup.match(/data-mode="full"[^>]+data-track="([a-f0-9,]+)"/)?.[1]?.split(',')??[];
+ const checks={show:show.id,status,fullPlayer:tracks.length>0,fullTrackParts:tracks.length,summaryButtons:(markup.match(/data-mode="brief"/g)??[]).length,
+  selector:markup.includes('name="show"'),approval:markup.includes('Phê duyệt đề xuất')||markup.includes('Đã phê duyệt đề xuất'),
+  dailyEconomics:markup.includes('Hiệu quả quảng cáo trong ngày'),showEconomics:markup.includes('Kinh tế lũy kế của show'),
+  review:markup.includes('Sale 2.3'),mediaLinks:markup.includes('Tải về')};
+ console.log('Music admin release check',JSON.stringify(checks));
+}
+async function handle(req,res){const path=new URL(req.url,'http://localhost').pathname;if(['/staff','/staff/login','/staff/task','/staff/crm','/staff/logout'].includes(path))return handleStaff(req,res,path);if(path==='/api/24h/messenger/webhook')return handleMessenger24(req,res);if(path==='/health'&&req.method==='GET'){await pool.query('select 1');res.writeHead(200,{'Content-Type':'text/plain','Cache-Control':'no-store'});return res.end('ok')}if(path==='/login'&&req.method==='POST')return login(req,res);const s=await session(req);if(!s)return html(res,loginPage(),path==='/'?200:401);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/show-media/'))return serveShowMedia(req,res);if((req.method==='GET'||req.method==='HEAD')&&path.startsWith('/report-audio/')){
   const match=/^\/report-audio\/([a-f0-9]{64})\.mp3$/.exec(path);
   return serveAudio(req,res,pool,match?.[1]??'');
  }if(req.method==='GET'&&(path==='/reports/music'||path==='/proposals/music'))return musicShowPage(req,res,s,path);
- if(req.method==='GET'&&path==='/music')return html(res,renderMusicSnapshot(await getMusicSnapshot(),esc));if(req.method==='GET'&&path==='/reports/24h'){const day=reportDay(new URL(req.url,'http://localhost').searchParams.get('day'));const content=renderRetailDaily(await readRetailDaily(pool,day),day,esc);return html(res,reportWorkspace(s,path,content));}if(req.method==='GET'&&path==='/proposals/24h'){const params=new URL(req.url,'http://localhost').searchParams;const day=reportDay(params.get('day')),period=proposalPeriodValue(params.get('period')),base=path==='/proposals/music'?'music':'24h',platform=proposalPlatform(base,period);const [run,approvals]=await Promise.all([readLiveRun(pool,platform,day),readApprovals(pool,platform,day)]);const nav=['day','week','month'].map(p=>'<a class="period-link" '+(p===period?'aria-current="page" ':'')+'href="'+path+'?period='+p+'&day='+esc(day)+'">'+esc(p==='day'?'Kế hoạch ngày':p==='week'?'Kế hoạch tuần':'Kế hoạch tháng')+'</a>').join(' ');const legacy=approvals.length?'<details><summary>Lịch sử '+approvals.length+' phương án quy tắc đã duyệt (không phải AI)</summary><p>Giữ lại hồ sơ cũ để đối chiếu. Không tự chạy lại.</p></details>':'';const page='<main><section><h1>Đề xuất '+(base==='music'?'Music Show':'24H')+'</h1><nav>'+nav+'</nav><form method="get"><input type="hidden" name="period" value="'+esc(period)+'"><label>Ngày báo cáo<input type="date" name="day" value="'+esc(day)+'" required></label><button>Xem</button></form><a href="/reports/'+base+'?day='+esc(day)+'">Xem báo cáo nguồn</a></section>'+renderLiveDirector(run,esc)+legacy+'</main>';return html(res,reportWorkspace(s,path,page));}if(req.method==='GET'&&path==='/crm')return readCrm(req,res,s);if(req.method==='GET'&&path==='/staff/access')return html(res,staffAccessPage(staffPageTools,s));if(req.method==='GET'&&path==='/director/asset')return readDirectorAsset(req,res);if(req.method==='GET'&&path==='/director/report')return readDirectorReport(req,res);if(req.method==='GET'&&path==='/'){const rawPage=Number(new URL(req.url,'http://localhost').searchParams.get('reportPage')||1);const run=new URL(req.url,'http://localhost').searchParams.get('directorRun');return dashboard(res,s,Number.isSafeInteger(rawPage)&&rawPage>0&&rawPage<=1000000?rawPage:1,uuid.test(run||'')?run:null,new URL(req.url,'http://localhost').searchParams.get('show'));}if(req.method!=='POST')return html(res,'<main>Không tìm thấy.</main>',404);const f=await form(req);if(!eq(f.get('csrf')||'',s.csrf))return html(res,'<main>Yêu cầu không hợp lệ.</main>',403);if(path==='/daily-director/approve')return html(res,'<main><h1>Phương án cũ đã ngừng duyệt</h1><p>Chỉ trình phương án mới từ kết quả điều phối AI. Không thực thi phương án mẫu.</p><a href="/proposals/music">Xem đề xuất Music</a></main>',409);if(path==='/logout'){await pool.query('delete from os_sessions where token_hash=$1',[s.token_hash]);return redirect(res,'/',cookie('',0))}if(path==='/show')return createShow(req,res,s,f);if(path.startsWith('/director/'))return handleDirector(res,path,f);if(path==='/retail-plan')return createRetailPlan(res,f);if(path==='/analyst-plan')return rerunAnalystPlan(res,f);if(path==='/sale-check'){await directorSaleCheck();return redirect(res,'/#agents')}if(path==='/crm')return updateCrm(res,f);if(path==='/staff/access'){
+ if(req.method==='GET'&&path==='/music')return html(res,renderMusicSnapshot(await getMusicSnapshot(),esc));if(req.method==='GET'&&path==='/reports/24h'){const day=reportDay(new URL(req.url,'http://localhost').searchParams.get('day'));const content=renderRetailDaily(await readRetailDaily(pool,day),day,esc);return html(res,reportWorkspace(s,path,content));}if(req.method==='GET'&&path==='/proposals/24h'){const params=new URL(req.url,'http://localhost').searchParams;const day=reportDay(params.get('day')),period=proposalPeriodValue(params.get('period')),base=path==='/proposals/music'?'music':'24h',platform=proposalPlatform(base,period);const [run,approvals]=await Promise.all([readLiveRun(pool,platform,day),readApprovals(pool,platform,day)]);const nav=['day','week','month'].map(p=>'<a class="period-link" '+(p===period?'aria-current="page" ':'')+'href="'+path+'?period='+p+'&day='+esc(day)+'">'+esc(p==='day'?'Kế hoạch ngày':p==='week'?'Kế hoạch tuần':'Kế hoạch tháng')+'</a>').join(' ');const legacy=approvals.length?'<details><summary>Lịch sử '+approvals.length+' phương án quy tắc đã duyệt (không phải AI)</summary><p>Giữ lại hồ sơ cũ để đối chiếu. Không tự chạy lại.</p></details>':'';const page='<main><section><h1>Đề xuất '+(base==='music'?'Music Show':'24H')+'</h1><nav>'+nav+'</nav><form method="get"><input type="hidden" name="period" value="'+esc(period)+'"><label>Ngày báo cáo<input type="date" name="day" value="'+esc(day)+'" required></label><button>Xem</button></form><a href="/reports/'+base+'?day='+esc(day)+'">Xem báo cáo nguồn</a></section>'+renderLiveDirector(run,esc)+legacy+'</main>';return html(res,reportWorkspace(s,path,page));}if(req.method==='GET'&&path==='/crm')return readCrm(req,res,s);if(req.method==='GET'&&path==='/staff/access')return html(res,staffAccessPage(staffPageTools,s));if(req.method==='GET'&&path==='/director/asset')return readDirectorAsset(req,res);if(req.method==='GET'&&path==='/director/report')return readDirectorReport(req,res);if(req.method==='GET'&&path==='/'){const rawPage=Number(new URL(req.url,'http://localhost').searchParams.get('reportPage')||1);const run=new URL(req.url,'http://localhost').searchParams.get('directorRun');return dashboard(res,s,Number.isSafeInteger(rawPage)&&rawPage>0&&rawPage<=1000000?rawPage:1,uuid.test(run||'')?run:null,new URL(req.url,'http://localhost').searchParams.get('show'));}if(req.method!=='POST')return html(res,'<main>Không tìm thấy.</main>',404);const f=await form(req);if(!eq(f.get('csrf')||'',s.csrf))return html(res,'<main>Yêu cầu không hợp lệ.</main>',403);if(path==='/proposals/music/approve'){
+  const [snapshot,finance,signals]=await Promise.all([getMusicSnapshot(),getMusicFinance(),getMusicSignals()]);
+  const show=snapshot.rows.find(s=>s.id===f.get('show'));
+  if(!await approveShow(pool,f,show,{finance,signals,checkedAt:snapshot.checkedAt}))return html(res,'<main><p>Đề xuất đã thay đổi hoặc chưa đủ điều kiện phê duyệt.</p><a href="/proposals/music">Xem lại đề xuất</a></main>',409);
+  return redirect(res,'/proposals/music?'+new URLSearchParams({show:show.id,day:f.get('day'),period:f.get('period')}));
+ }if(path==='/daily-director/approve')return html(res,'<main><h1>Phương án cũ đã ngừng duyệt</h1><p>Chỉ trình phương án mới từ kết quả điều phối AI. Không thực thi phương án mẫu.</p><a href="/proposals/music">Xem đề xuất Music</a></main>',409);if(path==='/logout'){await pool.query('delete from os_sessions where token_hash=$1',[s.token_hash]);return redirect(res,'/',cookie('',0))}if(path==='/show')return createShow(req,res,s,f);if(path.startsWith('/director/'))return handleDirector(res,path,f);if(path==='/retail-plan')return createRetailPlan(res,f);if(path==='/analyst-plan')return rerunAnalystPlan(res,f);if(path==='/sale-check'){await directorSaleCheck();return redirect(res,'/#agents')}if(path==='/crm')return updateCrm(res,f);if(path==='/staff/access'){
  const staffId=f.get('staff_id');
  const code=await issueCode(pool,staffId);
  if(!code)return html(res,'<main>Nhân sự không hợp lệ.</main>',400);
@@ -263,7 +293,7 @@ async function observeSampleRun(id,once=false){
   await new Promise(resolve=>setTimeout(resolve,15000).unref());
  }
 }
-init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>initCrm(pool)).then(()=>initStaffWork(pool)).then(()=>initCrmFollowup(pool)).then(()=>initDirectorFinance(pool)).then(()=>initDailyDirector(pool)).then(()=>initLiveDirector(pool)).then(()=>initAudio(pool)).then(()=>{
+init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>initCrm(pool)).then(()=>initStaffWork(pool)).then(()=>initCrmFollowup(pool)).then(()=>initDirectorFinance(pool)).then(()=>initDailyDirector(pool)).then(()=>initLiveDirector(pool)).then(()=>initShowApprovals(pool)).then(()=>initAudio(pool)).then(()=>{
  const stopApproved=startApprovedWorker(pool,{onResult:result=>console.log('Approved daily Director task',JSON.stringify(result)),onError:error=>console.error('Approved daily task error',error.code||error.name)});
  const stopDaily=startLiveDirector(pool,{onResult:result=>console.log('Live Director cycle',JSON.stringify(result)),onError:error=>console.error('Live Director cycle unavailable',error.code||error.name)});
  const stopWorker=startDirectorWorker(pool,makeExecutor(pool,makeConnectors(pool)),review,{
@@ -278,6 +308,7 @@ init().then(()=>initDirectorQueue(pool)).then(()=>initMedia(pool)).then(()=>init
  const server=http.createServer((req,res)=>handle(req,res).catch(e=>{console.error('Request failed',e.code||e.name);if(!res.headersSent)html(res,'<main>Không xử lý được yêu cầu. <a href="/">Quay lại</a></main>',400);else res.end()}));server.requestTimeout=20000;server.headersTimeout=10000;server.listen(port,'0.0.0.0',()=>{console.log('EXTRA OS staging ready');
   startupSaleCheck().then(async()=>{
    if(process.env.RAILWAY_ENVIRONMENT_NAME!=='staging'||process.env.RAILWAY_SERVICE_NAME!=='admin-web')return;
+   verifyMusicReportPage().catch(error=>console.error('Music admin release check failed',error.code||error.name));
    verifyMusicFinance().then(status=>console.log('Music daily read-only verification',JSON.stringify(status))).catch(()=>console.error('Music daily verification unavailable'));
    readRetailDaily(pool,reportDay(null)).then(result=>console.log('24H daily report verification',JSON.stringify({ok:true,internalCampaigns:result.created,financeRecords:result.records.length,hasInboundData:result.crm!==null,sapoFnB:'not_connected'}))).catch(()=>console.error('24H daily report verification unavailable'));
    getMusicSnapshot().then(snapshot=>console.log('Music public snapshot',JSON.stringify({showsAvailable:snapshot.showsAvailable,inventoryAvailable:snapshot.inventoryAvailable,shows:snapshot.rows.length,rowsWithInventory:snapshot.rows.filter(row=>row.inventory!==null).length,rowsWithHeld:snapshot.rows.filter(row=>row.inventory?.held!==null&&row.inventory?.held!==undefined).length,rowsWithPrices:snapshot.rows.filter(row=>Object.values(row.prices??{}).some(v=>v!==null)).length}))).catch(()=>console.error('Music public snapshot unavailable'));

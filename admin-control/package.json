@@ -7,9 +7,9 @@
   },
   "scripts": {
     "start": "node server.cjs",
-    "test": "node --test test.cjs director.test.cjs",
+    "test": "node --test test.cjs *.test.cjs",
     "build": "npm test && node --check server.cjs",
-    "test:staging-integration": "node -e \"if(process.env.RAILWAY_ENVIRONMENT_NAME!=='staging'||process.env.RAILWAY_SERVICE_NAME!=='admin-web'||!process.env.DATABASE_URL){console.error('Integration tests require the isolated EXTRA OS staging database');process.exit(1)};const result=require('node:child_process').spawnSync(process.execPath,['--test','test.cjs','director.test.cjs'],{stdio:'inherit',env:{...process.env,DIRECTOR_TEST_DATABASE_URL:process.env.DATABASE_URL}});process.exit(result.status??1)\""
+    "test:staging-integration": "node -e \"if(process.env.RAILWAY_ENVIRONMENT_NAME!=='staging'||process.env.RAILWAY_SERVICE_NAME!=='admin-web'||!process.env.DATABASE_URL){console.error('Integration tests require the isolated EXTRA OS staging database');process.exit(1)};const result=require('node:child_process').spawnSync(process.execPath,['--test','test.cjs',...require('node:fs').readdirSync('.').filter(name=>name.endsWith('.test.cjs')).sort()],{stdio:'inherit',env:{...process.env,DIRECTOR_TEST_DATABASE_URL:process.env.DATABASE_URL}});process.exit(result.status??1)\""
   },
   "dependencies": {
     "pg": "8.16.3"

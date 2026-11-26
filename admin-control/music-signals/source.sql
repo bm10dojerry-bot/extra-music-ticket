@@ -1,7 +1,8 @@
+-- For upgrades, apply economics.sql and sale-audit.sql before replacing this reporting RPC.
 create schema if not exists extra_os_reporting;
 revoke all on schema extra_os_reporting from public,anon,authenticated;
 grant usage on schema extra_os_reporting to service_role;
-create table extra_os_reporting.music_ad_spend (
+create table if not exists extra_os_reporting.music_ad_spend (
   observed_day date primary key,
   fetched_at timestamptz not null,
   rows jsonb not null check (jsonb_typeof(rows)='array' and jsonb_array_length(rows)<=2000)
@@ -16,6 +17,8 @@ quotes as (select distinct q.quote->>'showId' as show_id,q.chat_id from public.e
 paid as (select distinct m.chat_id,o.show_id from public.extra_messenger_ai_orders m join public.extra_payment_orders o on o.code=m.order_code where o.status='paid' and not coalesce(o.is_vip_invitation,false) and o.paid_at<=now()),
 counts as (select q.show_id,count(*)::int as quoted,count(p.chat_id)::int as linked from quotes q join public.managed_shows s on s.id=q.show_id left join paid p on p.chat_id=q.chat_id and p.show_id=q.show_id group by q.show_id)
 select jsonb_build_object('source','music_sales_signals_v1','checkedAt',now(),'fromDay',b.day-6,'toDay',b.day,
+ 'saleAudit',extra_os_reporting.music_sale_audit_v1(),
+ 'economics',extra_os_reporting.music_economics_v1(),
  'messenger',coalesce((select jsonb_agg(jsonb_build_object('showId',show_id,'quotedChats',quoted,'linkedPaidChats',linked) order by show_id) from counts),'[]'::jsonb),
  'adDays',coalesce((select jsonb_agg(jsonb_build_object('day',a.observed_day,'fetchedAt',a.fetched_at,'rows',a.rows) order by a.observed_day) from extra_os_reporting.music_ad_spend a where a.observed_day between b.day-6 and b.day),'[]'::jsonb)) from bounds b;
 $$;

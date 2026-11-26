@@ -10,7 +10,8 @@ function publicMusicAsset(raw){
   if(u.protocol!=='https:'||u.username||u.password||u.port||u.search||u.hash)return null;
   const storage=u.hostname==='fokntdvgzfldxbaglrdc.supabase.co'&&u.pathname.startsWith('/storage/v1/object/public/extra-media/');
   const poster=u.hostname==='iextra.net'&&/^\/api\/public\/extra-os-poster\/extra-os-[0-9a-f-]{36}$/.test(u.pathname);
-  if(!storage&&!poster)return null;
+  const cccPoster=u.hostname==='iextra.net'&&u.pathname==='/posters/dinh-dung-2811-ccc-f1f3bbf7.jpg';
+  if(!storage&&!poster&&!cccPoster)return null;
   return u.href;
  }catch{return null;}
 }
@@ -54,8 +55,16 @@ function parseInventory(body){
   const seatCount=list=>Array.isArray(list)&&list.length<=10000&&list.every(id=>typeof id==='string'&&id.length>0&&id.length<=32)
    ?new Set(list).size:null;
   const boundedSeats=list=>{const n=seatCount(list);return n!==null&&n<=s.capacity?n:null;};
-  result.set(s.showId,{capacity:s.capacity,sold:s.sold,remaining:s.remaining,
-   held:boundedSeats(s.heldSeats),blocked:boundedSeats(s.blockedSeats)});
+  const held=boundedSeats(s.heldSeats),blocked=boundedSeats(s.blockedSeats);
+  const counts={capacity:s.capacity,sold:s.sold,remaining:s.remaining,held,blocked};
+  if(held!==null&&blocked!==null&&boundedSeats(s.soldSeats)===s.sold){
+   const unavailable=new Set([...s.soldSeats,...s.blockedSeats]);
+   if(s.capacity-unavailable.size===s.remaining){
+    for(const seat of s.heldSeats)unavailable.add(seat);
+    counts.sellable=Math.max(0,s.capacity-unavailable.size);
+   }
+  }
+  result.set(s.showId,counts);
  }
  return result;
 }

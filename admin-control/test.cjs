@@ -327,11 +327,14 @@ test('Vietnamese report audio preserves all words across bounded immutable parts
  const parts=segments(text);assert(parts.length>1);
  assert(parts.every(p=>p.input.length<=800));assert.equal(parts.map(p=>p.input).join(' '),text);
  assert.equal(parts.at(-1).key,segments(text).at(-1).key);
- const html=playerHtml({full:parts.map(p=>p.key),brief:[parts[0].key]});
+ const html=playerHtml({full:parts.map(p=>p.key)});
+ assert.doesNotMatch(html,/data-mode="brief"|Nghe tóm tắt/);
  assert.match(html,/Nghe toàn bộ báo cáo/);assert.match(html,/audio preload="none"/);
 });
 test('A staffing-only revision preserves validated targets, budgets and 11 report references',async()=>{
  const facts=live.makeFacts('music','2030-01-02',null,null,null,null);
+ // Historical staffing-only checkpoints predate the per-show economics protocol.
+ delete facts.analysisVersion;
  const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13'};
  const results={DirectorBrief:{responseId:'brief',output:{assignments:[]}}};
  for(const agent of live.roleNames)results[agent]={responseId:'resp_'+agent,output:{assetIds:[],actions:[]}};
@@ -353,19 +356,82 @@ test('A staffing-only revision preserves validated targets, budgets and 11 repor
  assert.deepEqual(updated.output.reportReview,old.reportReview);
  await assert.rejects(live.callRole('DirectorFinal',facts,results,env,makeRequest('run_ads')),/invalid_campaign_fields/);
 });
-test('One full-play click advances every audio part and a new mode starts from its first part',async()=>{
+test('Full-report playback advances every part and can pause, resume and replay',async()=>{
  const vm=require('node:vm'),{playerHtml}=require('./report-audio.cjs');
- const html=playerHtml({full:['a','b','c'],brief:['z']});
+ const html=playerHtml({full:['a','b','c']});
  const elem=()=>{const listeners={};return {dataset:{},addEventListener:(t,fn)=>{listeners[t]=fn;},fire:t=>listeners[t]?.()};};
- const audio=elem(),status=elem(),window=elem(),buttons=[elem(),elem()],played=[];
- buttons[0].dataset={mode:'full',track:'a,b,c',label:'Full'};buttons[1].dataset={mode:'brief',track:'z',label:'Brief'};
+ const audio=elem(),status=elem(),window=elem(),buttons=[elem()],played=[];
+ buttons[0].dataset={mode:'full',track:'a,b,c',label:'Full'};
  audio.paused=true;audio.pause=()=>{audio.paused=true;audio.fire('pause');};
  audio.play=()=>{played.push(audio.src);audio.paused=false;audio.fire('playing');return Promise.resolve();};
  const panel={querySelector:s=>s==='audio'?audio:status,querySelectorAll:()=>buttons};
  vm.runInNewContext(html.match(/<script>([\s\S]+)<\/script>/)[1],{document:{querySelector:()=>panel},window});
  buttons[0].fire('click');audio.fire('ended');audio.fire('ended');audio.fire('ended');
  assert.deepEqual(played,['/report-audio/a.mp3','/report-audio/b.mp3','/report-audio/c.mp3']);
- assert.equal(status.textContent,'Đã đọc hết.');buttons[1].fire('click');
- assert.equal(played.at(-1),'/report-audio/z.mp3');
- buttons[1].fire('click');assert.equal(audio.paused,true);buttons[1].fire('click');assert.equal(audio.paused,false);
+ assert.equal(status.textContent,'Đã đọc hết.');buttons[0].fire('click');
+ assert.equal(played.at(-1),'/report-audio/a.mp3');
+ buttons[0].fire('click');assert.equal(audio.paused,true);buttons[0].fire('click');assert.equal(audio.paused,false);
+});
+
+test('Show picker scopes dates, nearest-first options and blocked approval to the selected show',()=>{
+ const {renderShowPage,showCatalog}=require('./show-report.cjs');
+ const {proposalState,approvalPanel}=require('./show-approval.cjs');
+ const snapshot={showsAvailable:true,rows:[
+   {id:'next',date:'2030-01-03',time:'19:30',artist:'Sau',status:'announced'},
+   {id:'soon',date:'2030-01-02',time:'19:30',artist:'Gần',status:'announced'}]};
+ const catalog=showCatalog(snapshot,{},'2030-01-01'),show=catalog.active[0],esc=String;
+ assert.equal(show.id,'soon');
+ const run={status:'blocked',reason:'invalid_model_report',results:{}};
+ const panel=approvalPanel({run,show,state:proposalState(run,show),esc});
+ const html=renderShowPage({path:'/proposals/music',day:'2030-01-01',period:'week',catalog,show,report:{title:'Gần',brief:[],sections:[],images:[]},snapshot,run,esc,player:'',approvalPanel:panel});
+ assert.match(html,/<select name="show" required><optgroup[^>]*><option value="soon" selected/);
+ assert.match(html,/name="period"/);assert.match(html,/name="day"/);
+ assert.match(html,/disabled[^>]*>Phê duyệt đề xuất/);assert.match(html,/0\/11 Agent/);
+ assert.doesNotMatch(html,/action="\/proposals\/music\/approve"/);
+});
+
+test('Approval requires a checked, unexpired final campaign for the selected show',()=>{
+ const {proposalState,approvalPanel}=require('./show-approval.cjs');
+ const show={id:'soon',date:'2030-01-02',time:'19:30',artist:'Nghệ sĩ',status:'announced'};
+ const now=new Date('2030-01-01T08:00:00Z');
+ const campaign={showId:show.id,proposedBudgetVnd:0,deadline:'2030-01-02T17:00:00+07:00'};
+ const results=Object.fromEntries(live.roleNames.map(r=>[r,{responseId:r}]));
+ const final={analysisVersion:1,responseId:'v2',output:{campaigns:[campaign]}};
+ const run={id:'test',status:'ready',results:{...results,DirectorFinal:final}};
+ const state=proposalState(run,show,now);
+ assert.equal(state.campaign,campaign);assert.match(approvalPanel({run,show,day:'2030-01-01',period:'day',csrf:'c',state,esc:String}),/action="\/proposals\/music\/approve"/);
+ assert.match(proposalState(run,{...show,id:'other'},now).reason,/chưa có đề xuất/);
+ assert.match(proposalState(run,show,new Date('2030-01-02T17:01:00+07:00')).reason,/qua thời hạn/);
+ assert.match(proposalState({...run,results:{...run.results,DirectorFinal:{...final,analysisVersion:0}}},show,now).reason,/phân tích lại/);
+ assert.match(proposalState({...run,results:{...run.results,Ads:{}}},show,now).reason,/10\/11/);
+});
+
+test('Staging saves a proposal revision once and rejects stale or cross-show submissions',{skip:!process.env.DIRECTOR_TEST_DATABASE_URL},async()=>{
+ const {Pool}=require('pg'),{randomUUID}=require('node:crypto');
+ const {initShowApprovals,approveShow}=require('./show-approval.cjs');
+ const db=new Pool({connectionString:process.env.DIRECTOR_TEST_DATABASE_URL});
+ const connection=await db.connect();
+ const isolated={query:(...args)=>connection.query(...args),connect:async()=>({query:(...args)=>connection.query(...args),release(){}})};
+ try{
+  // Use a separate schema for this test because the production ledger has a real foreign key.
+  const schema='test_show_approval_'+randomUUID().replaceAll('-','');
+  await connection.query('create schema '+schema);
+  try{
+   await connection.query('set search_path to '+schema);
+   await connection.query('create table os_live_director_runs (id uuid primary key,platform text,day date,status text,reason text,results jsonb)');
+   await initShowApprovals(isolated);
+   const runId=randomUUID(),now=new Date('2030-01-01T10:00:00+07:00');
+   const show={id:'show-1',date:'2030-01-02',time:'19:30',status:'announced'};
+   const campaign={showId:show.id,proposedBudgetVnd:0,deadline:'2030-01-01T18:00:00+07:00'};
+   const results=Object.fromEntries(live.roleNames.map(r=>[r,{responseId:r}]));
+   results.DirectorFinal={analysisVersion:1,responseId:'v1',output:{campaigns:[campaign]}};
+   await connection.query("insert into os_live_director_runs values($1,'music',$2,'ready',null,$3::jsonb)",[runId,'2030-01-01',JSON.stringify(results)]);
+   const fields=new URLSearchParams({run:runId,period:'day',day:'2030-01-01',show:show.id,revision:'v1'});
+   assert.equal(await approveShow(isolated,fields,show,{},now),true);
+   assert.equal(await approveShow(isolated,fields,show,{},now),true);
+   assert.equal(await approveShow(isolated,fields,{...show,id:'other'},{},now),false);
+   fields.set('revision','stale');assert.equal(await approveShow(isolated,fields,show,{},now),false);
+   assert.equal((await connection.query('select count(*)::int as n from os_music_show_approvals')).rows[0].n,1);
+  }finally{await connection.query('reset search_path');await connection.query('drop schema '+schema+' cascade');}
+ }finally{connection.release();await db.end();}
 });

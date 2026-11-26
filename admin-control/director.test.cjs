@@ -572,6 +572,7 @@ test('Live Director persists all 13 distinct provider response checkpoints and b
   const args=JSON.parse(JSON.parse(opts.body).input);
   const output=args.role==='DirectorBrief'?{summary:'Giao việc kiểm thử',assignments:live.roleNames.map(agent=>({agent,mission:'Phân tích nguồn kiểm thử',deadline,deliverable:'Báo cáo',metric:'Số liệu đúng'})),blockers:[]}:args.role==='DirectorFinal'?{title:'Phương án fixture',reportReview:live.roleNames.map(agent=>({agent,reportId:args.reportIds[agent],decisionImpact:'Đối chiếu trong bài kiểm thử'})),summary:'Tổng hợp fixture',decision:'Duyệt nội bộ',blockers:[],campaigns:[{showId:show.id,title:'Chiến dịch kiểm thử',rationale:'Đọc dữ liệu fixture',target:'Mục tiêu thử nghiệm',deadline,proposedBudgetVnd:0,expectedLow:1,expectedHigh:2,budgetBasis:'Giả định fixture',assetIds:['poster:'+show.id],actions:[{agent:'Creative',action:'Chọn poster',deadline,deliverable:'Ảnh nguồn',metric:'Đúng show'}],staff:[],stopRule:'Không chi',missing:['Chưa có video']}]}:{summary:'Kết quả fixture '+args.role,sourceIds:['finance:'+show.id],actions:[action],assetIds:args.role==='Creative'?['poster:'+show.id]:[],assumptions:[],blockers:[]};
   if(args.role==='DirectorFinal'){
+   output.campaigns[0].economicReview={adAction:'hold',paidChannelPlan:'Giữ chi khi thiếu nguồn quy đổi.',followUpPlan:'Rà hội thoại chưa chốt.',forecastBasis:'Theo số vé ghi nhận hôm nay.',gapResponse:'Đánh giá số ghế còn với tốc độ bán.',checkpoint:deadline};
    assert(live.roleNames.every(role=>args.completed[role]));
    const schema=JSON.parse(opts.body).text.format.schema.properties.reportReview;
    for(const role of live.roleNames)assert.deepEqual(schema.properties[role].properties.reportId.enum,[args.reportIds[role]]);
@@ -598,4 +599,51 @@ test('Live Director persists all 13 distinct provider response checkpoints and b
  assert.equal(new Set(Object.values(run.results).map(r=>r.responseId)).size,13);
  assert.equal(await live.runNext(pool,{env,request,now}),null);
  const other=await live.readLiveRun(pool,'24h',day);assert.equal(other.step_index,0);
+});
+
+test('Music plans use only feasible pre-show deadlines and condition ad increases on matched returns',()=>{
+ const live=require('./live-director.cjs');
+ const day='2030-01-02',now=day+'T12:00:00+07:00',deadline=day+'T18:00:00+07:00';
+ const show={id:'fixture',artist:'Nghệ sĩ',venue:'ccc',date:day,time:'20:00',status:'announced',inventory:{capacity:550,sold:20,remaining:530,held:0}};
+ const totals={paidOrders:2,paidTickets:4,revenueVnd:851200,complimentaryTickets:0};
+ const finance={status:'available',data:{checkedAt:now,rows:[{showId:show.id,days:{[day]:totals},total:totals,recordedCostVnd:100000000,costUpdatedAt:now}]}};
+ const inventory={checkedAt:now,showsAvailable:true,inventoryAvailable:true,rows:[show]};
+ const signals={fromDay:day,toDay:day,messenger:[],adDays:[{day,fetchedAt:now,rows:[{showId:show.id,accountId:'1482182900406200',spendVnd:833867}]}]};
+ const facts=live.makeFacts('music_week',day,finance,inventory,null,null,signals);
+ assert.equal(facts.economics.fixture.daily.afterAssignedAdsVnd,17333);
+ assert.equal(facts.priorityShowId,'fixture');
+ const review={adAction:'reduce',paidChannelPlan:'Rà nhóm có chi.',followUpPlan:'Rà báo giá.',forecastBasis:'Số vé thực bán.',gapResponse:'Đối chiếu lại khi hụt.',checkpoint:deadline};
+ const campaign={economicReview:review,showId:'fixture',title:'Rà chiến dịch',rationale:'Sắp đến giờ diễn.',target:'Đánh giá.',deadline,proposedBudgetVnd:0,expectedLow:1,expectedHigh:4,budgetBasis:'Chi đã ghi nhận.',assetIds:[],actions:[{agent:'Ads',action:'Rà nhóm.',deadline,deliverable:'Danh sách.',metric:'Vé trả tiền.'}],staff:[],stopRule:'Dừng nếu vượt.',missing:[]};
+ const valid=c=>live.validFinal({title:'Trình duyệt',summary:'Đánh giá show.',decision:'Giảm chi.',blockers:[],campaigns:[c]},facts);
+ assert(valid(campaign));
+ for(const invalid of [
+  {...campaign,proposedBudgetVnd:1,economicReview:{...review,adAction:'increase'}},
+  {...campaign,economicReview:{...review,checkpoint:day+'T11:59:00+07:00'}},
+  {...campaign,deadline:day+'T20:01:00+07:00'},
+  {...campaign,actions:[{...campaign.actions[0],deadline:'2030-01-03T09:00:00+07:00'}]},
+  {...campaign,showId:''}
+ ])assert.equal(valid(invalid),false);
+});
+
+test('A new Music protocol archives today once, retains historical rows and honors a date-specific allowance',usePg,async t=>{
+ const live=require('./live-director.cjs'),pool=await database(t);
+ await live.initLiveDirector(pool);
+ const now=new Date('2030-01-02T10:00:00Z'),day='2030-01-02',id=randomUUID();
+ await pool.query(`insert into os_live_director_runs(platform,day,id,facts,results,status,reason)
+   values('music',$1,$2,'{"inputVersion":2}','{"old":{"responseId":"old"}}','ready',null),
+   ('music_week',$1,$3,'{"inputVersion":2}','{}','blocked','invalid_model_report'),
+   ('24h',$1,$4,'{}','{}','blocked','invalid_model_report'),
+   ('music','2030-01-01',$5,'{}','{}','blocked','invalid_model_report')`,
+   [day,id,randomUUID(),randomUUID(),randomUUID()]);
+ const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13',EXTRA_OS_DIRECTOR_OVERRIDE_DAY:day,EXTRA_OS_DIRECTOR_OVERRIDE_TOTAL:'unlimited'};
+ const show={id:'s',artist:'S',date:'2030-01-03',time:'19:00',venue:'ccc',inventory:null,status:'announced'};
+ const sources={env,now,inventory:async()=>({checkedAt:now.toISOString(),showsAvailable:true,inventoryAvailable:true,rows:[show]}),music:async()=>({status:'available',data:{checkedAt:now.toISOString(),rows:[]}}),media:async()=>null,retail:async()=>null,signals:async()=>null};
+ await Promise.all([live.seedLiveRuns(pool,sources),live.seedLiveRuns(pool,sources)]);
+ const current=await live.readLiveRun(pool,'music',day);
+ assert.equal(current.id,id);assert.deepEqual(current.results,{});assert.equal(current.status,'queued');assert.equal(current.facts.inputVersion,3);
+ assert.equal((await live.readLiveRun(pool,'music_week',day)).facts.inputVersion,3);
+ assert.equal((await live.readLiveRun(pool,'24h',day)).status,'queued');
+ assert.equal((await live.readLiveRun(pool,'music','2030-01-01')).status,'blocked');
+ assert.equal((await pool.query('select * from os_live_director_history')).rowCount,2);
+ assert.equal((await live.seedLiveRuns(pool,sources)).created,0);
 });
