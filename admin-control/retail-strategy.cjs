@@ -1,4 +1,5 @@
 'use strict';
+const {staffPlan:buildStaffPlan}=require('./staff-scope.cjs');
 // Business proposal, not actual performance. No network, publishing or spending capability.
 const shift=(day,k)=>new Date(Date.parse(day+'T00:00:00Z')+k*86400000).toISOString().slice(0,10);
 const time=(day,h='22:00')=>day+'T'+h+':00+07:00';
@@ -15,11 +16,7 @@ function buildRetailStrategy(day,end,period,now=new Date()){
  const ordersLow=Math.floor(conversationsLow*0.2),ordersHigh=Math.floor(conversationsHigh*0.3);
  const minContribution=ordersHigh?Math.ceil(budget/ordersHigh):null,maxContribution=ordersLow?Math.ceil(budget/ordersLow):null;
  const name='Tăng lượt khách mua tại cửa hàng 24H';
- const staff=[
-  {person:'Diệu',id:'dieu',role:'Sale / CSKH',deadline:firstDeadline,action:'Chuẩn bị danh sách câu hỏi thường gặp; điều phối người tư vấn và ghi nhận khách hỏi địa chỉ, hàng còn, giá, thời gian đến cửa hàng. Sau khi đủ quyền, xác nhận khách mua bằng hóa đơn POS thay vì chỉ đếm tin nhắn.',metric:'Số hội thoại đủ nhu cầu, lượt đến và hóa đơn đã thanh toán; không thu thập dữ liệu cá nhân ngoài hệ thống hiện hành.'},
-  {person:'Trang',id:'trang',role:'Marketing / Ads',deadline:firstDeadline,action:'Chuẩn bị hai mẫu quảng cáo tin nhắn dành cho khu vực phục vụ của cửa hàng: mua nhanh đồ thiết yếu và nhu cầu mua tối/đêm. Chỉ đề xuất địa bàn sau khi xác nhận địa chỉ. Không chạy quảng cáo trước khi duyệt riêng ngân sách.',metric:'Hai bản nháp, kế hoạch đo chi phí/hội thoại và quy đổi hóa đơn.'},
-  {person:'Hải',id:'hai',role:'Tài chính',deadline,action:'Lấy chứng từ POS cho nhóm hàng đã bán; xác nhận giá vốn, giảm giá, hoàn trả, chi phí phát sinh và phần đóng góp mỗi đơn. Nếu chưa có API thì nhập tổng hợp chứng từ vào đối soát nội bộ.',metric:'Số hóa đơn xác nhận, doanh thu, phần đóng góp mỗi đơn, chi phí và điều kiện hòa vốn.'}
- ];
+ const staff=buildStaffPlan(['complaint','assets'],firstDeadline).concat(buildStaffPlan(['finance'],deadline));
  const agents=[
   {agent:'Research',deadline:firstDeadline,action:'Đề xuất phân khúc khách gần cửa hàng có nhu cầu mua nhanh; xác minh địa bàn, nhóm hàng và nhu cầu theo khung giờ từ nguồn được cấp.',metric:'Hai nhóm khách và lý do chọn, ghi rõ giả định.'},
   {agent:'Content / Creative',deadline:firstDeadline,action:'Soạn 2 bài Facebook và 1 kịch bản video 15–20 giây: một bài tiện lợi mua nhanh, một bài nhu cầu tối/đêm; dùng ảnh thật có quyền và chỉ nêu sản phẩm, giờ mở cửa, giá sau xác minh.',metric:'2 bài nháp, 1 kịch bản và brief hình ảnh.'},

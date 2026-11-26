@@ -303,3 +303,30 @@ test('A one-day allowance expires on the following reporting day',()=>{
  assert.match(page,/100 \/ không giới hạn/);
  assert.doesNotMatch(page,/Đã dùng hết lượt gọi/);
 });
+
+test('Music readers isolate active shows and keep ended shows in revenue only',()=>{
+ const {showCatalog,buildReport,reading}=require('./show-report.cjs');
+ const shows=[{id:'a',artist:'Alpha',date:'2030-01-03',status:'announced'},{id:'b',artist:'Beta',date:'2030-01-02',status:'live'},{id:'c',artist:'Closed',date:'2030-01-02',status:'ended'},{id:'d',artist:'Past',date:'2030-01-01',status:'announced'}];
+ const finance={data:{checkedAt:'2030-01-02T05:00:00Z',rows:shows.map(s=>({...reportFixture.rows[0],showId:s.id,artist:s.artist}))}};
+ const catalog=showCatalog({rows:shows},finance,'2030-01-02');
+ assert.deepEqual(catalog.active.map(s=>s.id),['b','a']);assert.deepEqual(catalog.ended.map(s=>s.id),['d','c']);
+ const assignments=require('./staff-scope.cjs');
+ const first=assignments.assignDuty('print','2030-01-02T17:00:00+07:00');
+ assert.equal(first.staffId,'trang');assert.throws(()=>assignments.assignDuty('advertising','2030-01-02'));
+ const campaign=id=>({showId:id,title:id==='a'?'Alpha campaign':'Beta campaign',target:'Mục tiêu',rationale:'Có nguồn',deadline:first.deadline,staff:[first],actions:[],assetIds:[],missing:[],expectedLow:null,stopRule:'Ngưỡng dừng',budgetBasis:'Căn cứ',proposedBudgetVnd:500000});
+ const run={status:'ready',facts:{assets:[]},results:{DirectorFinal:{staffPolicyVersion:1,output:{campaigns:[campaign('a'),campaign('b')]}}}};
+ const normal=buildReport(shows[0],'2030-01-02',finance,run,false);
+ assert.match(reading(normal,'full'),/Alpha campaign/);assert.doesNotMatch(reading(normal,'full'),/Beta|Closed/);
+ assert.match(reading(normal,'full'),/Nhận file đã duyệt/);assert.doesNotMatch(reading(normal,'brief'),/Nhận file đã duyệt/);
+ const ended=buildReport(shows[2],'2030-01-02',finance,run,true);
+ assert.deepEqual(ended.sections,[]);assert.doesNotMatch(reading(ended,'full'),/Ngân sách|AI|Alpha/);
+});
+test('Vietnamese report audio preserves all words across bounded immutable parts',()=>{
+ const {segments,playerHtml}=require('./report-audio.cjs');
+ const text='Báo cáo của nghệ sĩ. '.repeat(120)+'Kết thúc.';
+ const parts=segments(text);assert(parts.length>1);
+ assert(parts.every(p=>p.input.length<=800));assert.equal(parts.map(p=>p.input).join(' '),text);
+ assert.equal(parts.at(-1).key,segments(text).at(-1).key);
+ const html=playerHtml({full:parts.map(p=>p.key),brief:[parts[0].key]});
+ assert.match(html,/Nghe toàn bộ báo cáo/);assert.match(html,/audio preload="none"/);
+});

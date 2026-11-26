@@ -1,4 +1,5 @@
 'use strict';
+const {staffPlan:buildStaffPlan}=require('./staff-scope.cjs');
 const {createHash}=require('node:crypto');
 const {reportDay,musicDay,getMusicFinance,readRetailDaily}=require('./daily-reports.cjs');
 const {getMusicSnapshot}=require('./music-readonly.cjs');
@@ -55,11 +56,7 @@ function buildCampaign(day,show,financeRow,now=new Date(timeOf(day,'00:00')),per
  const lowCpa=100000,highCpa=250000;
  const additionalLow=Math.min(Math.max(0,available-paceScenario),Math.floor(paidBudgetVnd/highCpa));
  const additionalHigh=Math.min(Math.max(0,available-paceScenario),Math.floor(paidBudgetVnd/lowCpa));
- const staffPlan=[
-  {id:'dieu',person:'Diệu',role:'Sale / CSKH',deadline:initialDeadline,action:'Đề xuất rà khách đã chủ động hỏi vé, điều phối tư vấn trên hệ thống hiện hành nếu được phép.',metric:'Số hội thoại đủ điều kiện, vé đã thanh toán và lý do chưa chốt.'},
-  {id:'trang',person:'Trang',role:'Quảng cáo',deadline:initialDeadline,action:'Đọc số chi, hội thoại và đơn theo chiến dịch; không tăng ngân sách khi chưa được duyệt riêng.',metric:'Bảng chi tiêu, hội thoại, chi phí/vé nếu xác minh được; đề xuất giữ/dừng/tăng.'},
-  {id:'hai',person:'Hải',role:'Tài chính',deadline,action:'Đối chiếu doanh thu xác nhận, hoàn trả và chi phí trước khi kết luận hiệu quả.',metric:'Bảng đối soát và khoản còn thiếu.'}
- ];
+ const staffPlan=buildStaffPlan(['print','complaint','assets'],initialDeadline).concat(buildStaffPlan(['finance'],deadline));
  const mediaPlan=[
   {channel:'Facebook / Messenger',asset:'2 bản nội dung: nhắc lịch và hướng dẫn chọn ghế',agent:'Content / Creative',deadline:initialDeadline,metric:'2 bản nháp đúng ngày, giá, nguồn ghế và quyền sử dụng ảnh.'},
   {channel:'TikTok / Reels',asset:'Kịch bản video 15–30 giây và lời mời tư vấn',agent:'Content / Creative / Social',deadline:initialDeadline,metric:'1 kịch bản và lịch dự kiến; chưa đăng.'},
