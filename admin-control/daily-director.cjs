@@ -88,7 +88,7 @@ async function savePlan(pool,platform,day,plan){
  return {changed:rows.length===1,revision:rows[0]?.revision??null};
 }
 async function readPlan(pool,platform,day){
- const {rows}=await pool.query("select day::text day,plan,revision,updated_at,fingerprint from os_daily_director where platform=$1 and day=$2::date",[platform,day]);
+ const {rows}=await pool.query("select day::text as day,plan,revision,updated_at,fingerprint from os_daily_director where platform=$1 and day=$2::date",[platform,day]);
  return rows[0]??null;
 }
 const validApproval=(platform,day,revision,fingerprint,now)=>['music','24h'].includes(platform)&&typeof day==='string'&&day===reportDay(null,now)&&Number.isSafeInteger(revision)&&revision>0&&typeof fingerprint==='string'&&/^[a-f0-9]{64}$/.test(fingerprint);
@@ -125,7 +125,7 @@ async function executeNextApprovedTask(pool,now=new Date()){
  const client=await pool.connect();
  try{
   await client.query('begin');
-  const {rows:[row]}=await client.query("select e.platform,e.day::text day,e.revision,e.task_id,e.task from os_daily_execution e join os_daily_approvals a on a.platform=e.platform and a.day=e.day and a.revision=e.revision where e.status='queued' order by e.day,e.ordinal,e.platform,e.revision for update of e skip locked limit 1");
+  const {rows:[row]}=await client.query("select e.platform,e.day::text as day,e.revision,e.task_id,e.task from os_daily_execution e join os_daily_approvals a on a.platform=e.platform and a.day=e.day and a.revision=e.revision where e.status='queued' order by e.day,e.ordinal,e.platform,e.revision for update of e skip locked limit 1");
   if(!row){await client.query('commit');return null;}
   const output=executeApprovedTask(row.task,row.day,now);
   await client.query("update os_daily_execution set status=$5,result=$6::jsonb,updated_at=now() where platform=$1 and day=$2::date and revision=$3 and task_id=$4 and status='queued'",[row.platform,row.day,row.revision,row.task_id,output.status,JSON.stringify(output.result)]);
