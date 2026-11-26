@@ -45,3 +45,10 @@ Mở một chiến dịch ngoài chế độ mẫu trong **ONE CLICK 24H → Đ�
 ### Hàng đợi CRM 24H
 
 **AI Director → Mở hàng đợi CRM 24H** hiển thị các hội thoại được ghi nhận qua webhook 24H để quản trị phân công, ghi chú và thay đổi trạng thái. Cổng nhân sự chỉ hiển thị hội thoại được giao. Hội thoại đã xử lý trở về hàng chờ khi có tín hiệu mua hàng hoặc hỗ trợ mới. Sự kiện yêu cầu ngừng liên hệ giữ hội thoại trong mục **Ngừng liên hệ**, kể cả khi có tin đến sau. Cổng xử lý nội bộ dùng mã băm của hội thoại.
+
+
+## Music · dữ liệu công khai chỉ đọc
+
+Mở **Nền tảng → Music → Mở lịch show và số ghế** trong Admin đã đăng nhập. Trang đọc hai API GET công khai tại iextra.net, không sử dụng thông tin đăng nhập của Music, không giữ ghế, không tạo đơn và không lưu dữ liệu khách hàng. Chỉ hiển thị lịch, sức chứa và số ghế theo API; số ghế còn theo API chưa trừ giữ chỗ, có thể không đầy đủ. API lịch có cơ chế dữ liệu dự phòng phía Music. Nếu nguồn lỗi, hiển thị chưa có dữ liệu, không lấy số kế hoạch làm số thực tế. Báo cáo doanh thu và lợi nhuận vẫn cần tích hợp đối soát riêng.
+
+Sapo FnB: chưa được cấp tài liệu và quyền API phù hợp. Không dùng API Sapo Web để suy đoán dữ liệu FnB. Các đường tích hợp Sapo Web hiện có giữ nguyên cho đúng loại nguồn, không bật tự động khi chưa xác minh cửa hàng.
