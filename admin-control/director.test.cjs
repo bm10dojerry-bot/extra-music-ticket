@@ -534,3 +534,20 @@ test('Daily Director approval gates queue, rejects stale version, deduplicates c
  assert.equal(await executeNextApprovedTask(pool,now),null);
  assert.equal((await approvePlan(pool,request,new Date('2030-01-03T03:00:00Z'))).status,'invalid');
 });
+
+
+test('Daily, weekly and monthly proposal approvals are isolated in PostgreSQL',usePg,async t=>{
+ const {initDailyDirector,savePlan,readPlan,approvePlan,readApprovals,executeNextApprovedTask}=require('./daily-director.cjs');
+ const pool=await database(t);await initDailyDirector(pool);await initDailyDirector(pool);
+ const day='2030-01-02',now=new Date('2030-01-02T03:00:00Z');
+ const plan={title:'Period test',summary:'Test only',evidence:{},tasks:[{id:'draft',agent:'Content',title:'Prepare draft',deliverable:'Internal material',state:'draft_ready'}]};
+ for(const platform of ['music','music_week','music_month','24h','24h_week','24h_month'])await savePlan(pool,platform,day,{...plan,title:platform});
+ const weekly=await readPlan(pool,'music_week',day);
+ assert.equal((await approvePlan(pool,{platform:'music_week',day,revision:weekly.revision,fingerprint:weekly.fingerprint},now)).status,'approved');
+ assert.equal((await readApprovals(pool,'music_week',day)).length,1);
+ assert.equal((await readApprovals(pool,'music',day)).length,0);
+ assert.equal((await readApprovals(pool,'music_month',day)).length,0);
+ assert.equal((await readApprovals(pool,'24h_week',day)).length,0);
+ const result=await executeNextApprovedTask(pool,now);assert.equal(result.platform,'music_week');assert.equal(result.externalActions,0);
+ assert.equal(await executeNextApprovedTask(pool,now),null);
+});
