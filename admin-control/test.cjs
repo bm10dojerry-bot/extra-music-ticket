@@ -127,3 +127,27 @@ test('Daily Director 24H gates product strategy on actual FnB data and never sub
  assert(!plan.tasks.some(t=>t.state==='completed'));
  assert.match(renderDailyDirector(null,'2030-01-01',escapeMusic),/Chưa có bản phân tích/);
 });
+
+
+test('Director uses historical shows and prepares the entire upcoming portfolio, not just immediate campaigns',()=>{
+ const oldTotals={paidOrders:3,paidTickets:8,revenueVnd:3200000,complimentaryTickets:1};
+ const historical={showId:'past',artist:'Show đã qua',date:'2029-12-28',total:oldTotals,days:{'2029-12-27':oldTotals},recordedCostVnd:2000000,costUpdatedAt:'2030-01-01T00:00:00Z'};
+ const data=parseMusicFinance({...reportFixture,rows:[...reportFixture.rows,historical]});
+ const future=[
+  {...planInventory.rows[0],id:'future-far',artist:'Show xa',date:'2030-02-15',status:'pending',inventory:null},
+  {...planInventory.rows[0],id:'future-2',artist:'Show 2',date:'2030-01-08'},
+  {...planInventory.rows[0],id:'future-full',artist:'Show hết vé',date:'2030-01-03',status:'sold_out',inventory:{capacity:100,sold:100,remaining:0,held:0,blocked:0}}
+ ];
+ const plan=musicPlan('2030-01-02',{status:'available',data},{...planInventory,rows:[...planInventory.rows,...future]});
+ assert.equal(plan.evidence.historicalShows.length,1);
+ assert.equal(plan.evidence.historicalShows[0].revenueVnd,3200000);
+ assert.equal(plan.evidence.upcomingShows.length,4);
+ const far=plan.evidence.upcomingShows.find(r=>r.showId==='future-far');
+ assert.equal(far.priority,'prepare');assert.match(far.policy,/chưa quảng bá mở bán/);
+ assert.match(plan.evidence.upcomingShows.find(r=>r.showId==='future-full').policy,/không đẩy bán thêm/);
+ assert(plan.tasks.some(t=>t.id==='historical-review'&&t.state==='draft_ready'));
+ assert(plan.tasks.some(t=>t.id==='portfolio-plan'&&t.state==='draft_ready'));
+ assert(!plan.tasks.some(t=>t.id==='future-full:ads'));
+ const body=renderDailyDirector({plan,revision:1,updated_at:'2030-01-02T00:00:00Z'},'2030-01-02',escapeMusic,{platform:'music'});
+ assert.match(body,/Học từ kết quả show trước/);assert.match(body,/Show đã qua/);assert.match(body,/Show xa/);assert.match(body,/Kế hoạch toàn bộ show chưa diễn/);
+});
