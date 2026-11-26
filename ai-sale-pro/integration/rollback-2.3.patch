@@ -1,0 +1,115 @@
+--- a/lib/ai-sales.ts
++++ b/lib/ai-sales.ts
+@@ -1,4 +1,6 @@
+ import "server-only";
++import {dispatchForChat,DispatchBlocked} from "./ai-sale-pro/dispatch";
++import {proEscalate,proRpc,proRuntimeMode,type DispatchPurpose} from "./ai-sale-pro/database";
+ import {inspectBookingContacts,unresolvedContactFields,correctedBookingContact,checkoutContactIssues,missingContactProof,contactCorrectionReply} from "./messenger-contact-validation";
+ import {allowedQuestionReply,questionMessageId} from "./messenger-question-reply";
+ import {followUpAfterAnswer} from "./messenger-short-followup";
+@@ -37,6 +39,12 @@
+ class JobStopped extends Error {}
+ class SendUncertain extends Error {}
+ 
++const knownMessengerRejection=(error:unknown)=>error instanceof MessengerSendError&&!error.ambiguous;
++function guardedMessenger<T extends {messageId:string}>(chat:AiChat,key:string,purpose:DispatchPurpose,
++  send:(recheck:()=>Promise<void>)=>Promise<T>){
++  return dispatchForChat({chatId:chat.id,pageId:chat.messenger_page_id,recipient:chat.messenger_psid,key,purpose},send,knownMessengerRejection);
++}
++
+ export async function aiRpc<T=Result>(name:string,params:Record<string,unknown>):Promise<T>{
+   return await staffDb("rpc/extra_messenger_ai_"+name,{method:"POST",body:JSON.stringify(params)}) as T;
+ }
+@@ -131,9 +139,19 @@
+     if(["body_conflict","failed","invalid"].includes(begin.outcome))throw Error("Stored response could not be safely resumed");
+     if(begin.outcome!=="send"||!begin.outbox_id||!begin.send_token)throw new JobStopped("Send no longer allowed");
+     let acknowledgement:{messageId:string};
+-    try{acknowledgement=seatMapUrl?await sendMessengerPageImage(chat.messenger_psid,seatMapUrl):await sendMessengerPageMessage(chat.messenger_psid,parts[index],index===0&&style?.replyToMid?{mid:style.replyToMid,beforeFallback:()=>guard(job)}:undefined);}
++    try{
++      const purpose=seatMapUrl?"seat_map":action.purpose==="ticket"?"ticket":action.purpose==="payment"||action.purpose==="quote"?"checkout":"reply";
++      acknowledgement=await guardedMessenger(chat,begin.outbox_id,purpose,recheck=>
++        seatMapUrl?sendMessengerPageImage(chat.messenger_psid,seatMapUrl,recheck):
++        sendMessengerPageMessage(chat.messenger_psid,parts[index],index===0&&style?.replyToMid
++          ?{mid:style.replyToMid,beforeFallback:()=>guard(job)}:undefined,recheck));
++    }
+     catch(error){
+-      const knownRejected=error instanceof MessengerSendError&&!error.ambiguous;
++      if(error instanceof DispatchBlocked){
++        await aiRpc("finish_send",{p_outbox_id:begin.outbox_id,p_send_token:begin.send_token,p_result:"failed",p_external_message_id:null,p_error:"AI tạm dừng gửi theo trạng thái hội thoại."}).catch(()=>{});
++        throw new JobStopped(error.outcome);
++      }
++      const knownRejected=knownMessengerRejection(error);
+       await aiRpc("finish_send",{p_outbox_id:begin.outbox_id,p_send_token:begin.send_token,p_result:knownRejected?"failed":"uncertain",p_external_message_id:null,p_error:knownRejected?"Facebook từ chối nhận tin nhắn.":"Chưa xác định Facebook đã nhận tin; không tự gửi lặp."}).catch(()=>{});
+       if(!knownRejected)throw new SendUncertain("Provider acknowledgement missing");
+       throw error;
+@@ -359,7 +377,7 @@
+     await guard(job);
+     await sendInbound({purpose:"reply",body:friendly.body});
+     if(friendly.heart && latest.external_message_id && !currentOrder && !state?.current_order_code && state?.status!=="needs_attention")
+-      await maybeSendHeart(chat.messenger_page_id,chat.messenger_psid,latest.external_message_id,messages,()=>guard(job)).catch(()=>{});
++      if(proRuntimeMode()==="legacy")await maybeSendHeart(chat.messenger_page_id,chat.messenger_psid,latest.external_message_id,messages,()=>guard(job)).catch(()=>{});
+     return;
+   }
+   const service=!confirmationProblem?await showServiceReply(latest.body,messages,commentContext?.showId||currentOrder?.showId||latestQuote?.showId).catch(()=>null):null;
+@@ -488,10 +506,14 @@
+     const rows=await staffDb("extra_support_chats?id=eq."+job.chat_id+"&select=id,customer_name,channel,messenger_page_id,messenger_psid,last_customer_at,ai_mode,ai_started_at,status&limit=1") as AiChat[];
+     const chat=rows[0],page=getMessengerConfig()?.pageId;
+     if(!chat||chat.channel!=="messenger"||chat.messenger_page_id!==page||!chat.messenger_psid)throw new JobStopped("Chat no longer matches Page");
++    const eligible=await proRpc<string>("can_send",{p_chat_id:chat.id,p_page_id:page,
++      p_mode:proRuntimeMode(),p_purpose:job.kind==="paid_ticket"?"ticket":"reply"});
++    if(eligible!=="ok")throw new JobStopped("Automation is paused");
+     if(job.kind==="paid_ticket"&&job.order_code)await handlePaid(job,chat,job.order_code);
+     else{
+       await guard(job);
+-      const finishTyping=startMessengerTyping(chat.ai_mode==="auto"&&withinMessengerReplyWindow(chat.last_customer_at)?chat.messenger_psid:"");
++      const finishTyping=proRuntimeMode()==="pro"?async()=>{}:
++        startMessengerTyping(chat.ai_mode==="auto"&&withinMessengerReplyWindow(chat.last_customer_at)?chat.messenger_psid:"");
+       try{await handleInbound(job,chat);}finally{await finishTyping();}
+     }
+     await aiRpc("finish",{p_job_id:job.id,p_lease_token:job.lease_token,p_result:"done",p_error:null,p_retry_seconds:30});
+@@ -567,7 +589,7 @@
+    // Recheck the linked order after claiming the image, before contacting Meta.
+    const current=await getAiOrderStatus(chat.id,action.orderCode);
+    if(extraVerifiedQr(current,action.body)!==qr){await finish("failed",null,"Đơn không còn chờ thanh toán; không gửi ảnh QR.").catch(()=>{});return;}
+-   acknowledgement=await sendMessengerPageImage(chat.messenger_psid,qr);
++   acknowledgement=await guardedMessenger(chat,begin.outbox_id,"checkout",recheck=>sendMessengerPageImage(chat.messenger_psid,qr,recheck));
+   }catch(error){
+    const knownRejected=error instanceof MessengerSendError&&!error.ambiguous;
+    await finish(knownRejected?"failed":"uncertain",null,knownRejected?"Facebook từ chối ảnh QR; đường dẫn dự phòng đã gửi.":"Chưa xác định kết quả gửi ảnh QR; không gửi lặp. Đường dẫn dự phòng đã gửi.").catch(()=>{});
+--- a/lib/facebook-messenger.ts
++++ b/lib/facebook-messenger.ts
+@@ -25,9 +25,10 @@
+ export class MessengerSendError extends Error {
+  constructor(public readonly ambiguous:boolean,public readonly statusCode?:number,public readonly providerCode?:number){super(ambiguous?"Messenger delivery acknowledgement is unknown":"Messenger rejected the message");this.name="MessengerSendError";}
+ }
+-export async function sendMessengerPageMessage(psid:string,message:string,replyTo?:{mid:string;beforeFallback:()=>Promise<unknown>}):Promise<{messageId:string}>{
++export async function sendMessengerPageMessage(psid:string,message:string,replyTo?:{mid:string;beforeFallback:()=>Promise<unknown>},beforeSend?:()=>Promise<void>):Promise<{messageId:string}>{
+  const config=await getMessengerGraphConfig();
+  if(!config||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);
++ await beforeSend?.();
+  let res:Response;
+  try{res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+   method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
+@@ -40,7 +41,7 @@
+     (data.error?.code===100 && /reply.to|quoted message|message.to.reply|invalid.*mid/i.test(data.error?.message||"")));
+   if(replyTo && quoteRejected){
+     await replyTo.beforeFallback();
+-    return sendMessengerPageMessage(psid,message);
++    return sendMessengerPageMessage(psid,message,undefined,beforeSend);
+   }
+   console.warn("[messenger-api] Failed",res.status,typeof data.error?.code==="number"?data.error.code:"unknown");
+   const knownRejected=!res.ok&&(typeof data.error?.code==="number"||(res.status>=400&&res.status<500&&res.status!==408));
+@@ -50,11 +51,12 @@
+ }
+ 
+ 
+-export async function sendMessengerPageImage(psid:string,imageUrl:string):Promise<{messageId:string}>{
++export async function sendMessengerPageImage(psid:string,imageUrl:string,beforeSend?:()=>Promise<void>):Promise<{messageId:string}>{
+  if(!/^https:\/\/img\.vietqr\.io\/image\//.test(imageUrl)&&!/^https:\/\/iextra\.net\/api\/public\/seat-map\/(?:ccc|laocai)$/.test(imageUrl))throw new MessengerSendError(false);
+ 
+  const config=await getMessengerGraphConfig();
+  if(!config||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);
++ await beforeSend?.();
+  let res:Response;
+  try{res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+   method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},

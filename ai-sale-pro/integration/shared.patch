@@ -1,0 +1,479 @@
+--- /dev/null
++++ b/app/ai-sale-pro-handoff.tsx
+@@ -0,0 +1,112 @@
++"use client";
++import { useEffect, useState, type FormEvent } from "react";
++import { isResolutionCommand, reasonLabels, type HandoffReason } from "../lib/ai-sale-pro/policy";
++import type { HandoffStatus } from "../lib/ai-sale-pro/operator";
++
++type Detail = {
++  handoff: HandoffStatus;
++  canResolve: boolean;
++  notice?: { state: string }[];
++  audit?: { staff_id: string; outcome: string; recorded_at: string }[];
++  dispatches?: { purpose: string; status: string; started_at: string }[];
++};
++
++const outcomeLabels: Record<string, string> = {
++  paid: "Đã xác nhận khách đã thanh toán. Dừng lời mời mua vé.",
++  unpaid: "Đã xử lý xong. Bộ quét tiếp tục theo điều kiện chăm sóc hiện có.",
++  payment_unknown: "Chưa xác định được thanh toán. Hội thoại vẫn khóa.",
++  in_flight: "Còn lượt gửi đang được xác minh. Vui lòng kiểm tra lại.",
++  forbidden: "Tài khoản này chưa được cấp quyền xác nhận bàn giao.",
++  stale: "Mục bàn giao đã thay đổi. Vui lòng tải lại hội thoại.",
++  replay: "Lệnh này đã được ghi nhận.",
++};
++const dispatchLabels: Record<string, string> = {
++  sending: "Đang gửi", skipped: "Đã chặn", sent: "Đã gửi", failed: "Bị từ chối",
++  uncertain: "Chưa có biên nhận", queued: "Đang chờ gửi",
++};
++const purposeLabels: Record<string, string> = {
++  reply: "Trả lời", checkout: "Đặt vé", ticket: "Giao vé", followup: "Nhắc khách",
++  before_show_paid: "Nhắc lịch", manual_timeout: "Nhắc chờ", seat_map: "Ảnh sơ đồ", comment_reply: "Tin tư vấn từ bình luận",
++};
++const time = new Intl.DateTimeFormat("vi-VN", {
++  dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh",
++});
++
++export default function HandoffPanel({ chatId }: { chatId: string }) {
++  const [detail, setDetail] = useState<Detail>();
++  const [command, setCommand] = useState("");
++  const [status, setStatus] = useState("");
++  const [busy, setBusy] = useState(false);
++  const [refresh, setRefresh] = useState(0);
++  useEffect(() => {
++    const controller = new AbortController();
++    const load = () => void fetch("/api/staff/ai-sale-pro?chatId=" + encodeURIComponent(chatId),
++      { cache: "no-store", signal: controller.signal })
++      .then(async result => {
++        if (result.ok && !controller.signal.aborted) {
++          const next = await result.json() as Detail;
++          if (!controller.signal.aborted) setDetail(next);
++        }
++      })
++      .catch(() => {});
++    load();
++    const timer = setInterval(load, 15_000);
++    return () => { controller.abort(); clearInterval(timer); };
++  }, [chatId, refresh]);
++
++  const handoff = detail?.handoff;
++  if (!handoff?.id) return null;
++  const reason = reasonLabels[handoff.reason as HandoffReason] || "Cần nhân viên kiểm tra";
++  const open = !handoff.resolved_at;
++
++  async function resolve(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault();
++    if (busy || !handoff?.id || !isResolutionCommand(command)) return;
++    setBusy(true);
++    try {
++      const response = await fetch("/api/staff/ai-sale-pro", {
++        method: "POST", headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ chatId, handoffId: handoff.id, eventId: crypto.randomUUID(), issuedAt: new Date().toISOString(), command }),
++      });
++      const data = await response.json();
++      setStatus(outcomeLabels[data.outcome] || data.error || "Chưa xác minh được lệnh.");
++      if (response.ok) setCommand("");
++      setRefresh(value => value + 1);
++    } catch {
++      setStatus("Chưa đọc được kết quả. Kiểm tra lại trạng thái bàn giao.");
++    } finally {
++      setBusy(false);
++    }
++  }
++
++  return (
++    <section aria-label="Bàn giao AI Sale" className="extra-inbox-queue-intro">
++      <p><strong>{open ? "Đang khóa AI" : "Đã xử lý bàn giao"}</strong> · {reason}
++        {handoff.opened_at ? " · " + time.format(new Date(handoff.opened_at)) : ""}
++      </p>
++      {detail?.notice?.length ? <p>Thông báo Trang · {dispatchLabels[detail.notice[0].state]}</p> : null}
++      {handoff.in_flight ? <p>Đang xác minh lượt gửi đã bắt đầu.</p> : null}
++      {open && detail?.canResolve ? (
++        <form className="extra-inbox-reply" onSubmit={resolve}>
++          <label htmlFor="extra-sale-pro-command">Lệnh nội bộ · Đã xử lý xong</label>
++          <input id="extra-sale-pro-command" value={command} maxLength={120} onChange={event => setCommand(event.target.value)} />
++          <button type="submit" disabled={busy || handoff.in_flight || !isResolutionCommand(command)}>Xác nhận xử lý</button>
++        </form>
++      ) : null}
++      {status ? <p role="status">{status}</p> : null}
++      {detail?.audit || detail?.dispatches ? (
++        <details>
++          <summary>Lịch sử bàn giao và gửi</summary>
++          <ul>
++            {detail.audit?.map(item => <li key={item.recorded_at + item.staff_id}>
++              {time.format(new Date(item.recorded_at))} · {item.staff_id} · {outcomeLabels[item.outcome]}
++            </li>)}
++            {detail.dispatches?.map(item => <li key={item.started_at + item.purpose}>
++              {time.format(new Date(item.started_at))} · {purposeLabels[item.purpose]} · {dispatchLabels[item.status]}
++            </li>)}
++          </ul>
++        </details>
++      ) : null}
++    </section>
++  );
++}
+--- a/app/api/admin/ai-sales/route.ts
++++ b/app/api/admin/ai-sales/route.ts
+@@ -1,4 +1,6 @@
+ import {after,NextRequest,NextResponse} from "next/server";
++import {proRpc,proRuntimeMode,proEscalate} from "../../../../lib/ai-sale-pro/database";
++import type {HandoffStatus} from "../../../../lib/ai-sale-pro/operator";
+ import {requireRole,staffDb} from "../../../../lib/staff-auth";
+ import {getMessengerConfig,getMessengerGraphConfig} from "../../../../lib/facebook-messenger";
+ import {getFacebookOAuthConfig} from "../../../../lib/facebook-page-connection";
+@@ -78,6 +80,12 @@
+    }
+    const chats=await staffDb("extra_support_chats?id=eq."+input.chatId+"&channel=eq.messenger&messenger_page_id=eq."+pageId+"&select=id&limit=1") as {id:string}[];
+    if(!chats.length)return reply({error:"Không tìm thấy cuộc trò chuyện thuộc Fanpage đang kết nối."},404);
++   const handoff=await proRpc<HandoffStatus>("status",{p_chat_id:input.chatId,p_page_id:pageId});
++   if(input.mode==="ai"&&handoff.id&&!handoff.resolved_at)return reply({error:"Cần dùng lệnh xử lý xong trong hộp thư nội bộ."},409);
++   if(input.mode==="manual"&&proRuntimeMode()==="pro"){
++    const locked=await proEscalate(input.chatId,"human_requested","admin_takeover");
++    if(!["locked","already_locked"].includes(locked.outcome))return reply({error:"Chưa khóa được hội thoại."},409);
++   }
+    const result=await aiRpc("set_mode",{p_chat_id:input.chatId,p_mode:input.mode==="ai"?"auto":"manual"});
+    if(!["updated","configured"].includes(result.outcome))return reply({error:"Chưa thay đổi được người phụ trách cuộc trò chuyện."},409);
+   }else return reply({error:"Yêu cầu không hợp lệ."},400);
+--- a/app/api/cron/ai-sales/route.ts
++++ b/app/api/cron/ai-sales/route.ts
+@@ -1,3 +1,5 @@
++import {getMessengerConfig} from "../../../../lib/facebook-messenger";
++import {runProTasks} from "../../../../lib/ai-sale-pro/reporting";
+ import {purgeShowSignals} from "../../../../lib/messenger-show-signals";
+ import {NextRequest,NextResponse} from "next/server";
+ import {timingSafeEqual} from "node:crypto";
+@@ -16,10 +18,13 @@
+  if(secret.length<24||given.length!==expected.length||!timingSafeEqual(Buffer.from(given),Buffer.from(expected)))return NextResponse.json({error:"Unauthorized"},{status:401});
+  try{
+   if(new Date().getUTCMinutes()===0)await purgeShowSignals().catch(()=>console.warn("[ai-sales] Deferred expired media cleanup"));
++  const page=getMessengerConfig()?.pageId;
++  const reporting=page?runProTasks(page,{clock:()=>new Date(),adminOrigin:"https://admin.iextra.net"})
++    .catch(()=>({outcome:"internal_reporting_unavailable"})):Promise.resolve({outcome:"page_unavailable"});
+   const [worker,comments,manualTimeout]=await Promise.all([runAiSalesQueue({maxJobs:4}),runCommentQueue({maxJobs:1,scan:true}),runAiSalesManualTimeout()]);
+   const dayBefore=worker.enabled&&worker.ready?await runDayBefore():{sent:0};
+   const notifications=await sendAiSalesOwnerNotifications();
+   const followup=worker.enabled&&worker.ready?await runAiSalesFollowup():{enabled:false,sent:0};
+-  return NextResponse.json({...worker,comments,dayBefore,notifications,followup,manualTimeout},{headers:{"Cache-Control":"no-store"}});
++  return NextResponse.json({...worker,comments,dayBefore,notifications,followup,manualTimeout,internalReporting:await reporting},{headers:{"Cache-Control":"no-store"}});
+  }catch{console.warn("[ai-sales] Scheduled run unavailable");return NextResponse.json({error:"AI sales processing temporarily unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});}
+ }
+--- /dev/null
++++ b/app/api/staff/ai-sale-pro/route.ts
+@@ -0,0 +1,83 @@
++import { NextRequest, NextResponse } from "next/server";
++import { cookies } from "next/headers";
++import { getActor, getStaff, STAFF_COOKIE, staffDb } from "../../../../lib/staff-auth";
++import { getMessengerConfig } from "../../../../lib/facebook-messenger";
++import { proRpc, proStatus } from "../../../../lib/ai-sale-pro/database";
++import { resolveHandoff, type HandoffStatus } from "../../../../lib/ai-sale-pro/operator";
++
++export const runtime = "nodejs";
++export const dynamic = "force-dynamic";
++const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++const reply = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
++
++async function scopedChat(chatId: string, pageId: string) {
++  const rows = await staffDb("extra_support_chats?id=eq." + chatId + "&channel=eq.messenger&messenger_page_id=eq." +
++    pageId + "&select=id,assigned_staff_id&limit=1") as { id: string; assigned_staff_id: string | null }[];
++  return rows[0] ?? null;
++}
++
++async function operatorScope(staffId?: string) {
++  if (!staffId || !uuid.test(staffId)) return null;
++  const rows = await staffDb("extra_sale_pro_operators?staff_id=eq." + staffId +
++    "&select=can_resolve_any&limit=1") as { can_resolve_any: boolean }[];
++  return rows[0] ?? null;
++}
++
++export async function GET(req: NextRequest) {
++  const id = req.nextUrl.searchParams.get("chatId");
++  if (!id || !uuid.test(id)) return reply({ error: "Mã hội thoại không hợp lệ." }, 400);
++  try {
++    const jar = await cookies();
++    const [actor, operator] = await Promise.all([getActor(), getStaff(jar.get(STAFF_COOKIE)?.value)]);
++    if (!actor || !["admin", "sale"].includes(actor.role)) return reply({ error: "Cần đăng nhập." }, 403);
++    const page = getMessengerConfig()?.pageId;
++    if (!page) return reply({ error: "Messenger chưa có cấu hình." }, 503);
++    const [chat, scope] = await Promise.all([scopedChat(id, page), operatorScope(operator?.id)]);
++    if (!chat || (actor.role === "sale" && chat.assigned_staff_id !== actor.id && !scope?.can_resolve_any)) {
++      return reply({ error: "Không tìm thấy hội thoại được cấp quyền." }, 404);
++    }
++    const [handoff, mode] = await Promise.all([
++      proRpc<HandoffStatus>("status", { p_chat_id: id, p_page_id: page }),
++      proStatus(page),
++    ]);
++    const canResolve = Boolean(operator && ["admin", "sale"].includes(operator.role) &&
++      scope && (scope.can_resolve_any || chat.assigned_staff_id === operator.id));
++    if (actor.role !== "admin" || !handoff.id) return reply({ handoff, mode, canResolve });
++    const [audit, dispatches, notice] = await Promise.all([
++      staffDb("extra_sale_pro_resolution_audit?handoff_id=eq." + handoff.id +
++        "&select=staff_id,outcome,recorded_at&order=recorded_at.desc&limit=20"),
++      staffDb("extra_sale_pro_dispatches?chat_id=eq." + id +
++        "&select=purpose,status,started_at,finished_at&order=started_at.desc&limit=20"),
++      staffDb("extra_sale_pro_delivery?handoff_id=eq." + handoff.id +
++        "&select=state,created_at,finished_at&limit=1"),
++    ]);
++    return reply({ handoff, mode, canResolve, audit, dispatches, notice });
++  } catch {
++    return reply({ error: "Chưa đọc được trạng thái bàn giao." }, 503);
++  }
++}
++
++export async function POST(req: NextRequest) {
++  const origin = req.headers.get("origin");
++  if (!origin || origin !== req.nextUrl.origin) return reply({ error: "Nguồn yêu cầu không hợp lệ." }, 403);
++  if (Number(req.headers.get("content-length") || 0) > 2048) return reply({ error: "Yêu cầu quá lớn." }, 413);
++  try {
++    const jar = await cookies();
++    const operator = await getStaff(jar.get(STAFF_COOKIE)?.value);
++    if (!operator || !["admin", "sale"].includes(operator.role)) return reply({ outcome: "forbidden" }, 403);
++    const raw = await req.text();
++    if (raw.length > 2048) return reply({ error: "Yêu cầu quá lớn." }, 413);
++    let input: Record<string, unknown>;
++    try { input = JSON.parse(raw); } catch { return reply({ outcome: "invalid" }, 400); }
++    if (!input || typeof input.chatId !== "string" || !uuid.test(input.chatId)) return reply({ outcome: "invalid" }, 400);
++    const page = getMessengerConfig()?.pageId;
++    if (!page) return reply({ error: "Messenger chưa có cấu hình." }, 503);
++    if (!await scopedChat(input.chatId, page)) return reply({ outcome: "forbidden" }, 403);
++    const result = await resolveHandoff(input, operator);
++    const status = ["paid", "unpaid"].includes(result.outcome) ? 200 :
++      result.outcome === "forbidden" ? 403 : result.outcome === "invalid" ? 400 : 409;
++    return reply(result, status);
++  } catch {
++    return reply({ error: "Chưa xác minh được yêu cầu. Khóa vẫn được giữ." }, 503);
++  }
++}
+--- a/app/api/staff/support-chats/route.ts
++++ b/app/api/staff/support-chats/route.ts
+@@ -1,5 +1,6 @@
+ import {NextRequest,NextResponse} from "next/server";
+ import {requireRole,staffDb,type Staff} from "../../../../lib/staff-auth";
++import {isResolutionCommand} from "../../../../lib/ai-sale-pro/policy";
+ import {getMessengerConfig,sendMessengerPageMessage} from "../../../../lib/facebook-messenger";
+ import {getAiSalesSettings,type AiSettings} from "../../../../lib/ai-sales";
+ 
+@@ -83,6 +84,9 @@
+    const rec=await staffDb("extra_support_chats?id=eq."+encodeURIComponent(id)+"&select=messenger_page_id,messenger_psid&limit=1") as {messenger_page_id:string|null;messenger_psid:string|null}[];
+    const dest=rec[0];
+    if(!dest?.messenger_psid||dest.messenger_page_id!==configs.pageId)return reply({error:"Cuộc chat không thuộc Fanpage được cấp quyền"},409);
++   if(isResolutionCommand(body))return reply({error:"Nhập lệnh tại mục bàn giao AI trong hội thoại."},400);
++   const active=await staffDb("extra_sale_pro_dispatches?chat_id=eq."+id+"&status=eq.sending&select=token&limit=1") as unknown[];
++   if(active.length)return reply({error:"AI đang hoàn tất một lượt gửi, vui lòng kiểm tra lại."},409);
+    // Do not store a staff reply as sent when Meta rejects the outbound message.
+    await sendMessengerPageMessage(dest.messenger_psid,body);
+   }
+--- a/app/support-inbox.tsx
++++ b/app/support-inbox.tsx
+@@ -1,6 +1,7 @@
+ "use client";
+ import {useEffect,useMemo,useRef,useState,type FormEvent} from "react";
+ import "./support-inbox.css";
++import HandoffPanel from "./ai-sale-pro-handoff";
+ 
+ type Chat={id:string;show_id:string|null;customer_name:string;customer_phone:string|null;status:"open"|"closed";created_at:string;updated_at:string;last_customer_at:string|null;last_staff_at:string|null;assigned_staff_id:string|null;assigned_at:string|null;channel:"website"|"messenger";aiManaged?:boolean};
+ type Message={id:number;sender:"staff"|"customer";body:string;staff_name:string|null;created_at:string};
+@@ -132,6 +133,7 @@
+       </button>
+      </div>
+     </div>
++    {current.channel==="messenger"&&canView&&<HandoffPanel key={current.id} chatId={current.id}/>}
+     {showQueue&&<div className="extra-inbox-queue-intro"><p>Khách chưa có Sale phụ trách. Tin nhắn được lưu an toàn trong hàng chờ.</p>
+      {!isManager&&<button type="button" disabled={busy||myOpen>=8} onClick={()=>void doAction({action:"claim",chatId:current.id})}>{myOpen>=8?"Bạn đã đủ 8 khách":"Nhận khách để tư vấn"}</button>}
+     </div>}
+--- a/lib/ai-comment-leads.ts
++++ b/lib/ai-comment-leads.ts
+@@ -1,4 +1,6 @@
+ import "server-only";
++import {dispatchForChat,DispatchBlocked} from "./ai-sale-pro/dispatch";
++import {proRpc,proRuntimeMode} from "./ai-sale-pro/database";
+ import {generateText} from "ai";
+ import {staffDb} from "./staff-auth";
+ import {getMessengerConfig,MessengerSendError} from "./facebook-messenger";
+@@ -76,12 +78,32 @@
+   // must fence this send, even before its corresponding webhook arrives.
+   source=await fetchVerifiedCommentSource(lead.post_id,lead.comment_id);
+   if(!sameSource(lead,source)||source.hidden){await ingestCommentEvent(fromSource(source));return "source_refreshed";}
++  let linked:{chat_id:string;recipient_psid:string}|undefined;
++  if(source.authorId&&/^\d{5,80}$/.test(source.authorId)){
++   const known=await staffDb("extra_comment_ai_leads?page_id=eq."+lead.page_id+"&author_id=eq."+source.authorId+
++    "&state=eq.sent&chat_id=not.is.null&recipient_psid=not.is.null&select=chat_id,recipient_psid&limit=100") as
++    {chat_id:string;recipient_psid:string}[];
++   const identities=new Map(known.map(item=>[item.chat_id+":"+item.recipient_psid,item]));
++   if(identities.size===1&&known.length<100)linked=identities.values().next().value;
++  }
++  const runtimeMode=proRuntimeMode();
++  const dbMode=(await proRpc<{enabled:boolean}>("mode",{p_page_id:lead.page_id})).enabled?"pro":"legacy";
++  if(dbMode!==runtimeMode||(runtimeMode==="pro"&&!linked))return "recipient_unverified";
+   const begin=await commentRpc<{outcome:string;lead_id?:string;send_token?:string;comment_id?:string;body?:string}>("begin_send",{p_lead_id:lead.id,p_lease_token:lead.lease_token,p_verification:{source_verified_at:source.verifiedAt,private_reply_allowed:source.canReplyPrivately&&!source.hidden,source_version:lead.source_version,body:source.body,post_id:source.postId,author_id:source.authorId,created_at:source.createdAt}});
+   if(begin.outcome!=="send"||!begin.send_token||begin.comment_id!==lead.comment_id||typeof begin.body!=="string")return begin.outcome;
+   let receipt:{messageId:string;recipientPsid:string|null};
+-  try{receipt=await sendCommentPrivateReply(begin.comment_id,begin.body)}
++  try{
++   const {comment_id:id,body}=begin;
++   receipt=linked
++    ?await dispatchForChat({chatId:linked.chat_id,pageId:lead.page_id,recipient:linked.recipient_psid,
++      key:"comment:"+id,purpose:"comment_reply"},
++      recheck=>sendCommentPrivateReply(id,body,recheck),error=>error instanceof MessengerSendError&&!error.ambiguous)
++    :await sendCommentPrivateReply(id,body,async()=>{
++      if((await proRpc<{enabled:boolean}>("mode",{p_page_id:lead.page_id})).enabled)throw new DispatchBlocked("wrong_release");
++    });
++  }
+   catch(error){
+-   const definite=error instanceof MessengerSendError&&!error.ambiguous;
++   const definite=error instanceof DispatchBlocked||error instanceof MessengerSendError&&!error.ambiguous;
+    const permission=error instanceof MessengerSendError&&[10,190,200,283,368,459].includes(error.providerCode||0);
+    await commentRpc("finish_send",{p_lead_id:lead.id,p_send_token:begin.send_token,p_result:definite?"failed":"uncertain",p_error:definite?"Facebook từ chối tin nhắn riêng. Cần kiểm tra quyền hoặc điều kiện bình luận.":null}).catch(()=>{});
+    if(permission)await commentRpc("configure",{p_patch:{permissions_ready:false,readiness_reason:"Facebook từ chối quyền gửi tin riêng; đã dừng các lượt tư vấn mới để kiểm tra."}}).catch(()=>{});
+--- a/lib/ai-sales-followup.ts
++++ b/lib/ai-sales-followup.ts
+@@ -1,6 +1,7 @@
+ import "server-only";
++import {dispatchForChat,DispatchBlocked} from "./ai-sale-pro/dispatch";
+ import {staffDb} from "./staff-auth";
+-import {getMessengerConfig,sendMessengerPageMessage} from "./facebook-messenger";
++import {getMessengerConfig,sendMessengerPageMessage,MessengerSendError} from "./facebook-messenger";
+ type Due={chat_id:string;customer_message_id:number;anchor_reply_id:number;stage:3|60};
+ type Claim={outcome:string;id?:string;claim_token?:string;psid?:string;stage?:3|60};
+ type Verified={outcome:string;psid?:string;show_id?:string;artist?:string;days_remaining?:number};
+@@ -35,8 +36,15 @@
+    body="Anh/chị ơi, "+when.toLowerCase()+" là show "+artist.trim()+" diễn ra rồi, mình có đặt chỗ không ạ? Báo ngay bên em để chọn những vị trí đẹp còn trống nhé!\nhttps://iextra.net/show/"+encodeURIComponent(show_id);
+   }
+   let messageId:string;
+-  try{const sent=await sendMessengerPageMessage(claim.psid,body);messageId=sent.messageId;}
+-  catch{await finish("uncertain",null).catch(()=>{});return {enabled,sent:0,result:"delivery_uncertain"};}
++  try{
++   const psid=claim.psid;
++   const sent=await dispatchForChat({chatId:item.chat_id,pageId:config.pageId,recipient:psid,key:"followup:"+claim.id,purpose:"followup"},
++    recheck=>sendMessengerPageMessage(psid,body,undefined,recheck),error=>error instanceof MessengerSendError&&!error.ambiguous);
++   messageId=sent.messageId;
++  }catch(error){
++   await finish(error instanceof DispatchBlocked?"skipped":"uncertain",null).catch(()=>{});
++   return {enabled,sent:0,result:error instanceof DispatchBlocked?error.outcome:"delivery_uncertain"};
++  }
+   if(!messageId||messageId.length<4||messageId.length>200){await finish("uncertain",null).catch(()=>{});return {enabled,sent:0,result:"receipt_invalid"};}
+   const finished=await finish("sent",messageId);
+   return {enabled,sent:finished.outcome==="sent"?1:0,result:finished.outcome};
+--- a/lib/ai-sales-manual-timeout.ts
++++ b/lib/ai-sales-manual-timeout.ts
+@@ -1,5 +1,7 @@
+ import {askedOffer,hasPoster,posterChildren} from "./poster-offers";
+ import "server-only";
++import {dispatchForChat,DispatchBlocked} from "./ai-sale-pro/dispatch";
++import {proRuntimeMode} from "./ai-sale-pro/database";
+ import {questionMessageId,allowedQuestionReply} from "./messenger-question-reply";
+ import {showServiceReply} from "./messenger-show-service";
+ import {friendlyAcknowledgement} from "./messenger-conversation-style";
+@@ -162,17 +164,24 @@
+      if(current.outcome!=="ok"||current.psid!==v.psid)throw Error("Conversation changed");
+     }}:undefined;
+     let body=response.body;let mid:string;
++    const psid=v.psid;
+     try{
+-     if(response.image){
+-      try{mid=(await sendMessengerPageImage(v.psid,response.image)).messageId;}
+-      catch(e){
+-       if(!(e instanceof MessengerSendError)||e.ambiguous||!response.fallback)throw e;
+-       const second=await verify();
+-       if(second.outcome!=="ok"||second.psid!==v.psid){await finish("skipped","",null);stats.skipped++;continue;}
+-       body=response.fallback;mid=(await sendMessengerPageMessage(v.psid,body,quote)).messageId;
+-      }
+-     }else mid=(await sendMessengerPageMessage(v.psid,body,quote)).messageId;
+-    }catch{await finish("uncertain",body,null).catch(()=>{});continue;}
++      mid=(await dispatchForChat({chatId:item.chat_id,pageId:cfg.pageId,recipient:psid,
++        key:"manual-timeout:"+claim.id,purpose:"manual_timeout"},async recheck=>{
++        if(!response.image)return sendMessengerPageMessage(psid,body,quote,recheck);
++        try{return await sendMessengerPageImage(psid,response.image,recheck);}
++        catch(error){
++          if(proRuntimeMode()==="pro"||!(error instanceof MessengerSendError)||error.ambiguous||!response.fallback)throw error;
++          const second=await verify();
++          if(second.outcome!=="ok"||second.psid!==psid)throw new DispatchBlocked("stale");
++          body=response.fallback;
++          return sendMessengerPageMessage(psid,body,quote,recheck);
++        }
++      },error=>error instanceof MessengerSendError&&!error.ambiguous)).messageId;
++    }catch(error){
++      await finish(error instanceof DispatchBlocked?"skipped":"uncertain",body,null).catch(()=>{});
++      continue;
++    }
+     if(!mid||mid.length<4||mid.length>200){await finish("uncertain",body,null).catch(()=>{});continue;}
+     const result=await finish("sent",body,mid);
+     if(result.outcome==="sent")stats.sent++;
+--- a/lib/facebook-comments.ts
++++ b/lib/facebook-comments.ts
+@@ -106,9 +106,10 @@
+ }
+ 
+ /** Caller must persist its one-shot send intent and check live eligibility first. */
+-export async function sendCommentPrivateReply(commentId:string,body:string):Promise<{messageId:string;recipientPsid:string|null}>{
++export async function sendCommentPrivateReply(commentId:string,body:string,beforeSend?:()=>Promise<void>):Promise<{messageId:string;recipientPsid:string|null}>{
+  let config:Config;try{config=await configOrThrow();}catch{throw new MessengerSendError(false);}
+  if(!commentIdValid(commentId)||typeof body!=="string"||!body.trim()||body.length>1000)throw new MessengerSendError(false);
++ await beforeSend?.();
+  let response:Response;
+  try{response=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+   method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+config.pageToken},
+--- a/lib/messenger-day-before.ts
++++ b/lib/messenger-day-before.ts
+@@ -1,6 +1,7 @@
+ import "server-only";
++import {dispatchForChat} from "./ai-sale-pro/dispatch";
+ import {staffDb} from "./staff-auth";
+-import {getMessengerConfig,sendMessengerPageMessage} from "./facebook-messenger";
++import {getMessengerConfig,sendMessengerPageMessage,MessengerSendError} from "./facebook-messenger";
+ import {showForecast,dayBeforeText,type Reminder} from "./show-day-before";
+ function rpc<T>(method:string,body:Record<string,unknown>):Promise<T> {
+   return staffDb("rpc/extra_day_before_"+method,{method:"POST",body:JSON.stringify(body),signal:AbortSignal.timeout(7000)}) as Promise<T>;
+@@ -16,7 +17,12 @@
+       const body=dayBeforeText(row,weather);
+       if(!await rpc<boolean>("claim",{p_page:page,p_chat:row.chat_id,p_show:row.show_id,p_expected:row}))continue;
+       let mid:string|null=null;
+-      try{mid=(await sendMessengerPageMessage(row.recipient,body)).messageId||null;}catch{/* Ambiguous delivery must not be retried. */}
++      try{
++        mid=(await dispatchForChat({chatId:row.chat_id,pageId:page,recipient:row.recipient,
++          key:"day-before:"+row.show_id,purpose:row.kind==="paid"?"before_show_paid":"followup"},
++          recheck=>sendMessengerPageMessage(row.recipient,body,undefined,recheck),
++          error=>error instanceof MessengerSendError&&!error.ambiguous)).messageId;
++      }catch{/* Ambiguous delivery must not be retried. */}
+       await rpc("finish",{p_page:page,p_recipient:row.recipient,p_show:row.show_id,p_mid:mid,p_body:body});
+       if(mid)sent++;
+     }
+--- a/lib/messenger-short-followup.ts
++++ b/lib/messenger-short-followup.ts
+@@ -1,6 +1,7 @@
+ import "server-only";
++import {dispatchForChat,DispatchBlocked} from "./ai-sale-pro/dispatch";
+ import {staffDb} from "./staff-auth";
+-import {sendMessengerPageMessage,MessengerSendError} from "./facebook-messenger";
++import {getMessengerConfig,sendMessengerPageMessage,MessengerSendError} from "./facebook-messenger";
+ import {explicitStop,isPing,norm,sensitiveQuestion} from "./ai-sales-timeout-policy";
+ import {friendlyAcknowledgement} from "./messenger-conversation-style";
+ import {customerRequestsHuman} from "./messenger-sale-memory";
+@@ -52,9 +53,13 @@
+   if(!tip||!Number.isFinite(due)||Date.now()>due+10000)return;
+   await sleep(Math.max(0,due-Date.now()+30));
+   const claim=await staffDb("rpc/extra_messenger_ai_claim_short_followup",{method:"POST",body:JSON.stringify({p_job_id:jobId,p_parent_id:primary.id,p_body:tip})}) as {id:string;token:string;psid:string}|null;
+-  if(!claim?.token)return;
++  const page=getMessengerConfig()?.pageId;
++  if(!claim?.token||!page)return;
+   let mid:string|null=null,result="uncertain";
+-  try{mid=(await sendMessengerPageMessage(claim.psid,tip)).messageId;result="sent";}
+-  catch(err){if(err instanceof MessengerSendError&&!err.ambiguous)result="failed";}
++  try{
++    mid=(await dispatchForChat({chatId,pageId:page,recipient:claim.psid,key:claim.id,purpose:"followup"},
++      recheck=>sendMessengerPageMessage(claim.psid,tip,undefined,recheck),error=>error instanceof MessengerSendError&&!error.ambiguous)).messageId;
++    result="sent";
++  }catch(error){if(error instanceof DispatchBlocked||error instanceof MessengerSendError&&!error.ambiguous)result="failed";}
+   await staffDb("rpc/extra_messenger_ai_finish_send",{method:"POST",body:JSON.stringify({p_outbox_id:claim.id,p_send_token:claim.token,p_result:result,p_external_message_id:mid,p_error:mid?null:"Chưa gửi được tin tư vấn bổ sung."})});
+ }
+--- a/middleware.ts
++++ b/middleware.ts
+@@ -21,7 +21,7 @@
+   const url=request.nextUrl.clone();url.pathname="/checkin";url.search="";return NextResponse.rewrite(url);
+  }
+  if(host==="sale.iextra.net"){
+-  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname==="/api/staff/login"||pathname==="/api/staff/logout"||pathname==="/api/staff/sale-requests"||pathname==="/api/staff/ticket-link"||pathname.startsWith("/api/staff/support-chats")||pathname==="/api/staff/sale-shows"||pathname==="/api/staff/reports"||pathname==="/api/public/show-inventory"||pathname==="/api/payments/sepay/status"||pathname==="/api/staff/sale-reserve"||pathname==="/api/staff/live-presence"||pathname==="/reset-password"||pathname==="/api/auth/forgot-password"||pathname==="/api/auth/reset-password")return NextResponse.next();
++  if(pathname.startsWith("/_next/")||pathname==="/favicon.ico"||pathname==="/api/staff/login"||pathname==="/api/staff/logout"||pathname==="/api/staff/sale-requests"||pathname==="/api/staff/ticket-link"||pathname.startsWith("/api/staff/support-chats")||pathname==="/api/staff/ai-sale-pro"||pathname==="/api/staff/sale-shows"||pathname==="/api/staff/reports"||pathname==="/api/public/show-inventory"||pathname==="/api/payments/sepay/status"||pathname==="/api/staff/sale-reserve"||pathname==="/api/staff/live-presence"||pathname==="/reset-password"||pathname==="/api/auth/forgot-password"||pathname==="/api/auth/reset-password")return NextResponse.next();
+   if(pathname==="/sale"||pathname.startsWith("/sale/"))return NextResponse.next();
+   if(pathname.startsWith("/api/"))return NextResponse.json({error:"Cổng Sale không có quyền truy cập API này"},{status:403});
+   const url=request.nextUrl.clone();url.pathname="/sale";url.search="";return NextResponse.rewrite(url);

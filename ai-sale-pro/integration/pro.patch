@@ -1,0 +1,344 @@
+--- a/app/api/meta/messenger/webhook/route.ts
++++ b/app/api/meta/messenger/webhook/route.ts
+@@ -1,3 +1,6 @@
++import {asksForStaff} from "../../../../../lib/ai-sales-24";
++import {inboundHandoff,isResolutionCommand} from "../../../../../lib/ai-sale-pro/policy";
++import {proEscalate,proStatus,proRuntimeMode} from "../../../../../lib/ai-sale-pro/database";
+ import {recordSignedBatch} from "../../../../../lib/messenger-show-signals";
+ import {simplePriceQuestion} from "../../../../../lib/messenger-recognize-inquiry";
+ import {after,NextRequest,NextResponse} from "next/server";
+@@ -58,6 +61,7 @@
+  const marketingReferrals=new Map<string,MarketingMessengerReferral>();
+  console.info("[messenger-webhook] Verified signed Page payload, entryCount",Math.min(data.entry.length,30));
+  try{
++  const pro=proRuntimeMode()==="pro"&&(await proStatus(config.pageId)).enabled;
+   for(const page of data.entry.slice(0,30)){
+    if(page.id!==config.pageId){unmatchedPages+=1;continue;}
+    for(const event of extractCommentEvents(config.pageId,page)){
+@@ -81,6 +85,20 @@
+     if(result.outcome==="duplicate"){duplicate+=1;continue;}
+     if(result.outcome==="received"&&result.chat_id){
+      processed+=1;
++     if(pro){
++      const turns=await staffDb("extra_support_messages?chat_id=eq."+encodeURIComponent(result.chat_id)+
++        "&select=id,sender,body,staff_name,external_message_id&order=id.desc&limit=12") as
++        {id:number;sender:string;body:string;staff_name?:string;external_message_id?:string}[];
++      const index=turns.findIndex(turn=>turn.external_message_id===mid&&turn.sender==="customer");
++      const reason=index<0?null:inboundHandoff(turns.slice(index).reverse(),asksForStaff);
++      if(reason||isResolutionCommand(body)){
++       const locked=await proEscalate(result.chat_id,reason||"out_of_scope","signed_inbound");
++       if(!["locked","already_locked"].includes(locked.outcome))throw Error("Conversation lock unavailable");
++       try{await staffDb("rpc/extra_support_assign_chat",{method:"POST",body:JSON.stringify({p_chat_id:result.chat_id})});}
++       catch{console.warn("[messenger-webhook] Locked chat assignment deferred");}
++       continue;
++      }
++     }
+      if(result.ai_queued){
+       aiQueued=true;
+       singlePrice=processed===1 && simplePriceQuestion(body);
+--- a/lib/ai-sales-checkout.ts
++++ b/lib/ai-sales-checkout.ts
+@@ -1,4 +1,6 @@
+ import "server-only";
++import {proRuntimeMode} from "./ai-sale-pro/database";
++import {verifySeats} from "./ai-sale-pro/seats";
+ import {artistPhotoNotice,validChildSeats} from "./show-family-policy";
+ import {staffDb} from "./staff-auth";
+ import {seatsFor, venues, type VenueId} from "./venues";
+@@ -177,6 +179,17 @@
+ }
+ export async function reserveAiQuote(context:AiCheckoutContext,quoteId:string,mode:"confirmation"|"details"="confirmation"):Promise<AiSalesOrder>{
+   contextValid(context);bankConfig();if(!UUID.test(quoteId))invalid();
++  if(proRuntimeMode()==="pro"){
++    const quote=await getAiLatestQuote(context.chatId);
++    if(!quote||quote.id!==quoteId)throw new AiCheckoutError("QUOTE_STALE","Báo giá đã thay đổi.");
++    const previous=await staffDb("extra_messenger_ai_orders?chat_id=eq."+context.chatId+
++      "&quote_id=eq."+quote.id+"&select=order_code&limit=1") as {order_code:string}[];
++    if(!previous.length){
++      const snapshot=await getAiSeatSnapshot(quote.showId);
++      try{verifySeats(snapshot,[...quote.seats,...quote.giftSeats]);}
++      catch{throw new AiCheckoutError("RESERVATION_FAILED","Ghế đã thay đổi. Cần kiểm tra lại trước khi giữ.");}
++    }
++  }
+   const result=await staffDb(mode==="details"?"rpc/extra_messenger_ai_checkout_details":"rpc/extra_messenger_ai_reserve_quote",{method:"POST",body:JSON.stringify({p_job_id:context.jobId,p_lease_token:context.leaseToken,p_quote_id:quoteId})}) as {outcome:string;order_code:string};
+   if(!["reserved","existing"].includes(result?.outcome)||!CODE.test(result.order_code||""))throw new AiCheckoutError("RESERVATION_FAILED","Chưa thể giữ ghế. Cần đọc lại báo giá và tin nhắn mới nhất.");
+   const order=await getAiOrderStatus(context.chatId,result.order_code);
+--- a/lib/ai-sales.ts
++++ b/lib/ai-sales.ts
+@@ -1,4 +1,8 @@
+ import "server-only";
++import {dispatchForChat,DispatchBlocked} from "./ai-sale-pro/dispatch";
++import {proEscalate,proRpc,proRuntimeMode,type DispatchPurpose} from "./ai-sale-pro/database";
++import {inboundHandoff,isResolutionCommand,repeatsLastAnswer,type HandoffReason} from "./ai-sale-pro/policy";
++import {canonicalSeatCodes,isExactSeatInquiry,showSeatAttachment} from "./ai-sale-pro/seats";
+ import {asksForStaff,unableToAnswer,seatCodes,simpleSeatQuestion,exactSeatDetails,formatExactSeats,HANDOFF_REPLY} from "./ai-sales-24";
+ import {inspectBookingContacts,unresolvedContactFields,correctedBookingContact,checkoutContactIssues,missingContactProof,contactCorrectionReply} from "./messenger-contact-validation";
+ import {allowedQuestionReply,questionMessageId} from "./messenger-question-reply";
+@@ -11,10 +15,10 @@
+ import {generateText,ToolLoopAgent,tool,isStepCount,type ModelMessage} from "ai";
+ import {z} from "zod";
+ import {staffDb} from "./staff-auth";
+-import {startMessengerTyping,getMessengerConfig,sendMessengerPageMessage,MessengerSendError,sendMessengerPageImage,getMessengerGraphConfig} from "./facebook-messenger";
++import {startMessengerTyping,getMessengerConfig,sendMessengerPageMessage,MessengerSendError,sendMessengerPageImage,sendMessengerSeatMap,getMessengerGraphConfig} from "./facebook-messenger";
+ import {deliverTickets} from "./extra-ticketing";
+ import {
+-  AiCheckoutError,listAiSalesShows,getAiSeatOptions,buildAiQuote,reserveAiQuote,getAiLatestQuote,
++  AiCheckoutError,listAiSalesShows,getAiSeatSnapshot,getAiSeatOptions,buildAiQuote,reserveAiQuote,getAiLatestQuote,
+   getAiOrderStatus,getAiPaidTicketDelivery,isAiPurchaseConfirmation,renderAiQuoteMessage,renderAiPaymentMessage,
+   type AiCheckoutContext,type AiSalesQuote,type AiSalesOrder,
+ } from "./ai-sales-checkout";
+@@ -37,6 +41,12 @@
+ type Action={purpose:"reply"|"quote"|"payment"|"ticket";body:string;quoteId?:string;orderCode?:string};
+ class JobStopped extends Error {}
+ class SendUncertain extends Error {}
++
++const knownMessengerRejection=(error:unknown)=>error instanceof MessengerSendError&&!error.ambiguous;
++function guardedMessenger<T extends {messageId:string}>(chat:AiChat,key:string,purpose:DispatchPurpose,
++  send:(recheck:()=>Promise<void>)=>Promise<T>){
++  return dispatchForChat({chatId:chat.id,pageId:chat.messenger_page_id,recipient:chat.messenger_psid,key,purpose},send,knownMessengerRejection);
++}
+ 
+ export async function aiRpc<T=Result>(name:string,params:Record<string,unknown>):Promise<T>{
+   return await staffDb("rpc/extra_messenger_ai_"+name,{method:"POST",body:JSON.stringify(params)}) as T;
+@@ -117,7 +127,7 @@
+ }
+ 
+ /** The database records the attempt before Meta is contacted. Ambiguous sends never auto-repeat. */
+-export async function sendAiSalesMessage(job:AiJob,chat:AiChat,action:Action,seatMapUrl?:string,style?:{customer:string;history:Message[];page?:string;replyToMid?:string}):Promise<void>{
++export async function sendAiSalesMessage(job:AiJob,chat:AiChat,action:Action,seatMapUrl?:string|Uint8Array<ArrayBuffer>,style?:{customer:string;history:Message[];page?:string;replyToMid?:string}):Promise<void>{
+   if(!withinMessengerReplyWindow(chat.last_customer_at))throw new JobStopped("Messenger reply window closed");
+   const text=action.purpose==="reply"&&!seatMapUrl?await extraPersonalizeFirstReply(chat,action.body):action.body;
+   const parts=seatMapUrl?[action.body]:splitAiMessage(style&&action.purpose==="reply"?styleSalesReply(text,style.customer,style.history,style.page):text);
+@@ -132,9 +142,20 @@
+     if(["body_conflict","failed","invalid"].includes(begin.outcome))throw Error("Stored response could not be safely resumed");
+     if(begin.outcome!=="send"||!begin.outbox_id||!begin.send_token)throw new JobStopped("Send no longer allowed");
+     let acknowledgement:{messageId:string};
+-    try{acknowledgement=seatMapUrl?await sendMessengerPageImage(chat.messenger_psid,seatMapUrl):await sendMessengerPageMessage(chat.messenger_psid,parts[index],index===0&&style?.replyToMid?{mid:style.replyToMid,beforeFallback:()=>guard(job)}:undefined);}
++    try{
++      const purpose=seatMapUrl?"seat_map":action.purpose==="ticket"?"ticket":action.purpose==="payment"||action.purpose==="quote"?"checkout":"reply";
++      acknowledgement=await guardedMessenger(chat,begin.outbox_id,purpose,recheck=>
++        typeof seatMapUrl==="string"?sendMessengerPageImage(chat.messenger_psid,seatMapUrl,recheck):
++        seatMapUrl?sendMessengerSeatMap(chat.messenger_psid,seatMapUrl,recheck):
++        sendMessengerPageMessage(chat.messenger_psid,parts[index],index===0&&style?.replyToMid
++          ?{mid:style.replyToMid,beforeFallback:()=>guard(job)}:undefined,recheck));
++    }
+     catch(error){
+-      const knownRejected=error instanceof MessengerSendError&&!error.ambiguous;
++      if(error instanceof DispatchBlocked){
++        await aiRpc("finish_send",{p_outbox_id:begin.outbox_id,p_send_token:begin.send_token,p_result:"failed",p_external_message_id:null,p_error:"AI tạm dừng gửi theo trạng thái hội thoại."}).catch(()=>{});
++        throw new JobStopped(error.outcome);
++      }
++      const knownRejected=knownMessengerRejection(error);
+       await aiRpc("finish_send",{p_outbox_id:begin.outbox_id,p_send_token:begin.send_token,p_result:knownRejected?"failed":"uncertain",p_external_message_id:null,p_error:knownRejected?"Facebook từ chối nhận tin nhắn.":"Chưa xác định Facebook đã nhận tin; không tự gửi lặp."}).catch(()=>{});
+       if(!knownRejected)throw new SendUncertain("Provider acknowledgement missing");
+       throw error;
+@@ -237,6 +258,15 @@
+   const messages=[...history].reverse(),latest=history.find(m=>m.sender==="customer"),state=stateRows[0];
+   if(!latest||latest.id!==job.source_message_id)throw new JobStopped("Newer customer message exists");
+   await guard(job);
++  const pro=proRuntimeMode()==="pro";
++  const handoff=async(reason:HandoffReason)=>{
++    const result=await proEscalate(chat.id,reason,job.id);
++    if(!["locked","already_locked"].includes(result.outcome))throw Error("Handoff state unavailable");
++  };
++  if(pro){
++    const reason=inboundHandoff(messages.filter(message=>message.id<=latest.id),asksForStaff);
++    if(reason||isResolutionCommand(latest.body)){await handoff(reason||"out_of_scope");return;}
++  }
+   if(asksForStaff(latest.body)){
+     try{await sendAiSalesMessage(job,chat,{purpose:"reply",body:HANDOFF_REPLY});}
+     finally{await setState(job,"needs_attention","Khách yêu cầu gặp Sale/CSKH/ban quản lý; nhân viên tiếp nhận hội thoại.","Khách chủ động yêu cầu gặp nhân viên.");}
+@@ -250,7 +280,11 @@
+   if(recognition.caption)latest.body=recognition.caption;
+   const style:{customer:string;history:Message[];page?:string;replyToMid?:string}={customer:latest.body,history:messages,replyToMid};
+   let serviceNote="";
+-  const sendInbound=(action:Action,media?:string)=>{
++  const sendInbound=async(action:Action,media?:string)=>{
++    if(pro&&action.purpose==="reply"&&!media&&(unableToAnswer(action.body)||repeatsLastAnswer(action.body,messages))){
++      await handoff(unableToAnswer(action.body)?"unable_to_answer":"repeated");
++      throw new JobStopped("Handoff to Sale");
++    }
+     if(action.purpose==="reply"&&!media&&unableToAnswer(action.body))return setState(job,"needs_attention","Sale tiếp quản câu hỏi chưa trả lời được.","AI không đủ dữ liệu hoặc không thể xử lý yêu cầu.").then(()=>{throw new JobStopped("Handoff to Sale");});
+     const withNote=serviceNote && action.purpose==="reply" && !media ? {...action,body:serviceNote+"\n"+action.body}:action;
+     if(withNote!==action)serviceNote="";
+@@ -258,19 +292,41 @@
+   };
+   const context:AiCheckoutContext={chatId:chat.id,jobId:job.id,leaseToken:job.lease_token,sourceMessageId:latest.id};
+   const currentOrder=state?.current_order_code?await getAiOrderStatus(chat.id,state.current_order_code):null;
++  if(pro&&isSeatMapRequest(latest.body)){
++    const catalog=await listAiSalesShows();
++    const memory=salesPreferences(messages,catalog,commentContext?.showId);
++    const explicit=selectSeatMap(latest.body,messages,catalog,commentContext?.showId,latestQuote?.showId);
++    const selected=recognition.showId===null||memory.showSelectionUnresolved?null:
++      catalog.find(show=>show.id===(recognition.showId||explicit?.show?.id||memory.showId||currentOrder?.showId||latestQuote?.showId));
++    if(!selected){
++      await sendInbound({purpose:"reply",body:"Mình muốn xem sơ đồ ghế của đêm nhạc nào ạ?"});
++      return;
++    }
++    let png:Uint8Array<ArrayBuffer>;
++    try{png=await showSeatAttachment(await getAiSeatSnapshot(selected.id),new Date());}
++    catch{await handoff("unable_to_answer");return;}
++    await sendAiSalesMessage(job,chat,{purpose:"reply",body:"[Ảnh sơ đồ ghế · "+selected.id+"]"},png,style);
++    return;
++  }
+   const isNewImage=messages.some(m=>m.id===latest.id&&m.body.startsWith("[Khách gửi ảnh;"))||recognition.reading!==undefined;
+   const reading24=recognition.reading;
+-  const exactCodes=reading24?.kind==="seat_map"?(reading24.seatSelectionCertain?reading24.selectedSeats||[]:[]):seatCodes(latest.body);
++  const exactCodes=reading24?.kind==="seat_map"
++    ?(reading24.seatSelectionCertain?reading24.selectedSeats||[]:[]):seatCodes(latest.body);
+   if(isNewImage&&(!reading24||reading24.kind==="unreadable"||reading24.kind==="error"||reading24.kind==="other")){
+     await setState(job,"needs_attention","AI chưa đọc được nội dung khách gửi; Sale kiểm tra ảnh gốc.","Nội dung ảnh chưa xác định được.");return;
+   }
+-  if((reading24?.kind==="seat_map"&&isNewImage)||simpleSeatQuestion(latest.body)){
++  if((reading24?.kind==="seat_map"&&isNewImage)||(pro?isExactSeatInquiry(latest.body):simpleSeatQuestion(latest.body))){
+     const catalog=await listAiSalesShows().catch(()=>[]);
+     const mem=salesPreferences(messages,catalog,commentContext?.showId);
+     const choice=recognition.showId===null||mem.showSelectionUnresolved?undefined:catalog.find(s=>s.id===(recognition.showId||mem.showId||currentOrder?.showId||latestQuote?.showId));
+-    if(exactCodes.length&&choice){
++    if((exactCodes.length||(pro&&reading24?.kind!=="seat_map"))&&choice){
++      const snapshot=pro?await getAiSeatSnapshot(choice.id):null;
++      const parsed=snapshot?canonicalSeatCodes(reading24?.kind==="seat_map"?exactCodes.join(", "):latest.body,snapshot.seats):null;
++      if(parsed?.unknown.length){await handoff("unable_to_answer");return;}
++      const ids=parsed?.valid??exactCodes;
++      if(!ids.length){await handoff("unable_to_answer");return;}
+       let details:Awaited<ReturnType<typeof exactSeatDetails>>|null=null;
+-      try{details=await exactSeatDetails(choice.id,exactCodes);}catch{}
++      try{details=await exactSeatDetails(choice.id,ids);}catch{}
+       if(details&&details.rows.every(s=>s.status!=="not_found")){await sendInbound({purpose:"reply",body:formatExactSeats(details)});return;}
+       await setState(job,"needs_attention","Sale kiểm tra mã ghế trên ảnh hoặc tin nhắn.","Mã ghế chưa đối chiếu được với sơ đồ bán vé.");return;
+     }
+@@ -298,6 +354,7 @@
+       :reading?.kind==="seat_map"?"Dạ, em thấy ảnh sơ đồ ghế. Mình muốn ngồi khu vực nào và cần bao nhiêu vé ạ?"
+       :"Dạ, em đã nhận ảnh. Mình muốn em kiểm tra nội dung nào để hỗ trợ chính xác hơn ạ?";
+     await guard(job);
++    if(pro&&(decision==="mismatch"||decision==="review"||decision==="unreadable")){await handoff("unable_to_answer");return;}
+     await sendInbound({purpose:"reply",body});
+     if(decision==="mismatch"||decision==="review"){
+       await setState(job,"needs_attention","Cần người phụ trách đối soát.","Ảnh hoặc trạng thái đơn chưa đủ điều kiện xác nhận.",order?.code||null);
+@@ -385,7 +442,7 @@
+     await guard(job);
+     await sendInbound({purpose:"reply",body:friendly.body});
+     if(friendly.heart && latest.external_message_id && !currentOrder && !state?.current_order_code && state?.status!=="needs_attention")
+-      await maybeSendHeart(chat.messenger_page_id,chat.messenger_psid,latest.external_message_id,messages,()=>guard(job)).catch(()=>{});
++      if(proRuntimeMode()==="legacy")await maybeSendHeart(chat.messenger_page_id,chat.messenger_psid,latest.external_message_id,messages,()=>guard(job)).catch(()=>{});
+     return;
+   }
+   const service=!confirmationProblem?await showServiceReply(latest.body,messages,commentContext?.showId||currentOrder?.showId||latestQuote?.showId).catch(()=>null):null;
+@@ -496,9 +553,11 @@
+   if(quickReply)console.info("[ai-sales] Quick information reply prepared in "+(Date.now()-quickStarted)+"ms");
+   const result=quickReply?{text:quickReply}:await agent.generate({messages:[{role:"user",content:contextText},...modelHistory(messages)],abortSignal:AbortSignal.timeout(90000)});
+   await guard(job);
++  if(needsSupport&&pro){await handoff("unable_to_answer");return;}
+   if(needsSupport){await setState(job,"needs_attention","Sale tiếp quản yêu cầu ngoài khả năng AI.","AI yêu cầu nhân viên xử lý.",currentOrder?.code||null);return;}
+   if(!action){
+-    const text=result.text.trim();if(!safeAiConversationText(text)||unableToAnswer(text)){await setState(job,"needs_attention","Sale tiếp quản câu hỏi chưa trả lời được.","AI chưa thể trả lời chính xác.",currentOrder?.code||null);return;}
++    const text=result.text.trim();if(pro&&(!safeAiConversationText(text)||unableToAnswer(text))){await handoff("unable_to_answer");return;}
++    if(!safeAiConversationText(text)||unableToAnswer(text)){await setState(job,"needs_attention","Sale tiếp quản câu hỏi chưa trả lời được.","AI chưa thể trả lời chính xác.",currentOrder?.code||null);return;}
+     action={purpose:"reply",body:text};
+   }
+   if(!quickReply&&!commentContext&&!history.some(m=>m.sender==="staff"&&m.staff_name==="EXTRA AI"))action.body="Chào anh/chị, em hỗ trợ tư vấn và đặt vé của +1 Extra Music ạ.\n"+action.body;
+@@ -516,10 +575,14 @@
+     const rows=await staffDb("extra_support_chats?id=eq."+job.chat_id+"&select=id,customer_name,channel,messenger_page_id,messenger_psid,last_customer_at,ai_mode,ai_started_at,status&limit=1") as AiChat[];
+     const chat=rows[0],page=getMessengerConfig()?.pageId;
+     if(!chat||chat.channel!=="messenger"||chat.messenger_page_id!==page||!chat.messenger_psid)throw new JobStopped("Chat no longer matches Page");
++    const eligible=await proRpc<string>("can_send",{p_chat_id:chat.id,p_page_id:page,
++      p_mode:proRuntimeMode(),p_purpose:job.kind==="paid_ticket"?"ticket":"reply"});
++    if(eligible!=="ok")throw new JobStopped("Automation is paused");
+     if(job.kind==="paid_ticket"&&job.order_code)await handlePaid(job,chat,job.order_code);
+     else{
+       await guard(job);
+-      const finishTyping=startMessengerTyping(chat.ai_mode==="auto"&&withinMessengerReplyWindow(chat.last_customer_at)?chat.messenger_psid:"");
++      const finishTyping=proRuntimeMode()==="pro"?async()=>{}:
++        startMessengerTyping(chat.ai_mode==="auto"&&withinMessengerReplyWindow(chat.last_customer_at)?chat.messenger_psid:"");
+       try{await handleInbound(job,chat);}finally{await finishTyping();}
+     }
+     await aiRpc("finish",{p_job_id:job.id,p_lease_token:job.lease_token,p_result:"done",p_error:null,p_retry_seconds:30});
+@@ -528,6 +591,9 @@
+   }catch(error){
+     if(error instanceof JobStopped){await aiRpc("finish",{p_job_id:job.id,p_lease_token:job.lease_token,p_result:"done",p_error:null,p_retry_seconds:30}).catch(()=>{});return;}
+     const ambiguous=error instanceof SendUncertain;
++    if(proRuntimeMode()==="pro"&&!ambiguous&&!(error instanceof DispatchBlocked)){
++      await proEscalate(job.chat_id,"unable_to_answer",job.id).catch(()=>{});
++    }
+     const reason=ambiguous?"Chưa xác định Facebook đã nhận phản hồi; hệ thống không gửi lặp.":"Chưa hoàn tất xử lý tự động sau các lần thử; cần kiểm tra kết nối hoặc dữ liệu đơn.";
+     await aiRpc("finish",{p_job_id:job.id,p_lease_token:job.lease_token,p_result:ambiguous?"failed":"retry",p_error:reason,p_retry_seconds:Math.min(300,30*Math.max(1,job.attempts))}).catch(()=>{});
+     console.warn("[ai-sales] Job deferred",job.kind,ambiguous?"delivery_uncertain":"processing_error");
+@@ -595,7 +661,7 @@
+    // Recheck the linked order after claiming the image, before contacting Meta.
+    const current=await getAiOrderStatus(chat.id,action.orderCode);
+    if(extraVerifiedQr(current,action.body)!==qr){await finish("failed",null,"Đơn không còn chờ thanh toán; không gửi ảnh QR.").catch(()=>{});return;}
+-   acknowledgement=await sendMessengerPageImage(chat.messenger_psid,qr);
++   acknowledgement=await guardedMessenger(chat,begin.outbox_id,"checkout",recheck=>sendMessengerPageImage(chat.messenger_psid,qr,recheck));
+   }catch(error){
+    const knownRejected=error instanceof MessengerSendError&&!error.ambiguous;
+    await finish(knownRejected?"failed":"uncertain",null,knownRejected?"Facebook từ chối ảnh QR; đường dẫn dự phòng đã gửi.":"Chưa xác định kết quả gửi ảnh QR; không gửi lặp. Đường dẫn dự phòng đã gửi.").catch(()=>{});
+--- a/lib/facebook-messenger.ts
++++ b/lib/facebook-messenger.ts
+@@ -1,4 +1,5 @@
+ import "server-only";
++import {imageAttachment} from "./ai-sale-pro/seats";
+ import {resolveFacebookPageCredential} from "./facebook-page-connection";
+ 
+ type Config={pageId:string;pageToken:string;appSecret:string;verifyToken:string;apiVersion:string};
+@@ -25,9 +26,10 @@
+ export class MessengerSendError extends Error {
+  constructor(public readonly ambiguous:boolean,public readonly statusCode?:number,public readonly providerCode?:number){super(ambiguous?"Messenger delivery acknowledgement is unknown":"Messenger rejected the message");this.name="MessengerSendError";}
+ }
+-export async function sendMessengerPageMessage(psid:string,message:string,replyTo?:{mid:string;beforeFallback:()=>Promise<unknown>}):Promise<{messageId:string}>{
++export async function sendMessengerPageMessage(psid:string,message:string,replyTo?:{mid:string;beforeFallback:()=>Promise<unknown>},beforeSend?:()=>Promise<void>):Promise<{messageId:string}>{
+  const config=await getMessengerGraphConfig();
+  if(!config||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);
++ await beforeSend?.();
+  let res:Response;
+  try{res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+   method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
+@@ -40,7 +42,7 @@
+     (data.error?.code===100 && /reply.to|quoted message|message.to.reply|invalid.*mid/i.test(data.error?.message||"")));
+   if(replyTo && quoteRejected){
+     await replyTo.beforeFallback();
+-    return sendMessengerPageMessage(psid,message);
++    return sendMessengerPageMessage(psid,message,undefined,beforeSend);
+   }
+   console.warn("[messenger-api] Failed",res.status,typeof data.error?.code==="number"?data.error.code:"unknown");
+   const knownRejected=!res.ok&&(typeof data.error?.code==="number"||(res.status>=400&&res.status<500&&res.status!==408));
+@@ -50,11 +52,12 @@
+ }
+ 
+ 
+-export async function sendMessengerPageImage(psid:string,imageUrl:string):Promise<{messageId:string}>{
++export async function sendMessengerPageImage(psid:string,imageUrl:string,beforeSend?:()=>Promise<void>):Promise<{messageId:string}>{
+  if(!/^https:\/\/img\.vietqr\.io\/image\//.test(imageUrl)&&!/^https:\/\/iextra\.net\/api\/public\/seat-map\/(?:ccc|laocai)(?:\?show=[a-z0-9-]{3,100})?$/.test(imageUrl))throw new MessengerSendError(false);
+ 
+  const config=await getMessengerGraphConfig();
+  if(!config||!/^[0-9]{5,80}$/.test(psid))throw new MessengerSendError(false);
++ await beforeSend?.();
+  let res:Response;
+  try{res=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
+   method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+config.pageToken},
+@@ -66,6 +69,26 @@
+   console.warn("[messenger-api] Failed",res.status,typeof data.error?.code==="number"?data.error.code:"unknown");
+   const knownRejected=!res.ok&&(typeof data.error?.code==="number"||(res.status>=400&&res.status<500&&res.status!==408));
+   throw new MessengerSendError(!knownRejected,res.status,data.error?.code);
++ }
++ return {messageId:data.message_id};
++}
++
++export async function sendMessengerSeatMap(psid:string,png:Uint8Array<ArrayBuffer>,beforeSend:()=>Promise<void>){
++ const config=await getMessengerGraphConfig();
++ if(!config||!/^\d{5,80}$/.test(psid))throw new MessengerSendError(false);
++ const body=imageAttachment(psid,png);
++ await beforeSend();
++ let response:Response;
++ try{
++  response=await fetch("https://graph.facebook.com/"+config.apiVersion+"/"+config.pageId+"/messages",{
++   method:"POST",headers:{Authorization:"Bearer "+config.pageToken},body,
++   cache:"no-store",redirect:"error",signal:AbortSignal.timeout(9500)
++  });
++ }catch{throw new MessengerSendError(true);}
++ const data=await response.json().catch(()=>null) as SendResponse|null;
++ if(!response.ok||!data?.message_id||data.recipient_id!==psid){
++  const rejected=!response.ok&&response.status>=400&&response.status<500&&response.status!==408;
++  throw new MessengerSendError(!rejected,response.status,data?.error?.code);
+  }
+  return {messageId:data.message_id};
+ }
