@@ -571,10 +571,24 @@ test('Live Director persists all 13 distinct provider response checkpoints and b
   assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(opts.method,'POST');
   const args=JSON.parse(JSON.parse(opts.body).input);
   const output=args.role==='DirectorBrief'?{summary:'Giao việc kiểm thử',assignments:live.roleNames.map(agent=>({agent,mission:'Phân tích nguồn kiểm thử',deadline,deliverable:'Báo cáo',metric:'Số liệu đúng'})),blockers:[]}:args.role==='DirectorFinal'?{title:'Phương án fixture',reportReview:live.roleNames.map(agent=>({agent,reportId:args.reportIds[agent],decisionImpact:'Đối chiếu trong bài kiểm thử'})),summary:'Tổng hợp fixture',decision:'Duyệt nội bộ',blockers:[],campaigns:[{showId:show.id,title:'Chiến dịch kiểm thử',rationale:'Đọc dữ liệu fixture',target:'Mục tiêu thử nghiệm',deadline,proposedBudgetVnd:0,expectedLow:1,expectedHigh:2,budgetBasis:'Giả định fixture',assetIds:['poster:'+show.id],actions:[{agent:'Creative',action:'Chọn poster',deadline,deliverable:'Ảnh nguồn',metric:'Đúng show'}],staff:[],stopRule:'Không chi',missing:['Chưa có video']}]}:{summary:'Kết quả fixture '+args.role,sourceIds:['finance:'+show.id],actions:[action],assetIds:args.role==='Creative'?['poster:'+show.id]:[],assumptions:[],blockers:[]};
-  if(args.role==='DirectorFinal')assert(live.roleNames.every(role=>args.completed[role]));
+  if(args.role==='DirectorFinal'){
+   assert(live.roleNames.every(role=>args.completed[role]));
+   const schema=JSON.parse(opts.body).text.format.schema.properties.reportReview;
+   for(const role of live.roleNames)assert.deepEqual(schema.properties[role].properties.reportId.enum,[args.reportIds[role]]);
+   output.reportReview=Object.fromEntries(output.reportReview.map(({agent,...review})=>[agent,review]));
+  }
   return Response.json({id:'resp_fixture_'+(++calls),status:'completed',model:'fixture',output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]});
  };
- for(let n=0;n<13;n++){const result=await live.runNext(pool,{env,request,now});assert(result);assert.equal(result.externalActions,0);}
+ for(let n=0;n<13;n++){
+  if(n===1){
+   const setReason=reason=>pool.query("update os_live_director_runs set status='blocked',reason=$1 where platform='music' and day=$2::date",[reason,day]);
+   await setReason('invalid_evidence');
+   assert.equal(await live.runNext(pool,{env,request,now}),null);
+   await setReason('invalid_model_report');
+  }
+  const result=await live.runNext(pool,{env,request,now});
+  assert(result);assert.equal(result.externalActions,0);
+ }
  assert.equal(calls,13);
  const run=await live.readLiveRun(pool,'music',day);
  assert.equal(run.status,'ready');assert.equal(Object.keys(run.results).length,13);

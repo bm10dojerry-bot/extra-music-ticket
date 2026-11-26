@@ -231,7 +231,15 @@ test('Live Director requires distinct assignments and actual model reports befor
  const request=async(url,opts)=>{
   calls++;assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(opts.method,'POST');
   const body=JSON.parse(opts.body),input=JSON.parse(body.input);
-  if(input.role==='Research')assert.equal(input.assignment.agent,'Research');
+  if(input.role==='Research'){
+   assert.equal(input.assignment.agent,'Research');
+   const fields=body.text.format.schema.properties;
+   assert(fields.sourceIds.items.enum.includes('finance:music-1'));
+   assert(fields.assetIds.items.enum.includes('poster:music-1'));
+   assert(fields.actions.items.properties.showId.enum.includes('music-1'));
+   const pattern=new RegExp(fields.actions.items.properties.deadline.pattern);
+   assert(pattern.test(deadline));assert(!pattern.test('2030-01-03T09:00:00+07:00'));
+  }
   const output=input.role==='DirectorBrief'?brief:{summary:'Báo cáo mô hình fixture',sourceIds:['finance:music-1'],actions:[],assetIds:[],assumptions:[],blockers:[]};
   return Response.json({id:'resp_fixture_'+calls,status:'completed',model:'fixture',output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]});
  };
@@ -240,6 +248,8 @@ test('Live Director requires distinct assignments and actual model reports befor
  const r=await live.callRole('Research',f,{DirectorBrief:b},env,request);assert.equal(r.responseId,'resp_fixture_2');
  await assert.rejects(live.callRole('DirectorFinal',f,{DirectorBrief:b,Research:r},env,request),/missing_agent_reports/);
  assert.equal(calls,2);
+ const wrongSource=async()=>Response.json({id:'resp_unsupported',status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({...r.output,sourceIds:['finance:other']})}]}]});
+ await assert.rejects(live.callRole('Research',f,{DirectorBrief:b},env,wrongSource),/invalid_evidence/);
 });
 
 test('Live Director retains only the allowlisted provider failure code and honors Retry-After',async()=>{
