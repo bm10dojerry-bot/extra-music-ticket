@@ -15,7 +15,7 @@ export async function GET(request:Request,{params}:{params:Promise<{venue:string
    if(!/^[a-z0-9-]{3,100}$/.test(showId))return NextResponse.json({error:"Invalid show"},{status:400});
    const snapshot=await getAiSeatSnapshot(showId);
    if(snapshot.show.venueId!==venue)return NextResponse.json({error:"Show venue mismatch"},{status:404});
-   svg=renderSeatMapSvg(venue,{}, {seats:snapshot.seats,taken:snapshot.taken,title:snapshot.show.artist+" · "+snapshot.show.date,checkedAt:new Date().toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh"})});
+   svg=renderSeatMapSvg(venue,{}, {seats:snapshot.seats,taken:new Set([...snapshot.taken,...snapshot.seats.filter(s=>snapshot.show.prices[s.zone as "A"|"B"|"C"|"D"]===null).map(s=>s.id)]),title:snapshot.show.artist+" · "+snapshot.show.date,checkedAt:new Date().toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh"})});
   }else{
    const rows=await staffDb("venue_seat_rows?venue_id=eq."+venue+"&select=row_code,seat_count&limit=1000",{signal:AbortSignal.timeout(5000)}) as {row_code:string;seat_count:number}[];
    if(!Array.isArray(rows))throw Error("Layout unavailable");

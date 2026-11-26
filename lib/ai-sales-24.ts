@@ -7,7 +7,7 @@ const norm=(s:string)=>s.normalize("NFD").replace(/\p{M}/gu,"").replace(/[đĐ]/
 export function asksForStaff(body:string){
  const s=norm(body);
  if(/\b(?:khong|ko|k) (?:can|muon|xin) (?:gap |lien he |noi chuyen voi )?(?:ban quan ly|quan ly|cskh|cham soc khach hang|hotline)\b/.test(s))return false;
- return customerRequestsHuman(body)||/\b(?:gap|lien he|noi chuyen voi|chuyen cho|chuyen den|goi|xin so|cho xin|cho minh xin|cho anh xin|cho chi xin)\s+(?:(?:bo phan|ben|phong|so|nguoi) )?(?:cskh|cham soc khach hang|ban quan ly|quan ly|hotline|admin)\b/.test(s)||/^(?:cskh|cham soc khach hang|ban quan ly|hotline)(?: (?:oi|a|em|giup minh|ho tro))?$/.test(s);
+ return customerRequestsHuman(body)||/\b(?:gap|lien he|noi chuyen voi|chuyen cho|chuyen den|goi|xin so|cho xin|cho minh xin|cho anh xin|cho chi xin)\s+(?:voi )?(?:(?:bo phan|ben|phong|so|nguoi) )?(?:cskh|cham soc khach hang|ban quan ly|quan ly|hotline|admin)\b/.test(s)||/^(?:cskh|cham soc khach hang|ban quan ly|hotline)(?: (?:oi|a|em|giup minh|ho tro))?$/.test(s);
 }
 export function unableToAnswer(body:string){
  const s=norm(body);
