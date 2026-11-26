@@ -61,7 +61,7 @@ export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},
  const {W,H,anchors,reference,rows,cells,w,h}=g;
  const name=venue==="ccc"?"CCC SA PA":"+1 EXTRA LÀO CAI";
  const size=Math.min(35,h*.62,w/2.45);
- const mapColors={...zoneColors,A:"#f6b6be"}; // Pale red avoids confusing pen strokes with the seat fill.
+ const mapColors:Record<string,string>={...zoneColors,A:"#f6b6be"}; // Pale red avoids confusing pen strokes with the seat fill.
  const labels=cells.map((c,i)=>{
   const s=seats[i],blocked=snapshot?.taken.has(s.id),fill=blocked?"#737984":mapColors[s.zone]||"#cbd5e1",fg=blocked?"#ffffff":"#162032";
   return '<g data-seat="'+esc(s.id)+'">'+rect(c.x-w/2,c.y-h/2,w,h,fill,'rx="5"')+vectorLabel(s.id,c.x,c.y-size/2,size,fg,"middle",w-8,1.25)+'</g>';
