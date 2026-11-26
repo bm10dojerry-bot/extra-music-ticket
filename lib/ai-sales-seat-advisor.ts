@@ -3,9 +3,8 @@ import 'server-only';
 import {seatAdvicePage} from './show-family-policy';
 import {getAiSeatSnapshot, listAiSalesShows} from './ai-sales-checkout';
 import {salesPreferences} from './ai-sales-consultation';
-import {selectSeatMap, seatMapVenueName} from './ai-sales-seat-map';
+import {selectSeatMap} from './ai-sales-seat-map';
 import {rankSeatGroups, describeSeats, seatInquiry} from './v2-seat-guidance';
-import {staffDb} from './staff-auth';
 
 type Message = {sender:string; body:string; staff_name?:string|null};
 
@@ -13,19 +12,7 @@ export function seatAdviceEnabled(page: string, psid: string) {
   return seatAdvicePage(page,psid);
 }
 
-async function previousAttachment(chatId:string, jobId:string|null, marker:string) {
-  const query = new URLSearchParams({chat_id:'eq.' + chatId,
-    body:'eq.' + marker,state:'in.(sent,uncertain,sending)',select:'state',limit:'1'});
-  if(jobId)query.set('job_id','neq.' + jobId);
-  const sent = new URLSearchParams({chat_id:'eq.'+chatId,sender:'eq.staff',body:'eq.'+marker,select:'id',limit:'1'});
-  const uncertain = new URLSearchParams({chat_id:'eq.'+chatId,state:'eq.uncertain',select:'id',limit:'1'});
-  const [messages,unresolved]=await Promise.all([staffDb('extra_support_messages?'+sent),staffDb('extra_messenger_ai_timeout_ledger?'+uncertain)]) as [unknown[],unknown[]];
-  if(messages.length || unresolved.length)return true;
-  const rows = await staffDb('extra_messenger_ai_outbox?' + query) as {state:string}[];
-  return rows.length > 0;
-}
-
-export async function prepareSeatAdvice(chatId:string, jobId:string|null, body:string, history:Message[], referral: {showId?:string|null} | null, knownShow?:string|null) {
+export async function prepareSeatAdvice(_chatId:string, _jobId:string|null, body:string, history:Message[], referral: {showId?:string|null} | null, knownShow?:string|null) {
   const prior = history.slice(0,-1).filter(m => m.sender === 'customer' || m.sender === 'staff' && m.staff_name === 'EXTRA AI').slice(-4);
   const recentMap = prior.some(m => /sơ đồ|so do/i.test(m.body));
   const intent = seatInquiry(body, recentMap);
@@ -33,9 +20,10 @@ export async function prepareSeatAdvice(chatId:string, jobId:string|null, body:s
   const shows = await listAiSalesShows().catch(() => []);
   const selected = selectSeatMap(body,history,shows,referral,knownShow);
   if (!selected) return {sendImage:false, text:'Mình đang xem đêm nhạc nào, ở CCC Sa Pa hay Lào Cai ạ? Em sẽ tư vấn đúng vị trí và giá vé của suất đó.'};
-  const marker = '[Ảnh sơ đồ ghế ' + seatMapVenueName(selected.venue) + ']';
-  // If a send is still unresolved, continue advising by text until the customer explicitly requests a resend.
-  const sendImage = intent.requestImage && (intent.repeat || !await previousAttachment(chatId,jobId,marker).catch(() => true));
+  // Each new explicit customer request may receive the requested image, even if an old message contained it.
+  // Transport deduplication remains scoped to the current guarded job/outbox (or timeout claim).
+  // Never retry an ambiguous transport send automatically; a distinct customer request is not a retry.
+  const sendImage = intent.requestImage;
   if (sendImage && !intent.advice) return {sendImage,selected};
   const intro = selected.venue === 'ccc' ? 'Ở CCC Sa Pa, ghế xếp vòng cung hướng về sân khấu bên phải sơ đồ. Các hàng ghế trải từ sát sân khấu ra phía sau.' : 'Ở Lào Cai, sân khấu ở phía trước hai dãy ghế. Các hàng phía trước gần sân khấu hơn.';
   let text = intro + ' Mình muốn xem đêm nhạc của ca sĩ nào để em so giá vé và chọn ghế phù hợp ạ?';
