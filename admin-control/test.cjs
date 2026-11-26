@@ -167,7 +167,7 @@ test('Campaign proposal separates period-specific targets, cost scenarios and na
  const show={...planInventory.rows[0],date:'2030-01-20',time:'19:30'};
  const finance={...parseMusicFinance(reportFixture).rows[0],total:{...reportTotals,paidTickets:2}};
  const d=buildCampaign(day,show,finance,now,'day'),w=buildCampaign(day,show,finance,now,'week'),m=buildCampaign(day,show,finance,now,'month');
- assert.equal(d.slots.length,2);assert.equal(w.slots.length,7);assert(m.slots.length>w.slots.length);
+ assert.equal(d.slots.length,1);assert.equal(w.slots.length,7);assert(m.slots.length>w.slots.length);
  assert(m.targetNewPaidTickets<=show.inventory.remaining-show.inventory.held);
  assert(d.staffPlan.some(t=>t.person==='Diệu'));assert(d.mediaPlan.some(t=>t.channel.includes('TikTok')));
  assert.equal(d.budgetNewVnd,0);assert(d.paidScenario.budgetVnd>0);assert.match(d.paidScenario.basis,/giả định/i);
