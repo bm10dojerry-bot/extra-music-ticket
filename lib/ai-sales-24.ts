@@ -2,7 +2,7 @@ import "server-only";
 import {customerRequestsHuman} from "./messenger-sale-memory";
 import {getAiSeatSnapshot} from "./ai-sales-checkout";
 import {tierName} from "./poster-offers";
-import {verifySeatMapMarks,type MapMarks} from "./seat-map-image";
+import {resolveSeatMapMarks,type MapMarks} from "./seat-map-image";
 export const HANDOFF_REPLY="Dạ, anh/chị vui lòng đợi ít phút, bộ phận Sale hoặc chăm sóc khách hàng sẽ trực tiếp hỗ trợ mình ạ.";
 const norm=(s:string)=>s.normalize("NFD").replace(/\p{M}/gu,"").replace(/[đĐ]/g,"d").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
 export function asksForStaff(body:string){
@@ -42,10 +42,22 @@ export async function exactSeatDetails(showId:string,ids:readonly string[]){
 export async function verifiedMarkedSeatDetails(showId:string,marks:MapMarks){
  const fresh=await getAiSeatSnapshot(showId);
  if(fresh.show.venueId!=="ccc"&&fresh.show.venueId!=="laocai")return null;
- const ids=verifySeatMapMarks(marks,fresh.show.venueId,fresh.seats,showId);
- return ids?seatDetailsFromSnapshot(fresh,ids):null;
+ const result=resolveSeatMapMarks(marks,fresh.show.venueId,fresh.seats,showId);
+ return result?{...seatDetailsFromSnapshot(fresh,result.ids),needsSelection:result.needsSelection}:null;
 }
 export function formatExactSeats(data:Awaited<ReturnType<typeof exactSeatDetails>>){
  const lines=data.rows.map(s=>s.status==="not_found"?s.id+": không có trong sơ đồ show này.":s.id+" · hàng "+s.row+", ghế "+s.number+" · "+s.tier+" · "+(s.status==="available"?"đang trống":"không khả dụng")+(typeof s.price==="number"?" · "+s.price.toLocaleString("vi-VN")+"đ":""));
  return "Đêm "+data.show.artist+" tại "+data.show.venueName+":\n"+lines.join("\n")+"\nĐây là tình trạng lúc kiểm tra, chưa giữ ghế.";
+}
+
+export function formatMarkedSeats(data:NonNullable<Awaited<ReturnType<typeof verifiedMarkedSeatDetails>>>,address="mình"){
+ const a=address==="chị"?"chị":address==="anh"?"anh":"mình";
+ const ids=data.rows.map(s=>s.id).join(", ");
+ const available=data.rows.filter(s=>s.status==="available").map(s=>s.id);
+ const unavailable=data.rows.filter(s=>s.status!=="available").map(s=>s.id);
+ const heading="Đêm "+data.show.artist+" ngày "+data.show.date+" tại "+data.show.venueName+": ";
+ if(data.needsSelection){
+  return heading+"Em thấy "+data.rows.length+" ghế trong vùng "+a+" đánh dấu: "+ids+". "+(unavailable.length?"Ghế không khả dụng: "+unavailable.join(", ")+". ":"")+(available.length?(a==="mình"?"Mình":a==="chị"?"Chị":"Anh")+" muốn lấy ghế nào trong số này hay lấy tất cả các ghế còn trống ạ?":"Các ghế này hiện không còn trống. "+(a==="mình"?"Mình":a==="chị"?"Chị":"Anh")+" muốn em tìm vị trí gần đó không ạ?")+" Em chưa giữ ghế nào.";
+ }
+ return "Em đã kiểm tra "+data.rows.length+" ghế "+a+" đánh dấu: "+ids+".\n"+formatExactSeats(data)+(available.length?"\n"+(a==="mình"?"Mình":a==="chị"?"Chị":"Anh")+" muốn đặt "+(unavailable.length?"các ghế còn trống này":"đúng "+data.rows.length+" ghế này")+" không ạ?":"");
 }
