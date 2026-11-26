@@ -44,3 +44,32 @@ test("independent registration and blue mark verification through resized JPEG",
   assert.equal(renderer.verifySeatMapMarks({...marks,reference:"00000000"},venue,seats,showId),null);
  }
 });
+
+test("one red dot, four mixed-color dots and broad circle require the right response",async()=>{
+ const venue="ccc",showId="minh-vuong-0512",seats=venues.seatsFor(venue);
+ const g=renderer.seatMapGeometry(venue,seats,showId);
+ const svg=renderer.renderSeatMapSvg(venue,{}, {seats,taken:new Set(),title:"Minh Vương + Duy Khoa · 05/12/2026",checkedAt:"04:30",showId});
+ const cell=id=>g.cells.find(c=>c.id===id);
+ const decode=async annotation=>{
+  const jpg=await sharp(Buffer.from(svg.replace("</svg>",annotation+"</svg>"))).resize({width:1800,height:1800,fit:"inside"}).jpeg({quality:83}).toBuffer();
+  const {data,info}=await sharp(jpg).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true});
+  const marks=renderer.readSeatMapMarks(data,info.width,info.height);
+  assert.ok(marks,"registered image");
+  return renderer.resolveSeatMapMarks(marks,venue,seats,showId);
+ };
+ const dot=(id,color)=>{const c=cell(id);return '<circle cx="'+c.x+'" cy="'+c.y+'" r="14" fill="'+color+'"/>';};
+ assert.deepEqual(await decode(dot("C10","#ff0000")),{ids:["C10"],needsSelection:false});
+ const ids=["A05","C10","C30","G40"];
+ assert.deepEqual(await decode(ids.map((id,i)=>dot(id,["#ff0000","#0044ff","#00bb00","#ff0000"][i])).join("")),{ids,needsSelection:false});
+ const a=cell("C10"),b=cell("C12"),cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;
+ const circle='<ellipse cx="'+cx+'" cy="'+cy+'" rx="60" ry="'+((b.y-a.y)/2+24)+'" fill="none" stroke="#0044ff" stroke-width="10"/>';
+ assert.deepEqual(await decode(circle),{ids:["C10","C11","C12"],needsSelection:true});
+ assert.equal(await decode(""),null,"unmarked map must not select seats");
+ const helpers=load("lib/ai-sales-24.ts",{"server-only":{},"./messenger-sale-memory":{},"./ai-sales-checkout":{},"./poster-offers":{},"./seat-map-image":renderer});
+ const rows=["C10","C11","C12"].map(id=>({id,row:"C",number:Number(id.slice(1)),tier:"VIP",price:349000,status:"available"}));
+ const details={show:{id:showId,artist:"Minh Vương + Duy Khoa",date:"2026-12-05",venueName:"CCC Sa Pa"},rows,needsSelection:true};
+ const reply=helpers.formatMarkedSeats(details,"chị");
+ assert.match(reply,/C10, C11, C12/);assert.match(reply,/Chị muốn lấy ghế nào trong số này hay lấy tất cả/);assert.match(reply,/chưa giữ ghế/);
+ assert.match(helpers.formatMarkedSeats({...details,needsSelection:false,rows:rows.slice(0,1)},"chị"),/Chị muốn đặt đúng 1 ghế này/);
+ assert.match(helpers.formatMarkedSeats({...details,rows:rows.map(row=>({...row,status:"unavailable"}))},"chị"),/không còn trống/);
+});
