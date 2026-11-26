@@ -111,7 +111,7 @@ test('Daily Director turns the same Music report into grounded campaign drafts w
  assert(plan.tasks.some(t=>t.agent==='Sale'&&t.state==='draft_ready'));
  assert(plan.tasks.some(t=>t.agent==='Ads'&&t.state==='awaiting_approval'&&t.deliverable.includes('0 đ')));
  const body=renderDailyDirector({plan,revision:1,updated_at:'2030-01-02T00:00:00Z'},'2030-01-02',escapeMusic);
- assert.match(body,/AI Director/);assert.match(body,/Bản nháp nội bộ/);assert.match(body,/không đồng nghĩa/);
+ assert.match(body,/AI Director/);assert.match(body,/Bản nháp đề xuất · chờ duyệt/);assert.match(body,/không đồng nghĩa/);assert.doesNotMatch(body,/Đã chuẩn bị tài liệu nội bộ/);
  const missing=musicPlan('2030-01-02',{status:'unavailable',data:null},planInventory);
  assert(missing.tasks.every(t=>t.state==='needs_input'));
  assert.equal(missing.evidence.finance,'missing');
