@@ -110,6 +110,29 @@ updateSend('  console.warn("[messenger-api] Failed"', `  const quoteRejected=res
   }
   console.warn("[messenger-api] Failed"`);
 fs.writeFileSync(transport,source.slice(0,textStart)+send+source.slice(textEnd));
+// Checkout confirmation recovery: keep existing SQL consent and reservation protections.
+const recoveryHelper="function shouldRefreshConfirmedQuote(body:string,sentAt:string|null,receivedAt:string,confirmationError:string):boolean{\n  if(!sentAt)return false;\n  const elapsed=Date.parse(receivedAt)-Date.parse(sentAt);\n  if(!Number.isFinite(elapsed)||elapsed<=0||elapsed>30*60*1000)return false;\n  const short=body.normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g,\"\").replace(/[đĐ]/g,\"d\").toLowerCase().replace(/[.!?,]+/g,\" \").trim().replace(/\\s+/g,\" \");\n  // \"Oke\" is intentionally not passed to the reservation RPC. Requote and request a fresh explicit confirmation.\n  if(/^(oke|okie|okey)( (em|nhe|nha|a|nhe em|em nhe))?$/.test(short))return true;\n  return /\\bAI_(QUOTE_CHANGED|CONFIRMATION_REQUIRED)\\b/.test(confirmationError);\n}";
+const recoveryBlock="  // A checkout rejection is not a request for human support. Refresh the server-priced quote instead.\n  // Never retry a reservation with stale consent or create a second order on a transport error.\n  if(latestQuote && !currentOrder && !state?.current_order_code && !recognition.caption &&\n      shouldRefreshConfirmedQuote(latest.body,latestQuote.sentAt,latest.created_at,confirmationFailure)){\n    await guard(job);\n    const existing=await staffDb(\"extra_messenger_ai_orders?chat_id=eq.\"+chat.id+\"&quote_id=eq.\"+latestQuote.id+\"&select=order_code&limit=1\") as {order_code:string}[];\n    if(!Array.isArray(existing)||existing.length)throw Error(\"Checkout recovery deferred: verify existing reservation\");\n    let refreshed:AiSalesQuote;\n    try{refreshed=await buildAiQuote(context,latestQuote);}\n    catch(error){\n      if(error instanceof JobStopped)throw error;\n      if(!(error instanceof Error)||!/\\bAI_SEAT_CONFLICT\\b/.test(error.message))throw error;\n      await sendInbound({purpose:\"reply\",body:\"Dạ, cặp ghế vừa chọn hiện không còn trống. Em chưa giữ ghế hoặc tạo đơn thanh toán. Mình muốn em kiểm tra cặp ghế khác cùng hạng nhé?\"});\n      await setState(job,\"in_progress\",\"Ghế vừa chọn không còn trống; chờ khách chọn lại.\",null);return;\n    }\n    await guard(job);\n    await sendInbound({purpose:\"quote\",body:\"Dạ, em xin lỗi vì bước xác nhận vừa rồi chưa hoàn tất. Em đã kiểm tra lại và gửi báo giá mới để mình xác nhận, chưa thu tiền hoặc giữ ghế nhé.\\n\"+renderAiQuoteMessage(refreshed),quoteId:refreshed.id});\n    await setState(job,\"in_progress\",\"Đã gửi lại báo giá đã kiểm tra; chờ khách xác nhận mới.\",null);return;\n  }\n";
+const tsRecovery=require("typescript");
+const compiled=tsRecovery.transpileModule(recoveryHelper,{compilerOptions:{target:tsRecovery.ScriptTarget.ES2022}}).outputText;
+const shouldRefresh=new Function(compiled+"\nreturn shouldRefreshConfirmedQuote;")();
+const sent="2026-11-26T05:23:19Z",later="2026-11-26T05:24:11Z";
+assert.equal(shouldRefresh("Oke",sent,later,""),true);
+assert.equal(shouldRefresh("Okie nhé",sent,later,""),true);
+assert.equal(shouldRefresh("ĐỒNG Ý",sent,later,'Database 400 AI_QUOTE_CHANGED'),true);
+assert.equal(shouldRefresh("Đồng ý",sent,later,'Database 400 AI_CONFIRMATION_REQUIRED'),true);
+assert.equal(shouldRefresh("Đồng ý",sent,later,"ECONNRESET"),false);
+assert.equal(shouldRefresh("Không đồng ý",sent,later,""),false);
+assert.equal(shouldRefresh("Oke",null,later,""),false);
+assert.equal(shouldRefresh("Oke",sent,"2026-11-26T06:00:00Z",""),false);
+assert.equal(shouldRefresh("Oke",sent,sent,""),false);
+change('async function handleInbound(job:AiJob,chat:AiChat){',recoveryHelper+'\nasync function handleInbound(job:AiJob,chat:AiChat){');
+change('let confirmationProblem=false;','let confirmationProblem=false;let confirmationFailure="";');
+change('if(error instanceof JobStopped)throw error;\n      confirmationProblem=true;','if(error instanceof JobStopped)throw error;\n      confirmationProblem=true;confirmationFailure=error instanceof Error?error.message:"";');
+change('  const friendly=friendlyAcknowledgement(latest.body);',recoveryBlock+'  const friendly=friendlyAcknowledgement(latest.body);');
+const recoveryAst=tsRecovery.createSourceFile(file,worker,tsRecovery.ScriptTarget.Latest,true,tsRecovery.ScriptKind.TS);
+assert.equal(recoveryAst.parseDiagnostics.length,0,"Checkout recovery syntax");
+console.log("[EXTRA AI Sale] 9 confirmation-recovery cases passed; SQL reservation and payment guards unchanged.");
 fs.writeFileSync(file,worker);
 const quickFile="lib/ai-sales-quick-reply.ts";
 const quick=fs.readFileSync(quickFile,"utf8");
