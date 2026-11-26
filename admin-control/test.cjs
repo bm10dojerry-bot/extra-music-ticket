@@ -232,7 +232,7 @@ test('Live Director requires distinct assignments and actual model reports befor
   calls++;assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(opts.method,'POST');
   const body=JSON.parse(opts.body),input=JSON.parse(body.input);
   if(input.role==='Research')assert.equal(input.assignment.agent,'Research');
-  const output=input.role==='DirectorBrief'?brief:{summary:'Báo cáo mô hình fixture',actions:[],assetIds:[],assumptions:[],blockers:[]};
+  const output=input.role==='DirectorBrief'?brief:{summary:'Báo cáo mô hình fixture',sourceIds:['finance:music-1'],actions:[],assetIds:[],assumptions:[],blockers:[]};
   return Response.json({id:'resp_fixture_'+calls,status:'completed',model:'fixture',output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]});
  };
  const b=await live.callRole('DirectorBrief',f,{},env,request);
@@ -240,4 +240,13 @@ test('Live Director requires distinct assignments and actual model reports befor
  const r=await live.callRole('Research',f,{DirectorBrief:b},env,request);assert.equal(r.responseId,'resp_fixture_2');
  await assert.rejects(live.callRole('DirectorFinal',f,{DirectorBrief:b,Research:r},env,request),/missing_agent_reports/);
  assert.equal(calls,2);
+});
+
+test('Live Director retains only the allowlisted provider failure code and honors Retry-After',async()=>{
+ const env={EXTRA_OS_DIRECTOR_MODEL_ENABLED:'true',EXTRA_OS_OPENAI_API_KEY:'fixture-only',EXTRA_OS_DIRECTOR_MAX_CALLS_PER_DAY:'13'};
+ const facts=live.makeFacts('music','2030-01-02',null,null,null,null);
+ for(const [code,reason,seconds] of [['insufficient_quota','provider_quota_exhausted',3600],['rate_limit_exceeded','provider_rate_limited',300],['unknown','provider_http_429',300]]){
+  const request=async()=>Response.json({error:{code,message:'private diagnostic'}},{status:429,headers:{'Retry-After':'300'}});
+  await assert.rejects(live.callRole('DirectorBrief',facts,{},env,request),e=>e.message===reason&&e.retrySeconds===seconds);
+ }
 });
