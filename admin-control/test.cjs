@@ -100,11 +100,13 @@ test('main menu shows both requested report labels and preserves navigation with
  const selected=renderSidebar('/reports/music');
  assert.match(selected,/href="\/reports\/music" aria-current="page"/);
  assert.match(selected,/href="\/#overview"/);assert.match(selected,/href="\/#agents"/);
+ assert.match(html,/>ONE CLICK MUSIC</);assert.match(html,/>ONE CLICK 24H</);
 });
 const planInventory={showsAvailable:true,inventoryAvailable:true,rows:[{id:'music-1',artist:'Nghệ sĩ mẫu',date:'2030-01-07',status:'announced',prices:{A:500000},inventory:{capacity:100,sold:20,remaining:75,held:1,blocked:2}}]};
 test('Daily Director turns the same Music report into grounded campaign drafts without live permissions',()=>{
  const plan=musicPlan('2030-01-02',{status:'available',data:parseMusicFinance(reportFixture)},planInventory);
  assert.equal(plan.evidence.daily.revenueVnd,1500000);
+ assert.equal(plan.evidence.previousDay,'2030-01-01');assert.equal(plan.evidence.adAttribution,null);assert.match(plan.tasks[0].deliverable,/ngày hiện tại có thể chưa kết thúc/);
  assert(plan.tasks.some(t=>t.agent==='Content'&&t.state==='draft_ready'&&t.deliverable.includes('Nghệ sĩ mẫu')));
  assert(plan.tasks.some(t=>t.agent==='Sale'&&t.state==='draft_ready'));
  assert(plan.tasks.some(t=>t.agent==='Ads'&&t.state==='awaiting_approval'&&t.deliverable.includes('0 đ')));
