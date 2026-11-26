@@ -2,6 +2,7 @@ import "server-only";
 import {customerRequestsHuman} from "./messenger-sale-memory";
 import {getAiSeatSnapshot} from "./ai-sales-checkout";
 import {tierName} from "./poster-offers";
+import {verifySeatMapMarks,type MapMarks} from "./seat-map-image";
 export const HANDOFF_REPLY="Dạ, anh/chị vui lòng đợi ít phút, bộ phận Sale hoặc chăm sóc khách hàng sẽ trực tiếp hỗ trợ mình ạ.";
 const norm=(s:string)=>s.normalize("NFD").replace(/\p{M}/gu,"").replace(/[đĐ]/g,"d").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
 export function asksForStaff(body:string){
@@ -25,8 +26,8 @@ export function simpleSeatQuestion(body:string){
  const s=norm(body);
  return seatCodes(body).length>0&&s.length<150&&!/@|(?:0[0-9]{8,10})/.test(body)&&!/\b(?:dat|chot|mua|giu|thanh toan|chuyen khoan|ten|email|dien thoai|tang)\b/.test(s)&&(/\b(?:ghe|cho|vi tri|hang|con|trong|gia|bao nhieu|o dau)\b/.test(s)||/^(?:[a-o][0-9]{1,2}\s*)+$/.test(s));
 }
-export async function exactSeatDetails(showId:string,ids:readonly string[]){
- const fresh=await getAiSeatSnapshot(showId);
+function seatDetailsFromSnapshot(fresh:Awaited<ReturnType<typeof getAiSeatSnapshot>>,ids:readonly string[]){
+ const showId=fresh.show.id;
  const rows=ids.map(id=>{
   const seat=fresh.seats.find(s=>s.id===id);
   if(!seat)return {id,status:"not_found" as const};
@@ -34,6 +35,15 @@ export async function exactSeatDetails(showId:string,ids:readonly string[]){
   return {id,status:fresh.taken.has(id)||price===null?"unavailable" as const:"available" as const,row:seat.row,number:seat.number,tier:tierName(showId,seat.zone),price};
  });
  return {show:fresh.show,rows,checkedAt:new Date().toISOString()};
+}
+export async function exactSeatDetails(showId:string,ids:readonly string[]){
+ return seatDetailsFromSnapshot(await getAiSeatSnapshot(showId),ids);
+}
+export async function verifiedMarkedSeatDetails(showId:string,marks:MapMarks){
+ const fresh=await getAiSeatSnapshot(showId);
+ if(fresh.show.venueId!=="ccc"&&fresh.show.venueId!=="laocai")return null;
+ const ids=verifySeatMapMarks(marks,fresh.show.venueId,fresh.seats,showId);
+ return ids?seatDetailsFromSnapshot(fresh,ids):null;
 }
 export function formatExactSeats(data:Awaited<ReturnType<typeof exactSeatDetails>>){
  const lines=data.rows.map(s=>s.status==="not_found"?s.id+": không có trong sơ đồ show này.":s.id+" · hàng "+s.row+", ghế "+s.number+" · "+s.tier+" · "+(s.status==="available"?"đang trống":"không khả dụng")+(typeof s.price==="number"?" · "+s.price.toLocaleString("vi-VN")+"đ":""));
