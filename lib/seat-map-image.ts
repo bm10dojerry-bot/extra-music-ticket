@@ -1,17 +1,20 @@
-import {seatsFor,zoneColors} from "./venues";
+import {seatsFor,zoneColors,type Seat} from "./venues";
 type MapVenue="ccc"|"laocai";
-export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={}){
- const seats=seatsFor(venue,counts),name=venue==="ccc"?"CCC SA PA":"+1 EXTRA LAO CAI";
- const width=1440,height=1220;
- const x=(v:number)=>100+v*11.7,y=(v:number)=>230+v*8.8;
- const dots=seats.map(s=>'<circle cx="'+x(s.x).toFixed(2)+'" cy="'+y(s.y).toFixed(2)+'" r="5.4" fill="'+zoneColors[s.zone]+'" stroke="#ffffff" stroke-opacity=".3" stroke-width=".8"/>').join("");
- const rows=[...new Set(seats.map(s=>s.row))];
- const labels=rows.map(row=>{
-  const line=seats.filter(s=>s.row===row),a=line[0],b=line[line.length-1];
-  if(venue==="ccc")return '<text x="'+x(a.x).toFixed(2)+'" y="'+(y(a.y)-16).toFixed(2)+'" text-anchor="middle" class="row">'+row+'</text>';
-  return '<text x="'+(x(a.x)-21).toFixed(2)+'" y="'+(y(a.y)+4).toFixed(2)+'" text-anchor="middle" class="row">'+row+'</text>';
+type MapSnapshot={seats:Seat[];taken:ReadonlySet<string>;title:string;checkedAt:string};
+const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
+export function renderSeatMapSvg(venue:MapVenue,counts:Record<string,number>={},snapshot?:MapSnapshot){
+ const seats=snapshot?.seats??seatsFor(venue,counts),name=venue==="ccc"?"CCC SA PA":"+1 EXTRA LÀO CAI";
+ const W=3000,H=2520,x=(v:number)=>150+v*26,y=(v:number)=>270+v*20.3;
+ const maxRow=Math.max(...Array.from(new Set(seats.map(s=>s.row)),row=>seats.filter(s=>s.row===row).length));
+ const w=venue==="laocai"?Math.min(42,Math.max(20,Math.floor(2020/maxRow)-4)):64;
+ const h=venue==="ccc"?Math.min(29,Math.max(15,Math.floor(1750/(maxRow-1))-5)):30;
+ const size=venue==="laocai"?Math.min(19,Math.max(10,Math.floor(w/2.4))):Math.min(20,h-6);
+ const labels=seats.map(s=>{
+  const blocked=snapshot?.taken.has(s.id),fill=blocked?"#737984":zoneColors[s.zone]||"#cbd5e1",fg=blocked||s.zone==="A"?"#fff":"#162032",cx=x(s.x),cy=y(s.y);
+  return '<g><rect x="'+(cx-w/2).toFixed(2)+'" y="'+(cy-h/2).toFixed(2)+'" width="'+w+'" height="'+h+'" rx="5" fill="'+fill+'"/><text x="'+cx.toFixed(2)+'" y="'+cy.toFixed(2)+'" dy=".35em" text-anchor="middle" font-weight="700" font-size="'+size+'" fill="'+fg+'">'+esc(s.id)+'</text></g>';
  }).join("");
- const stage=venue==="ccc"?'<rect x="1210" y="390" width="114" height="580" rx="24" fill="#171d31"/><text x="1267" y="680" fill="#fff" font-size="26" text-anchor="middle" transform="rotate(90 1267 680)">SÂN KHẤU</text>':'<rect x="320" y="244" width="800" height="82" rx="20" fill="#171d31"/><text x="720" y="295" fill="#fff" font-size="30" text-anchor="middle">SÂN KHẤU</text>';
- const legend=["A","B","C","D"].map((z,i)=>'<circle cx="'+(200+320*i)+'" cy="1100" r="13" fill="'+zoneColors[z]+'"/><text x="'+(225+320*i)+'" y="1109" font-size="26" fill="#18233b">Hạng '+z+'</text>').join("");
- return '<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'"><style>text{font-family:DejaVu Sans,Arial,sans-serif}.row{fill:#36425a;font-size:16px;font-weight:bold}</style><rect width="1440" height="1220" fill="#f7f8fb"/><rect x="0" y="0" width="1440" height="180" fill="#12192b"/><text x="72" y="66" fill="#f8c95d" font-size="26" font-weight="bold">+1 EXTRA MUSIC SHOW</text><text x="72" y="126" fill="#ffffff" font-size="45" font-weight="bold">'+name+'</text><text x="1368" y="122" fill="#ffffff" font-size="27" text-anchor="end">'+seats.length+' ghế</text><rect x="48" y="208" width="1344" height="844" rx="30" fill="#ffffff" stroke="#e1e5ee"/>'+stage+dots+labels+legend+'<text x="720" y="1170" text-anchor="middle" font-size="22" fill="#526076">Sơ đồ bố trí ghế · Không thể hiện tình trạng ghế trống</text></svg>';
+ const stage=venue==="ccc"?'<rect x="2600" y="480" width="240" height="1350" rx="45" fill="#171d31"/><text x="2720" y="1150" fill="#fff" font-size="58" text-anchor="middle" transform="rotate(90 2720 1150)">SÂN KHẤU</text>':'<rect x="620" y="300" width="1760" height="190" rx="35" fill="#171d31"/><text x="1500" y="418" fill="#fff" font-size="62" text-anchor="middle">SÂN KHẤU</text>';
+ const legend=["A","B","C","D",...(snapshot?["X"]:[])].map((z,i)=>'<rect x="'+(200+520*i)+'" y="2290" width="55" height="40" rx="8" fill="'+(z==="X"?"#737984":zoneColors[z])+'"/><text x="'+(275+520*i)+'" y="2322" font-size="39" fill="#18233b">'+(z==="X"?"Không khả dụng":"Hạng "+z)+'</text>').join("");
+ const footer=snapshot?"Trạng thái lúc "+snapshot.checkedAt+" · Kiểm tra lại trước khi đặt":"Sơ đồ bố trí ghế · Chưa thể hiện ghế trống";
+ return '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'"><style>text{font-family:DejaVu Sans,Arial,sans-serif}</style><rect width="3000" height="2520" fill="#f7f8fb"/><rect width="3000" height="230" fill="#12192b"/><text x="100" y="70" fill="#f8c95d" font-size="38" font-weight="bold">+1 EXTRA MUSIC SHOW</text><text x="100" y="150" fill="#fff" font-size="68" font-weight="bold">'+esc(name)+'</text><text x="100" y="206" fill="#fff" font-size="36">'+esc(snapshot?.title||"Sơ đồ bán vé · mã từng ghế")+'</text><text x="2880" y="140" fill="#fff" font-size="44" text-anchor="end">'+seats.length+' ghế</text><rect x="60" y="244" width="2880" height="1980" rx="36" fill="#fff" stroke="#e1e5ee"/>'+stage+labels+legend+'<text x="1500" y="2445" text-anchor="middle" font-size="38" fill="#526076">'+esc(footer)+'</text></svg>';
 }
