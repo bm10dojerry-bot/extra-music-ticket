@@ -53,6 +53,7 @@ export async function POST(req:NextRequest){
  }
  let processed=0,ignored=0,unmatchedPages=0,duplicate=0,aiQueued=false,commentsQueued=false,commentIngestFailed=false;
  let singlePrice=false;
+ let imageEvents=0,imageReceived=0,imageDuplicates=0,signalFailures=0;
  const commentInbounds:Event[]=[];
  const manualChats=new Map<string,number>();
  const marketingReferrals=new Map<string,MarketingMessengerReferral>();
@@ -66,11 +67,15 @@ export async function POST(req:NextRequest){
    }
    if(!Array.isArray(page.messaging))continue;
    // Save signed attachments and ad context before the intake RPC exposes jobs to the cron worker.
-   await recordSignedBatch(config.pageId,page.messaging.slice(0,35));
+   try{await recordSignedBatch(config.pageId,page.messaging.slice(0,35));}
+   catch{signalFailures++;console.warn("[messenger-webhook] Optional signal storage unavailable; message intake continues");}
    for(const item of page.messaging.slice(0,35)){
     const referral=extractMarketingMessengerReferral(config.pageId,item);
     if(referral&&marketingReferrals.size<100)marketingReferrals.set(referral.sourceEventId,referral);
-    const mid=item.message?.mid||"",psid=item.sender?.id||"",body=incomingMessengerText(item.message||{});
+    const mid=item.message?.mid||"",psid=item.sender?.id||"";
+    const image=(item.message?.attachments||[]).some(a=>a?.type==="image");
+    if(image&&!item.message?.is_echo)imageEvents++;
+    const body=incomingMessengerText(item.message||{});
     if(item.message?.is_echo||!mid||!psid||!body){ignored+=1;continue;}
     if(body.length>1200){ignored+=1;continue;}
     const result=await staffDb("rpc/extra_support_ingest_messenger",{
@@ -78,9 +83,9 @@ export async function POST(req:NextRequest){
     }) as Ingest;
     if(result.outcome==="invalid"){ignored+=1;continue;}
     if(["received","duplicate"].includes(result.outcome))commentInbounds.push(item);
-    if(result.outcome==="duplicate"){duplicate+=1;continue;}
+    if(result.outcome==="duplicate"){duplicate+=1;if(image)imageDuplicates++;continue;}
     if(result.outcome==="received"&&result.chat_id){
-     processed+=1;
+     processed+=1;if(image)imageReceived++;
      if(result.ai_queued){
       aiQueued=true;
       singlePrice=processed===1 && simplePriceQuestion(body);
@@ -108,7 +113,7 @@ export async function POST(req:NextRequest){
   catch{console.warn("[comment-ai] Optional inbound attribution unavailable");}
  }
  // Deliberately no Page IDs, PSIDs, message bodies, tokens, or signatures in logs.
- console.info("[messenger-webhook] Completed",JSON.stringify({processed,ignored,unmatchedPages,duplicate}));
+ console.info("[messenger-webhook] Completed",JSON.stringify({processed,ignored,unmatchedPages,duplicate,imageEvents,imageReceived,imageDuplicates,signalFailures}));
  // The existing ledger rechecks the latest human reply, ownership and delivery claim.
  // The minute cron recovers missed wake-ups if an invocation ends early.
  if(manualChats.size)after(async()=>{
