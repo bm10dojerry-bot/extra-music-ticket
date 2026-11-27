@@ -1,3 +1,4 @@
+import {recoverRecentSeatMapImages} from "../../../../lib/messenger-seat-image-recovery";
 import {purgeShowSignals} from "../../../../lib/messenger-show-signals";
 import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
@@ -16,10 +17,11 @@ export async function GET(req:NextRequest){
  if(secret.length<24||given.length!==expected.length||!timingSafeEqual(Buffer.from(given),Buffer.from(expected)))return NextResponse.json({error:"Unauthorized"},{status:401});
  try{
   if(new Date().getUTCMinutes()===0)await purgeShowSignals().catch(()=>console.warn("[ai-sales] Deferred expired media cleanup"));
-  const [worker,comments,manualTimeout]=await Promise.all([runAiSalesQueue({maxJobs:4}),runCommentQueue({maxJobs:1,scan:true}),runAiSalesManualTimeout()]);
+  const [worker,comments,manualTimeout,recovery]=await Promise.all([runAiSalesQueue({maxJobs:4}),runCommentQueue({maxJobs:1,scan:true}),runAiSalesManualTimeout(),recoverRecentSeatMapImages()]);
+  if(recovery.recovered)await runAiSalesQueue({maxJobs:4});
   const dayBefore=worker.enabled&&worker.ready?await runDayBefore():{sent:0};
   const notifications=await sendAiSalesOwnerNotifications();
   const followup=worker.enabled&&worker.ready?await runAiSalesFollowup():{enabled:false,sent:0};
-  return NextResponse.json({...worker,comments,dayBefore,notifications,followup,manualTimeout},{headers:{"Cache-Control":"no-store"}});
+  return NextResponse.json({...worker,comments,dayBefore,notifications,followup,manualTimeout,recovery},{headers:{"Cache-Control":"no-store"}});
  }catch{console.warn("[ai-sales] Scheduled run unavailable");return NextResponse.json({error:"AI sales processing temporarily unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});}
 }
